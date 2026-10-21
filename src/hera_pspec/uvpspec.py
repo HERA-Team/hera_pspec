@@ -2914,10 +2914,11 @@ class UVPSpec:
         """
         Rescale one-step power spectra to ``self.cosmo`` (see set_cosmology).
 
-        ``p`` scales as the reference scalar (design note for #329, section 4:
-        ``p_1step = (s_disc / s) s (M q)``, with ``s_disc / s`` nearly
-        independent of the cosmology), its errors in ``stats_array`` too, and
-        its covariances as the square.
+        ``p`` scales as the reference scalar ``s``: one-step gives
+        ``p = (s_disc / s) s (M q)``, where ``s_disc`` is the same conversion
+        summed over channels instead of integrated over the band, and
+        ``s_disc / s`` hardly depends on the cosmology. Its errors in
+        ``stats_array`` scale the same way and its covariances as the square.
         """
         length_unit = self._default_length_unit()
         scalar_unit = length_unit**3 / (units.Hz * units.sr)

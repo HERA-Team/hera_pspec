@@ -1,7 +1,6 @@
 """Tests for the normalization label of power spectra and for one-step
 normalization in cosmological units (#329).
 
-Test names follow the design note's section 6 (T1, T3, T5-T9, T11).
 """
 
 import copy
@@ -33,8 +32,9 @@ from tests import legacy_fixtures as lf
 
 DATA_PATH = Path(DATA_PATH)
 
-# identities (design note section 6): 1e-12 relative to the largest element;
-# results through a matrix inverse or eigendecomposition: the branch's 1e-9
+# identities: 1e-12 relative to the largest element;
+# results through a matrix inverse or eigendecomposition: 1e-9, as in
+# tests/regression_cases.py
 IDENTITY_RTOL = 1e-12
 LINALG_RTOL = 1e-9
 SPW = (400, 440)
@@ -111,8 +111,8 @@ def channel_weights(beam, pol, freqs, cosmo, length_unit=LITTLEH):
 
 
 def discrete_scalar(weights, taper, dnu):
-    """Eq. (2) of the design note: s_disc = (N dnu)^2 / (dnu sum_i T_i^2 w_i),
-    the two-step scalar integral evaluated as a sum over channel centres."""
+    """s_disc = (N dnu)^2 / (dnu sum_i T_i^2 w_i): the two-step scalar
+    integral evaluated as a sum over channel centres, with w = B / X2Y."""
     bandwidth = weights.size * dnu
     return bandwidth**2 / (dnu * np.sum(taper**2 * weights))
 
@@ -123,7 +123,7 @@ def spw_freqs(ds):
 
 def mean_unnormed_q(ds, covariance, q_est=None):
     """<q_a> = (1/2) tr[R_1^dagger Q_a R_2 C] for a data covariance C
-    (arXiv:1502.06016 Eq. 13; design note section 2.2)."""
+    (arXiv:1502.06016 Eq. 13)."""
     if q_est is None:
         q_est = ds.get_Q_alt_tensor()
     A = np.conj(ds.R(KEY1)).T @ q_est @ ds.R(KEY2)
@@ -151,7 +151,7 @@ class UserResponse:
 
 def constant_w_kernel(n_freqs, n_dlys, dnu, w0):
     """K = Delta_eta sinc((i-j)/N_d) w0: a top-hat response with a constant
-    w = B / X2Y (design note sections 2.1 and 6, T7)."""
+    w = B / X2Y."""
     lag = np.subtract.outer(np.arange(n_freqs), np.arange(n_freqs))
     return w0 * np.sinc(lag / n_dlys) / (n_dlys * dnu)
 
@@ -171,7 +171,7 @@ def _labelled(uvp, normalization, response_model=None):
 
 
 class TestNormalizationParameter:
-    """T9: the normalization and response_model parameters."""
+    """The normalization and response_model parameters."""
 
     def test_default_and_check(self, vanilla_uvp) -> None:
         assert UVPSpec().normalization == "two-step"
@@ -268,9 +268,9 @@ class TestNormalizationParameter:
 
 
 class TestRelationToTwoStep:
-    """T1: design note eq. (2). For norm="I", Ndlys = Nfreqs, identity
-    weighting, no flags and the separable beam, one-step = two-step *
-    s_disc / s for every delay and time."""
+    """For norm="I", Ndlys = Nfreqs, identity weighting, no flags and the
+    separable beam, one-step = two-step * s_disc / s for every delay and
+    time (s_disc: see discrete_scalar)."""
 
     @pytest.mark.parametrize("taper", TAPERS)
     def test_eq_2(self, ds, taper) -> None:
@@ -287,7 +287,8 @@ class TestRelationToTwoStep:
         assert_close(uvp1.cov_array_real[0], uvp2.cov_array_real[0] * ratio2)
         # the reference scalar is stored, computed as for two-step
         np.testing.assert_array_equal(uvp1.scalar_array, uvp2.scalar_array)
-        # one-step is a few 0.01% higher here (design note section 3.2)
+        # one-step is a few 0.01% higher here: the channel sum s_disc is
+        # slightly larger than the band integral s
         assert 0 < s_disc / scalar - 1 < 3e-3
         assert uvp1.norm_units == uvp2.norm_units == "Mpc3 / littleh3"
         assert uvp1.normalization == "one-step"
@@ -295,9 +296,9 @@ class TestRelationToTwoStep:
 
 
 class TestFlatSpectrumExpectation:
-    """T3: for a flat P(k) = 1 the expected data covariance is
-    C = sum_b C_{,b} = diag(w) / dnu (the bins tile eta, design note sections
-    2.1 and 3.2), and one-step gives <p> = M <q> = 1 exactly."""
+    """For a flat P(k) = 1 the expected data covariance is
+    C = sum_b C_{,b} = diag(w) / dnu (the top-hat bins tile eta), and one-step
+    gives <p> = M <q> = 1 exactly."""
 
     @pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
     @pytest.mark.parametrize("taper", TAPERS)
@@ -317,7 +318,7 @@ class TestFlatSpectrumExpectation:
 
 
 class TestNormalizationMatrices:
-    """T5: W rows sum to 1 (I, V^-1/2), M H = I (H^-1), cov_p = M V_q M^T."""
+    """W rows sum to 1 (I, V^-1/2), M H = I (H^-1), cov_p = M V_q M^T."""
 
     @pytest.mark.parametrize("norm", ["I", "V^-1/2"])
     @pytest.mark.parametrize("taper", TAPERS)
@@ -372,7 +373,7 @@ class TestNormalizationMatrices:
 
 
 class TestUserResponseAndErrors:
-    """T6 (rest): user responses in pspec(), unit checks and error paths."""
+    """User responses in pspec(), unit checks and error paths."""
 
     def test_user_response_units(self, ds) -> None:
         configure(ds, NFREQS, "blackman-harris")
@@ -475,7 +476,7 @@ class TestUserResponseAndErrors:
 
 
 class TestExpectedDifferences:
-    """T7: closed forms of the two-step / one-step ratio for a flat P(k),
+    """Closed forms of the two-step / one-step ratio for a flat P(k),
     with a user response of constant w = B / X2Y so they are exact (design
     note sections 1.6, 3.2 and 6). F1 and F2 are pre-existing two-step
     biases that the one-step path does not have."""
@@ -491,7 +492,7 @@ class TestExpectedDifferences:
         H = ds.get_response(KEY1, KEY2, UserResponse(kernel, LITTLEH**-3), BEAM_POL)
         M, _ = ds.get_MW(H, H, mode=norm)
         p = M @ q_mean
-        # one-step recovers the flat spectrum (T3)
+        # one-step recovers the flat spectrum
         assert_close(p, np.ones(ndlys), rtol=IDENTITY_RTOL, scale=1.0)
         return p
 
@@ -536,7 +537,7 @@ class TestExpectedDifferences:
     @pytest.mark.parametrize("taper", TAPERS)
     def test_two_step_exact(self, ds, taper) -> None:
         # exact_norm today gives X2Y_bar * <1 / X2Y>_{T^2 B_ii^2} for a flat
-        # spectrum (design note section 3.2); one-step with the same HEALPix
+        # spectrum; one-step with the same HEALPix
         # beam gives 1
         configure(ds, NFREQS, taper)
         freqs = spw_freqs(ds)
@@ -575,7 +576,7 @@ NEW_COSMOLOGIES = [Planck18, LambdaCDM(H0=70.0, Om0=0.25, Ode0=0.75, Tcmb0=0.0)]
 
 
 class TestSetCosmology:
-    """T8: set_cosmology dispatches on normalization."""
+    """set_cosmology dispatches on normalization."""
 
     @pytest.mark.parametrize("new_cosmo", NEW_COSMOLOGIES, ids=["Planck18", "H0_70"])
     @pytest.mark.parametrize("taper", TAPERS)
@@ -608,7 +609,8 @@ class TestSetCosmology:
         assert_close(uvp.scalar_array, rebuilt.scalar_array)
         # a real change of the scalar (-1% to +16% in Mpc, more with h)
         assert np.all(np.abs(uvp.scalar_array / old_scalar - 1) > 5e-3)
-        # approximate rescale vs exact rebuild: <= 1e-5 (design note section 4)
+        # approximate rescale vs exact rebuild: <= 1e-5, since s_disc / s
+        # hardly depends on the cosmology
         assert_close(uvp.data_array[0], rebuilt.data_array[0], rtol=1e-5)
         for name in ("cov_array_real", "cov_array_imag"):
             assert_close(
@@ -676,8 +678,9 @@ def noise_uvd():
 
 
 class TestWhiteNoiseMonteCarlo:
-    """T11: pspec() on simulated data whose covariance is a flat P(k) = 1 in
-    the one-step response model, C = diag(w) / dnu (see T3). Every one-step
+    """pspec() on simulated data whose covariance is a flat P(k) = 1 in
+    the one-step response model, C = diag(w) / dnu (see
+    TestFlatSpectrumExpectation). Every one-step
     estimator has expectation 1, so the mean power must agree for norm I and
     H^-1, no taper and Blackman-Harris, Ndlys = Nfreqs and Nfreqs / 2 (the
     configurations where the two-step path is biased: F1, F2).

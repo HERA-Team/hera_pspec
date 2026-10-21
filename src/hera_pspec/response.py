@@ -126,7 +126,7 @@ def _lag_phases(n_dlys, n_freqs):
     ``phi_b(l) = Q^alt_{b,ij}`` for ``l = i - j = -(n_freqs-1) .. n_freqs-1``.
 
     ``Q^alt_{b,ij} = m_{b,i}^* m_{b,j} = exp(2 pi i (s + b)(i - j) / N_d)``
-    depends on ``i - j`` only (design note section 7). Shape
+    depends on ``i - j`` only. Shape
     ``(n_dlys, 2 n_freqs - 1)``.
     """
     lags = np.arange(-(n_freqs - 1), n_freqs)
@@ -141,7 +141,7 @@ def toeplitz_response(R1, R2, kernel, n_dlys, q_est=None):
     ``(Ndlys, N', N')`` tensor of ``C_{,b}``.
 
     ``Q^alt_b ⊙ K`` is Toeplitz-modulated (``Q^alt_{b,ij}`` depends on
-    ``i - j`` only), so (design note section 7)
+    ``i - j`` only), so the trace reduces to a sum over lags ``l = i - j``
 
         H_ab = (1/2) sum_l phi_b(l) P_a(l),
         P_a(l) = sum_{i-j=l} K_ij (R_1^dagger Q^est_a R_2)_{ji}.
@@ -264,7 +264,7 @@ class DelayResponse:
     Response ``dC/dp_b`` of top-hat (or sampled) delay bins.
 
     ``C_{,b} = Q^alt_b ⊙ K`` with the real kernel (HERA memo #44 Eq. 11;
-    arXiv:1502.06016 Eqs. 13-17; design note section 2.1)
+    arXiv:1502.06016 Eqs. 13-17)
 
         K_ij = Delta_eta * B_ij * S_ij / X2Y_ij    [1 / length_unit**3].
 
@@ -388,7 +388,7 @@ class DelayResponse:
                 kernel = kernel * np.sinc(lag / float(n_ext))
             return kernel
 
-        # cosmological: K = Delta_eta B ⊙ S / X2Y (design note section 2.1)
+        # cosmological: K = Delta_eta B ⊙ S / X2Y (see the class docstring)
         self._check_beam(beam, need_healpix=self.beam == "healpix")
         if cosmo is None:
             raise ValueError("A cosmological DelayResponse needs a cosmology.")

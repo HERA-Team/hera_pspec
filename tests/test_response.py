@@ -1,8 +1,7 @@
 """Tests for user-defined response matrices (#328): hera_pspec.response and
 PSpecData.get_response.
 
-Identities are checked at 1e-12 relative to the largest element (design note
-section 6, tests T2, T4, T6).
+Identities are checked at 1e-12 relative to the largest element.
 """
 
 import copy
@@ -85,7 +84,7 @@ LEGACY_CONFIGS = [
 
 @pytest.mark.filterwarnings("ignore:Poorly conditioned covariance:UserWarning")
 class TestLegacyConventions:
-    """T2: the legacy kernels reproduce get_H / get_G.
+    """The legacy kernels reproduce get_H / get_G.
 
     The iC configurations invert a rank-deficient empirical covariance, which
     warns (as in test_pspecdata's TestFisherMatrices).
@@ -140,7 +139,7 @@ class TestLegacyConventions:
 
 
 class TestToeplitzResponse:
-    """T4: the Toeplitz algorithm equals the explicit tr(E_a C_{,b}) loop."""
+    """The Toeplitz algorithm equals the explicit tr(E_a C_{,b}) loop."""
 
     @pytest.mark.parametrize(
         "n_dlys, n_freqs, extension",
@@ -209,7 +208,7 @@ def cosmological_kernel(ds, length_unit):
 
 
 class TestUserResponse:
-    """T6 (part): units of user responses, q_matrices, memory cap."""
+    """Units of user responses, q_matrices, memory cap."""
 
     @pytest.mark.parametrize("extension", [(0, 0), (3, 2)])
     def test_matches_delay_response(self, ds, extension) -> None:
@@ -404,7 +403,7 @@ class TestDelayResponseKernel:
         assert not DelayResponse().is_legacy
 
     def test_cosmological_kernel_diagonal(self, beam_nf_dipole) -> None:
-        # K_ii = Delta_eta Omega_pp / Omega_p^2 / X2Y at nu_i (design note 2.1),
+        # K_ii = Delta_eta Omega_pp / Omega_p^2 / X2Y at nu_i,
         # computed independently from the beam integrals
         freqs = np.linspace(140e6, 150e6, 40, endpoint=False)
         delays = utils.get_delays(freqs, n_dlys=20)
@@ -474,7 +473,7 @@ class TestDelayResponseKernel:
     @pytest.mark.parametrize("n_dlys", [40, 20, 10, 8])
     def test_bins_tile_eta(self, n_dlys) -> None:
         # sum_b Q^alt_b ⊙ sinc((i-j)/N_d) = N_d I when N_d divides the band
-        # (design note section 2.1): the aliased lags fall on sinc zeros
+        # because the aliased lags +-N_d fall on zeros of the sinc
         n_freqs = 40
         lag = np.subtract.outer(np.arange(n_freqs), np.arange(n_freqs))
         total = np.sum(q_alt(n_dlys, n_freqs), axis=0) * np.sinc(lag / n_dlys)
@@ -493,7 +492,7 @@ class TestDelayResponseKernel:
         separable = DelayResponse().kernel(
             nu, ds._delays_s(), beam_nf_dipole, BEAM_POL, beam_nf_dipole.cosmo, u.Mpc
         )
-        # the two beam models agree to the per-cent level (design note 3.2)
+        # the two beam models agree to the per-cent level
         assert np.max(np.abs(np.diag(kernel) / np.diag(separable) - 1)) < 0.01
 
     def test_healpix_needs_uvbeam(self, unflagged_uvd) -> None:
@@ -572,7 +571,7 @@ class TestPspecOneStepLegacy:
 
     Without a taper, without flags and with Ndlys = Nfreqs, sum_b H_ab does
     not depend on a, so the two-step result is the one-step (legacy) result
-    times the scalar (design note section 3.2), and the covariance scales by
+    times the scalar, and the covariance scales by
     the scalar squared.
     """
 

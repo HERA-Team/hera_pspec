@@ -3995,8 +3995,9 @@ class PSpecData:
                     "response must be a DelayResponse or have a "
                     "matrices(freqs, delays, beam, pol, cosmo, length_unit) method."
                 )
-        # one-step in cosmological units (design note section 3); the legacy
-        # one-step response is dimensionless
+        # one-step in cosmological units: H is built from dC/dp in
+        # 1 / length_unit**3, so p = M q comes out in vis^2 length_unit^3;
+        # the legacy one-step response is dimensionless
         one_step_cosmo = one_step and not (
             isinstance(response, responses.DelayResponse) and response.is_legacy
         )
@@ -4243,7 +4244,8 @@ class PSpecData:
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
                     if one_step:
-                        # reference scalar (design note section 4): computed
+                        # reference scalar, kept so set_cosmology can rescale
+                        # one-step spectra between cosmologies: computed
                         # as the two-step path does (scalar() ignores the
                         # H^-1 taper override), stored in scalar_array but
                         # never multiplied into p or cov
@@ -4452,7 +4454,7 @@ class PSpecData:
                     pv = self.p_hat(Mv, qv)
 
                     # Multiply by scalar (two-step only: a one-step p = M q is
-                    # already in vis^2 length_unit^3, design note section 3.1)
+                    # already in vis^2 length_unit^3)
                     if self.primary_beam is not None and not one_step:
                         if nper_chunk == 1:
                             logger.info("  Computing and multiplying scalar...")
