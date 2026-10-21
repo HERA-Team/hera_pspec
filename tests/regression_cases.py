@@ -590,7 +590,12 @@ def _noise_sensitivity() -> dict[str, np.ndarray]:
     for little_h in (True, False):
         tag = "h" if little_h else "noh"
         sense = noise.Sensitivity(beam=pstokes_beam())
-        sense.calc_scalar(freqs, "pI", num_steps=2000, little_h=little_h)
+        sense.calc_scalar(
+            freqs,
+            "pI",
+            num_steps=2000,
+            length_unit=conversions.length_unit_from_little_h(little_h),
+        )
         out[f"scalar_{tag}"] = sense.scalar
         out[f"P_N_Pk_{tag}"] = sense.calc_P_N(
             NOISE_TSYS, NOISE_T_INT, Ncoherent=1, Nincoherent=1, form="Pk"
@@ -619,7 +624,7 @@ def _noise_uvp_noise_error() -> dict[str, np.ndarray]:
             copy.deepcopy(auto_tsys),
             err_type=["P_N", "P_SN"],
             P_SN_correction=True,
-            little_h=little_h,
+            length_unit=conversions.length_unit_from_little_h(little_h),
         )
         for spw in uvp.spw_array:
             for stat in ("P_N", "P_SN"):

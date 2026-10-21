@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import numpy.typing as npt
+from astropy import units as u
 from astropy.cosmology import FLRW
 from scipy.linalg import circulant
 from uvtools import dspec
@@ -45,21 +46,24 @@ def calc_P_N(
 
     Parameters
     ----------
-    scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
+    scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP,
+        in L^3 / (Hz sr) for a cosmological length unit L
     Tsys : float, System temperature in Kelvin
     t_int : float, integration time of power spectra in seconds
     Ncoherent : int, number of coherent averages of visibility data with integration time t_int
         Total integration time is t_int * Ncoherent
     Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
     form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-    k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+    k : float ndarray, cosmological wave-vectors in 1 / L, where L is the length unit of
+        scalar (h Mpc^-1 for the default h^-1 Mpc), only needed if form == 'DelSq'
     component : str, options=['real', 'imag', 'abs']
         If component is real or imag, divide by an extra factor of sqrt(2)
 
     Returns (P_N)
     -------
-    P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-    if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+    P_N : estimated noise power spectrum (float or array) in mK^2 * L^3, where scalar is in
+        L^3 / (Hz sr) (L = h^-1 Mpc for the default scalar). If form == 'DelSq', P_N is
+        multiplied by k^3 / (2pi^2) and is in mK^2 (k in 1 / L).
     """
     # assert form
     assert form in ("Pk", "DelSq"), (
@@ -164,7 +168,8 @@ class Sensitivity:
         freqs: npt.NDArray[np.floating[Any]],
         pol: str,
         num_steps: int = 5000,
-        little_h: bool = True,
+        little_h: bool | None = None,
+        length_unit: u.UnitBase | str | None = None,
     ) -> None:
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
@@ -182,17 +187,28 @@ class Sensitivity:
         num_steps : number of frequency bins to use in numerical integration of scalar
 
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
+            Raises ValueError if it disagrees with ``length_unit``.
+
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit L of the scalar, e.g. ``u.Mpc / cu.littleh``
+            (h^-1 Mpc) or ``u.Mpc``. Default: ``u.Mpc / cu.littleh``.
 
         Result
         ------
-        self.scalar : float, cosmological and beam scalar prefactor
+        self.scalar : float, cosmological and beam scalar prefactor in
+            L^3 / (Hz sr), with L = ``length_unit``
+
+        self.length_unit : astropy.units.Unit, the length unit L of self.scalar
 
         self.subband : float ndarray, frequencies in spectral window used to calculate self.scalar
 
         self.pol : str, polarization used to calculate self.scalar
         """
+        # stacklevel 3: the deprecation warning points at the caller of calc_scalar
+        length_unit = conversions.resolve_length_unit(
+            length_unit, little_h, stacklevel=3
+        )
         # compute scalar
         self.scalar = self.beam.compute_pspec_scalar(
             freqs.min(),
@@ -200,9 +216,10 @@ class Sensitivity:
             len(freqs),
             num_steps=num_steps,
             pol=pol,
-            length_unit=conversions.length_unit_from_little_h(little_h),
+            length_unit=length_unit,
             noise_scalar=True,
         )
+        self.length_unit = length_unit
         self.subband = freqs
         self.pol = pol
 
@@ -232,21 +249,22 @@ class Sensitivity:
 
         Parameters
         ----------
-        scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
         Tsys : float, System temperature in Kelvin
         t_int : float, integration time of power spectra in seconds
         Ncoherent : int, number of coherent averages of visibility data with integration time t_int
             Total integration time is t_int * Ncoherent
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
         form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-        k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+        k : float ndarray, cosmological wave-vectors in 1 / L, where L is self.length_unit,
+            only needed if form == 'DelSq'
         component : str, options=['real', 'imag', 'abs']
             If component is real or imag, divide by an extra factor of sqrt(2)
 
         Returns (P_N)
         -------
-        P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-        if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+        P_N : estimated noise power spectrum (float or array) in mK^2 * L^3, where L is
+            self.length_unit, the length unit of self.scalar (see calc_scalar). If
+            form == 'DelSq', P_N is multiplied by k^3 / (2pi^2) and is in mK^2.
         """
         # assert scalar exists
         assert hasattr(self, "scalar"), (

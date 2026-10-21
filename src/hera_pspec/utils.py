@@ -1507,7 +1507,8 @@ def uvp_noise_error(
     precomp_P_N=None,
     P_SN_correction=True,
     num_steps_scalar=2000,
-    little_h=True,
+    little_h=None,
+    length_unit=None,
 ):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
@@ -1549,8 +1550,15 @@ def uvp_noise_error(
         Default is 2000
 
     little_h : bool, optional
-        Use little_h units in power spectrum.
-        Default is True.
+        Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
+        Raises ValueError if it disagrees with ``length_unit``.
+
+    length_unit : astropy.units.Unit or str, optional
+        Cosmological length unit L of the noise spectra. P_N and P_SN are
+        stored in ``uvp.stats_array`` as plain arrays in mK^2 * L^3.
+        Default: None, the object's own length unit
+        (``uvp._default_length_unit()``, the length unit of ``uvp.units``), so
+        the stored errors match the units of the data.
 
     """
     from hera_pspec import uvpspec_utils
@@ -1565,7 +1573,8 @@ def uvp_noise_error(
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs (floats in scalar_unit).
-    length_unit = conversions.length_unit_from_little_h(little_h)
+    # stacklevel 4 in the helper: the deprecation warning points at our caller
+    length_unit = uvp._resolve_length_unit(length_unit, little_h)
     scalar_unit = length_unit**3 / (u.Hz * u.sr)
     P_N_unit = u.mK**2 * length_unit**3
     scalar = {}
