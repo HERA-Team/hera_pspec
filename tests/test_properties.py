@@ -24,12 +24,14 @@ tested with fixed inputs and seeds elsewhere.
 import copy
 import functools
 import json
+import warnings
 
 import numpy as np
 import pytest
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
+from pyuvdata.analytic_beam import GaussianBeam
 from pyuvdata.utils import POL_NUM2STR_DICT
 from uvtools import dspec
 
@@ -43,6 +45,7 @@ from hera_pspec import (
     pstokes,
     testing,
     utils,
+    uvwindow,
 )
 from hera_pspec import uvpspec_utils as uvputils
 
@@ -352,6 +355,183 @@ class TestBeamScalar:
         np.testing.assert_allclose(
             tapered / untapered, 1 / np.mean(window**2), rtol=2e-3
         )
+
+    @settings(max_examples=20)
+    @given(fwhm=st.floats(0.01, 1.5), sigma_type=st.sampled_from(["power", "efield"]))
+    def test_gaussian_beam_fwhm(self, fwhm: float, sigma_type: str) -> None:
+        """fwhm is the full width at half maximum of the power beam of the
+        pyuvdata GaussianBeam that PSpecBeamGauss holds. Wrapping a
+        GaussianBeam with that power beam, given by the sigma of either its
+        power or its E-field beam (which is sqrt(2) wider), gives back fwhm
+        and the same beam integrals."""
+        beam = PSpecBeamGauss(fwhm, self.BEAM_FREQS)
+        power = beam.analytic_beam.power_eval(
+            az_array=np.zeros(2),
+            za_array=np.array([0.0, fwhm / 2]),
+            freq_array=self.BEAM_FREQS[:1],
+        )
+        # (axis, polarization, frequency, direction); xx
+        np.testing.assert_allclose(power[0, 0, 0].real, [1.0, 0.5], rtol=1e-12)
+
+        sigma = fwhm / np.sqrt(8 * np.log(2))  # of the power beam
+        if sigma_type == "efield":
+            sigma *= np.sqrt(2)
+        wrapped = PSpecBeamGauss(
+            beam=GaussianBeam(sigma=sigma, sigma_type=sigma_type),
+            beam_freqs=self.BEAM_FREQS,
+        )
+        np.testing.assert_allclose(wrapped.fwhm, fwhm, rtol=1e-12)
+        np.testing.assert_allclose(
+            wrapped.power_beam_int(), beam.power_beam_int(), rtol=1e-12
+        )
+        np.testing.assert_allclose(
+            wrapped.power_beam_sq_int(), beam.power_beam_sq_int(), rtol=1e-12
+        )
+
+
+@st.composite
+def ft_beams(draw) -> uvwindow.FTBeam:
+    """Small FTBeams with random data, on increasing frequencies whose
+    spacings differ by up to a factor of three."""
+    nfreqs = draw(st.integers(2, 8))
+    npix = draw(st.integers(1, 4))
+    df = draw(st.floats(50e3, 1e6))
+    steps = draw(arrays(np.float64, nfreqs - 1, elements=st.floats(0.5, 1.5)))
+    freqs = draw(st.floats(100e6, 200e6)) + df * np.concatenate([[0], np.cumsum(steps)])
+    data = draw(arrays(np.float64, (nfreqs, npix, npix), elements=st.floats(-1e3, 1e3)))
+    pol = draw(st.sampled_from(["pI", "xx", "yy"]))
+    return uvwindow.FTBeam(data, pol, freqs, mapsize=draw(st.floats(0.5, 2.0)))
+
+
+class TestFTBeam:
+    @pytest.mark.parametrize(
+        "half_plane",
+        [
+            "upper",
+            pytest.param(
+                "lower",
+                marks=pytest.mark.xfail(
+                    strict=True,
+                    raises=AssertionError,
+                    reason="arccos(x / za) only gives azimuths in [0, pi], so "
+                    "(x, y) with y < 0 is mapped to the azimuth of (x, -y), and "
+                    "FTBeam.from_beam evaluates the beam at the mirror image of "
+                    "every point of the lower half of its map (see #578).",
+                ),
+            ),
+        ],
+    )
+    @given(
+        az=arrays(np.float64, st.integers(1, 10), elements=st.floats(0, np.pi)),
+        # x^2 + y^2 underflows for za below ~1e-154 rad, which no beam map
+        # resolves; za = 0 is the zenith
+        za=st.one_of(st.just(0.0), st.floats(1e-100, np.pi / 2)),
+    )
+    @example(az=np.array([np.pi / 2]), za=1.0)
+    def test_cartesian_to_spherical_round_trip(
+        self, half_plane: str, az: np.ndarray, za: float
+    ) -> None:
+        """_cartesian_to_spherical inverts x = za cos(az), y = za sin(az).
+        arccos loses precision for azimuths close to 0 and pi, hence the
+        tolerance (1e-8 rad is far below the resolution of any beam map)."""
+        if half_plane == "lower":
+            az = TWO_PI - az
+        x, y = za * np.cos(az), za * np.sin(az)
+        az_out, za_out = uvwindow._cartesian_to_spherical(x, y)
+        np.testing.assert_allclose(za_out, za, rtol=1e-15)
+        np.testing.assert_allclose(za_out * np.cos(az_out), x, rtol=0, atol=1e-15)
+        np.testing.assert_allclose(za_out * np.sin(az_out), y, rtol=0, atol=1e-7)
+
+    @given(beam=ft_beams(), data=st.data())
+    def test_select_native_freqs(self, beam: uvwindow.FTBeam, data) -> None:
+        """Selecting some of the beam's own frequencies, in any order and
+        possibly repeated, extracts those channels; selecting all of them
+        leaves the beam unchanged. With inplace=False the beam itself is not
+        modified."""
+        original = copy.deepcopy(beam)
+        nfreqs = beam.freq_array.size
+        idx = data.draw(st.lists(st.integers(0, nfreqs - 1), min_size=2, max_size=10))
+        sub = beam.select_freqs(beam.freq_array[idx], inplace=False)
+        assert beam == original
+        np.testing.assert_array_equal(sub.freq_array, beam.freq_array[idx])
+        np.testing.assert_array_equal(sub.ft_beam, beam.ft_beam[idx])
+        assert (sub.pol, sub.mapsize) == (beam.pol, beam.mapsize)
+
+        assert beam.select_freqs(beam.freq_array, inplace=False) == beam
+        assert beam.select_freqs(beam.freq_array.copy()) is None
+        assert beam == original
+
+    @given(beam=ft_beams(), data=st.data())
+    def test_select_freqs_interpolates_linearly(
+        self, beam: uvwindow.FTBeam, data
+    ) -> None:
+        """Between two channels, the FT of the beam is interpolated linearly
+        in frequency. So a fraction t of the way from channel i to channel
+        i + 1 it is (1 - t) A_i + t A_(i+1), and a beam that is linear in
+        frequency is reproduced exactly at any frequency of the band."""
+        freqs = beam.freq_array
+        nfreqs = freqs.size
+        i = np.array(
+            data.draw(st.lists(st.integers(0, nfreqs - 2), min_size=2, max_size=10))
+        )
+        # away from the channels, so that every frequency is interpolated
+        t = data.draw(arrays(np.float64, i.size, elements=st.floats(0.01, 0.99)))
+        targets = (1 - t) * freqs[i] + t * freqs[i + 1]
+        with pytest.warns(UserWarning, match="interpolating"):
+            interp = beam.select_freqs(targets, inplace=False)
+        np.testing.assert_array_equal(interp.freq_array, targets)
+        w = ((targets - freqs[i]) / (freqs[i + 1] - freqs[i]))[:, None, None]
+        np.testing.assert_allclose(
+            interp.ft_beam,
+            (1 - w) * beam.ft_beam[i] + w * beam.ft_beam[i + 1],
+            rtol=1e-12,
+            atol=1e-12 * np.abs(beam.ft_beam).max(),
+        )
+
+        # any frequencies, whether or not they coincide with channels
+        targets = np.array(
+            data.draw(
+                st.lists(st.floats(freqs.min(), freqs.max()), min_size=2, max_size=10)
+            )
+        )
+        A, B = beam.ft_beam[0], beam.ft_beam[-1]
+        span = freqs[-1] - freqs[0]
+        beam.ft_beam = A + ((freqs - freqs[0]) / span)[:, None, None] * (B - A)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", "Requested frequencies do not coincide")
+            interp = beam.select_freqs(targets, inplace=False)
+        # If all frequencies are within 1e-3 channel widths of a channel (the
+        # default atol), the channels are extracted instead.
+        snap = 1e-3 * np.median(np.diff(freqs)) / span * np.abs(B - A).max()
+        np.testing.assert_allclose(
+            interp.ft_beam,
+            A + ((targets - freqs[0]) / span)[:, None, None] * (B - A),
+            rtol=0,
+            atol=snap + 1e-10 * (1 + np.abs(beam.ft_beam).max()),
+        )
+
+    @given(beam=ft_beams(), data=st.data())
+    def test_equality(self, beam: uvwindow.FTBeam, data) -> None:
+        """FTBeams are equal if and only if their polarization, map size,
+        frequencies and FT beams are; a copy is equal to the original."""
+        other = copy.deepcopy(beam)
+        assert beam == beam
+        assert beam == other and other == beam
+        assert beam.__eq__(beam.ft_beam) is NotImplemented
+
+        change = data.draw(st.sampled_from(["pol", "mapsize", "freq", "pixel"]))
+        if change == "pol":
+            other.pol = data.draw(
+                st.sampled_from(["pI", "xx", "yy"]).filter(lambda pol: pol != beam.pol)
+            )
+        elif change == "mapsize":
+            other.mapsize *= 2
+        elif change == "freq":
+            other.freq_array[data.draw(st.integers(0, beam.freq_array.size - 1))] += 1.0
+        else:
+            index = tuple(data.draw(st.integers(0, n - 1)) for n in beam.ft_beam.shape)
+            other.ft_beam[index] += 1.0
+        assert beam != other and other != beam
 
 
 # Baseline and baseline-pair integers hold each antenna number + 100 in three
