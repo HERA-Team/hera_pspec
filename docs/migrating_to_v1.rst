@@ -107,9 +107,8 @@ The examples on this page share this setup:
 
   beam = hp.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"))
 
-  uvd1, uvd2 = UVData(), UVData()
-  uvd1.read(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
-  uvd2.read(os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA"))
+  uvd1 = UVData.from_file(os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA"))
+  uvd2 = UVData.from_file(os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA"))
   for uvd in (uvd1, uvd2):
       # pyuvdata objects keep plain Hz; wrap them where hera_pspec needs them
       uvd.data_array *= beam.Jy_to_mK(np.unique(uvd.freq_array) * u.Hz, pol="XX")[

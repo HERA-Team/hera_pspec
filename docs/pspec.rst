@@ -15,9 +15,8 @@ The following example shows how to load ``UVData`` objects into a ``PSpecData`` 
 .. code-block:: python
 
   # Load into UVData objects
-  uvd1 = UVData(); uvd2 = UVData()
-  uvd1.read_miriad(datafile1)
-  uvd2.read_miriad(datafile2)
+  uvd1 = UVData.from_file(datafile1)
+  uvd2 = UVData.from_file(datafile2)
 
   # Create a new PSpecData object
   ds = hp.PSpecData(dsets=[uvd1, uvd2], beam=beam)

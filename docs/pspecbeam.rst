@@ -19,8 +19,7 @@ units using the :meth:`~hera_pspec.pspecbeam.PSpecBeamBase.Jy_to_mK` method, e.g
 .. code-block:: python
 
   # Apply unit conversion factor to UVData
-  uvd = UVData()
-  uvd.read_miriad(datafile) # Load data (assumed to be in Jy units)
+  uvd = UVData.from_file(datafile)  # Load data (assumed to be in Jy units)
   freqs = np.unique(uvd.freq_array) * u.Hz  # astropy.units imported as u
   uvd.data_array *= beam.Jy_to_mK(freqs)[None, :, None]
   uvd.vis_units = "mK"
