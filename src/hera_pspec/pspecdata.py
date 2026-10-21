@@ -1587,8 +1587,8 @@ class PSpecData:
 
         elif exact_norm and not (allow_fft):
             q = []
-            del_tau = (
-                np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(
+                np.diff(self._delays_s())
             )  # Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             integral_beam = self.get_integral_beam(
                 pol
@@ -1670,7 +1670,7 @@ class PSpecData:
         iR1Q1, iR2Q2 = {}, {}
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         if exact_norm:
             qnorm = del_tau * integral_beam
         else:
@@ -1778,7 +1778,7 @@ class PSpecData:
         iR1Q1, iR2Q2 = {}, {}
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         if exact_norm:
             qnorm = del_tau * integral_beam
         else:
@@ -1863,7 +1863,7 @@ class PSpecData:
         R2 = self.R(key2)
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         for dly_idx in range(self.spw_Ndlys):
             if exact_norm:
                 QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
@@ -2818,7 +2818,7 @@ class PSpecData:
                 "of allowed range of delay modes."
             )
 
-        tau = self.delays()[int(mode)] * 1.0e-9  # delay in seconds
+        tau = self._delays_s()[int(mode)]  # delay in seconds
         nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
 
         eta_int = np.exp(-2j * np.pi * tau * nu)  # exponential part
@@ -3024,22 +3024,26 @@ class PSpecData:
 
         Returns
         -------
-        delays : array_like
-            Delays, tau. Units: ns.
+        delays : astropy.units.Quantity
+            Delays, tau, in seconds. Before v1.0 this was a float array in
+            ns; ``delays().to_value(u.ns)`` gives those numbers.
         """
-        # Calculate the delays
+        return self._delays_s() * units.s
+
+    def _delays_s(self):
+        """
+        Delays of the current spectral window as a float array in seconds.
+
+        Used internally (including inside per-baseline loops) instead of
+        delays(), so no Quantity is created there.
+        """
         if len(self.dsets) == 0:
             raise IndexError(
                 "No datasets have been added yet; cannot calculate delays."
             )
-        else:
-            return (
-                utils.get_delays(
-                    self.freqs[self.spw_range[0] : self.spw_range[1]],
-                    n_dlys=self.spw_Ndlys,
-                )
-                * 1e9
-            )  # convert to ns
+        return utils.get_delays(
+            self.freqs[self.spw_range[0] : self.spw_range[1]], n_dlys=self.spw_Ndlys
+        )
 
     def scalar(
         self,
@@ -3793,7 +3797,7 @@ class PSpecData:
             spw_stats_array_cov_model = []
             spw_window_function = []
 
-            d = self.delays() * 1e-9
+            d = self._delays_s()
             f = dset1.freq_array.flatten()[spw_ranges[i][0] : spw_ranges[i][1]]
             dlys.extend(d)
             dly_spws.extend(np.ones_like(d, np.int16) * i)
