@@ -614,6 +614,45 @@ class TestUVWindowInit:
                 )
 
     @pytest.mark.parametrize(
+        ("flag", "kunits"), [(True, cu.littleh / units.Mpc), (False, 1 / units.Mpc)]
+    )
+    def test_positional_little_h_deprecated(
+        self, ft_beam_spw: uvwindow.FTBeam, flag: bool, kunits
+    ) -> None:
+        # the third positional argument used to be little_h
+        new = uvwindow.UVWindow(ft_beam_spw, "blackman-harris", kunits=kunits)
+        for value in (flag, np.bool_(flag)):
+            with pytest.warns(
+                DeprecationWarning, match="third positional argument"
+            ) as record:
+                old = uvwindow.UVWindow(ft_beam_spw, "blackman-harris", value)
+            assert record[0].filename == __file__
+            assert old.kunits == new.kunits
+            assert str(old.kunits) == str(new.kunits)
+            bl_len = 14.6
+            for got, expected in zip(
+                old.get_cylindrical_wf(bl_len, return_bins="unweighted"),
+                new.get_cylindrical_wf(bl_len, return_bins="unweighted"),
+                strict=True,
+            ):
+                np.testing.assert_array_equal(got, expected)
+            np.testing.assert_array_equal(
+                old.get_kperp_bins([bl_len]), new.get_kperp_bins([bl_len])
+            )
+            assert old.get_kpara_bins(old.freq_array).unit == kunits
+        # agreeing little_h keyword is accepted, a disagreeing one raises
+        with pytest.warns(DeprecationWarning, match="third positional argument"):
+            uvwindow.UVWindow(ft_beam_spw, None, flag, little_h=flag)
+        with pytest.warns(DeprecationWarning, match="third positional argument"):
+            with pytest.raises(ValueError, match="disagrees with the positional"):
+                uvwindow.UVWindow(ft_beam_spw, None, flag, little_h=not flag)
+
+    @pytest.mark.parametrize("kunits", [5, 0.1, object(), [1, 2]])
+    def test_non_unit_kunits_raise(self, ft_beam_spw: uvwindow.FTBeam, kunits) -> None:
+        with pytest.raises(TypeError, match="kunits must be an astropy unit.*got"):
+            uvwindow.UVWindow(ft_beam_spw, kunits=kunits)
+
+    @pytest.mark.parametrize(
         ("kunits", "expected"), [(cu.littleh / units.Mpc, True), (1 / units.Mpc, False)]
     )
     def test_little_h_property_deprecated(

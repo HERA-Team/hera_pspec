@@ -701,9 +701,11 @@ def _resolve_kunits(kunits, little_h, stacklevel=3):
 
     Parameters
     ----------
-    kunits : astropy.units.UnitBase or str or None
+    kunits : astropy.units.UnitBase or str or bool or None
         ``littleh / Mpc`` or ``1 / Mpc`` (strings are parsed with littleh
-        enabled). None means littleh / Mpc unless ``little_h`` is given.
+        enabled). None means littleh / Mpc unless ``little_h`` is given. A
+        bool is the deprecated ``little_h`` flag passed positionally (the
+        third positional argument of UVWindow used to be ``little_h``).
     little_h : bool or None
         Deprecated flag: True for littleh / Mpc, False for 1 / Mpc. Emits a
         ``DeprecationWarning`` when not None.
@@ -717,14 +719,40 @@ def _resolve_kunits(kunits, little_h, stacklevel=3):
 
     Raises
     ------
+    TypeError
+        If ``kunits`` is not a unit, a string, a bool or None.
     ValueError
         If ``kunits`` is neither unit, or if ``little_h`` disagrees with it.
     """
+    if isinstance(kunits, (bool, np.bool_)):
+        # the deprecated little_h flag, given as the third positional argument
+        warnings.warn(
+            "Passing little_h as the third positional argument of UVWindow is "
+            "deprecated; that argument is now kunits. Pass kunits=cu.littleh / "
+            "u.Mpc (little_h=True) or kunits=1 / u.Mpc (little_h=False) instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
+        from_flag = _LITTLEH_KUNITS if kunits else _MPC_KUNITS
+        if little_h is not None and bool(little_h) != bool(kunits):
+            raise ValueError(
+                f"little_h={little_h} disagrees with the positional little_h "
+                f"value {bool(kunits)}; pass only kunits."
+            )
+        return from_flag
     if kunits is not None:
         if isinstance(kunits, (str, bytes)):
             kunits = uvputils.parse_unit_string(kunits)
-        else:
+        elif isinstance(kunits, (units.UnitBase, units.Quantity)):
+            # 1 / u.Mpc is a Quantity of value 1
             kunits = units.Unit(kunits)
+        else:
+            raise TypeError(
+                "kunits must be an astropy unit or unit string "
+                "(astropy.cosmology.units.littleh / astropy.units.Mpc or "
+                f"1 / astropy.units.Mpc), got {kunits!r} of type "
+                f"{type(kunits).__name__}."
+            )
         if kunits == _LITTLEH_KUNITS:
             kunits = _LITTLEH_KUNITS
         elif kunits == _MPC_KUNITS:
