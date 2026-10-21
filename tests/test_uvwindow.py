@@ -150,83 +150,73 @@ def uvp_for_uvwindow(
     return uvp, uvp_nocosmo, uvp_crosspol
 
 
+@pytest.fixture()
+def ft_beam_init_kwargs(ft_beam_spw: uvwindow.FTBeam) -> dict:
+    """FTBeam constructor arguments that rebuild ft_beam_spw from its arrays."""
+    return dict(
+        data=ft_beam_spw.ft_beam,
+        pol="xx",
+        freq_array=ft_beam_spw.freq_array,
+        mapsize=ft_beam_spw.mapsize,
+    )
+
+
 class TestFTBeamInit:
-    def test_from_array(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
+    def test_from_array(self, ft_beam_init_kwargs: dict) -> None:
         test = uvwindow.FTBeam(
-            data=data,
-            pol="xx",
-            freq_array=freq_array,
-            mapsize=mapsize,
-            verbose=False,
-            x_orientation="east",
+            **ft_beam_init_kwargs, verbose=False, x_orientation="east"
         )
         assert test.pol == "xx"
-        assert np.allclose(data, test.ft_beam)
+        assert np.allclose(ft_beam_init_kwargs["data"], test.ft_beam)
 
-    @pytest.mark.parametrize("bad_data", ["2d", "wrong_shape"])
+    @pytest.mark.parametrize(
+        "slice_data,match",
+        [
+            pytest.param(
+                lambda data: data[:, :, 0], "Wrong dimensions for data input", id="2d"
+            ),
+            pytest.param(
+                lambda data: data[:, :, :-1],
+                "Wrong dimensions for data input",
+                id="wrong_shape",
+            ),
+            pytest.param(
+                lambda data: data[:12, :, :], "data must have shape", id="freq_mismatch"
+            ),
+        ],
+    )
     def test_invalid_data_shape(
-        self, ft_beam_spw: uvwindow.FTBeam, bad_data: str
+        self,
+        ft_beam_init_kwargs: dict,
+        slice_data: Callable[[np.ndarray], np.ndarray],
+        match: str,
     ) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        sliced = data[:, :, 0] if bad_data == "2d" else data[:, :, :-1]
-        with pytest.raises(ValueError, match="Wrong dimensions for data input"):
-            uvwindow.FTBeam(
-                data=sliced, pol="xx", freq_array=freq_array, mapsize=mapsize
-            )
+        data = slice_data(ft_beam_init_kwargs["data"])
+        with pytest.raises(ValueError, match=match):
+            uvwindow.FTBeam(**{**ft_beam_init_kwargs, "data": data})
 
-    def test_freq_mismatch(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(ValueError, match="data must have shape"):
-            uvwindow.FTBeam(
-                data=data[:12, :, :], pol="xx", freq_array=freq_array, mapsize=mapsize
-            )
-
-    def test_int_pol(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        test = uvwindow.FTBeam(
-            data=data, pol=-5, freq_array=freq_array, mapsize=mapsize
-        )
+    def test_int_pol(self, ft_beam_init_kwargs: dict) -> None:
+        test = uvwindow.FTBeam(**{**ft_beam_init_kwargs, "pol": -5})
         assert test.pol == uvutils.polnum2str(-5)
 
-    @pytest.mark.parametrize("bad_pol", ["test", 12])
+    @pytest.mark.parametrize(
+        "bad_pol,exc_type,match",
+        [
+            ("test", ValueError, "Wrong polarisation"),
+            (12, ValueError, "Wrong polarisation"),
+            (3.4, TypeError, "Must feed pol as str or int"),
+        ],
+        ids=["unknown_str", "unknown_int", "float"],
+    )
     def test_invalid_pol(
-        self, ft_beam_spw: uvwindow.FTBeam, bad_pol: str | int
+        self,
+        ft_beam_init_kwargs: dict,
+        bad_pol: str | int | float,
+        exc_type: type[Exception],
+        match: str,
     ) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(ValueError, match="Wrong polarisation"):
-            uvwindow.FTBeam(
-                pol=bad_pol, data=data, freq_array=freq_array, mapsize=mapsize
-            )
-
-    def test_float_pol_raises_typeerror(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(TypeError, match="Must feed pol as str or int"):
-            uvwindow.FTBeam(pol=3.4, data=data, freq_array=freq_array, mapsize=mapsize)
+        with pytest.raises(exc_type, match=match):
+            uvwindow.FTBeam(**{**ft_beam_init_kwargs, "pol": bad_pol})
 
 
 nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
@@ -273,17 +263,6 @@ class TestFTBeamFromBeam:
         for i in range(small_ft_beam.freq_array.size):
             assert np.argmax(small_ft_beam.ft_beam[i]) == (ngrid**2) // 2
 
-    def test_pol_as_int(self, small_ft_beam: uvwindow.FTBeam) -> None:
-        test = uvwindow.FTBeam.from_beam(
-            beamfile=nf_dipole_beamfits,
-            pol=-5,
-            freq_array=small_ft_beam.freq_array,
-            mapsize=1.0,
-            npix=29,
-        )
-        assert test.pol == "xx"
-        assert np.allclose(test.ft_beam, small_ft_beam.ft_beam)
-
     def test_too_few_frequencies(self, nf_dipole_beam_freqs: np.ndarray) -> None:
         with pytest.raises(ValueError, match="at least three frequencies"):
             uvwindow.FTBeam.from_beam(
@@ -315,15 +294,27 @@ class TestFTBeamFromBeam:
         # ...which is not trivially true: the beam changes with frequency
         assert not np.allclose(test.ft_beam[1], test.ft_beam[2])
 
-    def test_even_npix_adjusted_to_odd(self, small_ft_beam: uvwindow.FTBeam) -> None:
-        # npix=30 is adjusted down to 29, reproducing small_ft_beam exactly
-        test = uvwindow.FTBeam.from_beam(
+    @pytest.mark.parametrize(
+        "override",
+        [
+            pytest.param({"pol": -5}, id="pol_as_int"),
+            # npix=30 is adjusted down to 29
+            pytest.param({"npix": 30}, id="even_npix_adjusted_to_odd"),
+        ],
+    )
+    def test_equivalent_arguments(
+        self, small_ft_beam: uvwindow.FTBeam, override: dict
+    ) -> None:
+        """Check that equivalent from_beam arguments reproduce small_ft_beam exactly."""
+        kwargs = dict(
             beamfile=nf_dipole_beamfits,
             pol="xx",
             freq_array=small_ft_beam.freq_array,
             mapsize=1.0,
-            npix=30,
+            npix=29,
         )
+        test = uvwindow.FTBeam.from_beam(**{**kwargs, **override})
+        assert test.pol == "xx"
         assert test == small_ft_beam
 
     @pytest.mark.parametrize(("mapsize", "ngrid"), [(0.35, 15), (uvwindow._MAX_R, 29)])
@@ -397,16 +388,6 @@ class TestFTBeamFromFile:
         assert test.x_orientation == "east"
         np.testing.assert_array_equal(test.freq_array, ft_bandwidth[5:25])
 
-    def test_invalid_ftfile_type(self) -> None:
-        # The TypeError comes from pathlib; its wording varies between Python
-        # versions, so only the exception type is checked.
-        with pytest.raises(TypeError):
-            uvwindow.FTBeam.from_file(ftfile=12.0)
-
-    def test_invalid_ftfile_path(self) -> None:
-        with pytest.raises(ValueError, match="Wrong ftfile input"):
-            uvwindow.FTBeam.from_file(ftfile="whatever")
-
     def test_spw_range_matches_fixture(
         self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
     ) -> None:
@@ -424,15 +405,59 @@ class TestFTBeamFromFile:
         assert np.allclose(test.freq_array, ft_bandwidth)
 
     @pytest.mark.parametrize(
-        ("bad_freqs", "match"),
+        "make_kwargs,exc_type,match",
         [
-            (np.array([250e6, 251e6]), "beyond the bandwidth"),
-            (np.array([100e6]), "at least two frequencies"),
+            # The TypeError comes from pathlib; its wording varies between
+            # Python versions, so only the exception type is checked.
+            pytest.param(
+                lambda bandwidth: dict(ftfile=12.0),
+                TypeError,
+                None,
+                id="ftfile_not_path_like",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(ftfile="whatever"),
+                ValueError,
+                "Wrong ftfile input",
+                id="ftfile_missing",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile, freq_array=np.array([250e6, 251e6])
+                ),
+                ValueError,
+                "beyond the bandwidth",
+                id="freqs_beyond_bandwidth",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile, freq_array=np.array([100e6])
+                ),
+                ValueError,
+                "at least two frequencies",
+                id="single_frequency",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile,
+                    spw_range=(5, 25),
+                    freq_array=bandwidth[5:25],
+                ),
+                ValueError,
+                "both spw_range and freq_array",
+                id="spw_range_and_freq_array",
+            ),
         ],
     )
-    def test_invalid_freq_array(self, bad_freqs: np.ndarray, match: str) -> None:
-        with pytest.raises(ValueError, match=match):
-            uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
+    def test_invalid_input(
+        self,
+        ft_bandwidth: np.ndarray,
+        make_kwargs: Callable[[np.ndarray], dict],
+        exc_type: type[Exception],
+        match: str | None,
+    ) -> None:
+        with pytest.raises(exc_type, match=match):
+            uvwindow.FTBeam.from_file(**make_kwargs(ft_bandwidth))
 
     @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
@@ -1539,23 +1564,31 @@ class TestFTBeamSelectFreqs:
             interp.ft_beam, 0.75 * full.ft_beam[3:10] + 0.25 * full.ft_beam[4:11]
         )
 
-    def test_out_of_coverage_raises(
+    @pytest.mark.parametrize(
+        "make_bad_freqs,match",
+        [
+            pytest.param(
+                lambda bandwidth: np.array([bandwidth.max() + 1e6] * 3),
+                "beyond the bandwidth",
+                id="out_of_coverage",
+            ),
+            pytest.param(
+                lambda bandwidth: bandwidth[:1],
+                "at least two frequencies",
+                id="single_frequency",
+            ),
+        ],
+    )
+    def test_invalid_freqs_raise(
         self,
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
         ft_bandwidth: np.ndarray,
+        make_bad_freqs: Callable[[np.ndarray], np.ndarray],
+        match: str,
     ) -> None:
         full = make_ft_beam_obj()
-        with pytest.raises(ValueError, match="beyond the bandwidth"):
-            full.select_freqs(np.array([ft_bandwidth.max() + 1e6] * 3))
-
-    def test_single_frequency_raises(
-        self,
-        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
-        ft_bandwidth: np.ndarray,
-    ) -> None:
-        full = make_ft_beam_obj()
-        with pytest.raises(ValueError, match="at least two frequencies"):
-            full.select_freqs(ft_bandwidth[:1])
+        with pytest.raises(ValueError, match=match):
+            full.select_freqs(make_bad_freqs(ft_bandwidth))
 
 
 class TestFTBeamFromFileFreqArray:
@@ -1569,14 +1602,6 @@ class TestFTBeamFromFileFreqArray:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=target)
         assert np.allclose(test.freq_array, target)
         assert np.array_equal(test.ft_beam, full.ft_beam[5:25])
-
-    def test_both_selections_raise(self, ft_bandwidth: np.ndarray) -> None:
-        with pytest.raises(ValueError, match="both spw_range and freq_array"):
-            uvwindow.FTBeam.from_file(
-                ftfile=DATA_PATH / ftfile,
-                spw_range=(5, 25),
-                freq_array=ft_bandwidth[5:25],
-            )
 
     def test_interpolation_through_partial_read(
         self,
