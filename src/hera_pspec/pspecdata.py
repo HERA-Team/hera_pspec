@@ -1966,7 +1966,7 @@ class PSpecData:
         ``q_matrices`` is an array (or dimensionless Quantity) or a callable
         ``q_matrices(freqs, delays)`` taking the spectral-window frequencies
         (Quantity, Hz, without filter extensions) and the delay-bin centres
-        (Quantity, s).
+        (Quantity, ns, as returned by delays()).
         """
         if callable(q_matrices):
             freqs = self.freqs[self.spw_range[0] : self.spw_range[1]] * units.Hz
@@ -3325,10 +3325,11 @@ class PSpecData:
         Returns
         -------
         delays : astropy.units.Quantity
-            Delays, tau, in seconds. Before v1.0 this was a float array in
-            ns; ``delays().to_value(u.ns)`` gives those numbers.
+            Delays, tau, in ns (the same numbers as the float array returned
+            before v1.0). ``UVPSpec.dly_array`` stores delays in seconds;
+            convert with ``.to(u.s)`` where needed.
         """
-        return self._delays_s() * units.s
+        return units.Quantity(self._delays_s() * 1e9, units.ns)
 
     def _delays_s(self):
         """

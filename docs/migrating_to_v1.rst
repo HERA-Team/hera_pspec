@@ -23,8 +23,8 @@ Breaking changes
   ``UVPSpec.get_dlys`` (s), ``get_kparas`` and ``get_kperps``
   (1 / length unit), ``get_blpair_seps`` (m) and ``get_spw_ranges`` (Hz;
   the returned tuples hold Quantities, so they are no longer hashable).
-* ``PSpecData.delays()`` returns seconds as a Quantity. It used to return a
-  float array in ns.
+* ``PSpecData.delays()`` returns a Quantity in ns (the same numbers as the
+  float array it used to return).
 * ``PSpecData.scalar()`` and ``UVPSpec.compute_scalar()`` return a Quantity in
   ``length_unit**3 / (Hz sr)``.
 * ``UVPSpec.generate_noise_spectra()`` returns Quantities: mK² L³ for
@@ -335,7 +335,7 @@ Delays and the scalar
 .. code-block:: python
 
   # v1.0
-  dlys_ns = ds.delays().to_value(u.ns)
+  dlys_ns = ds.delays().value       # same numbers, now a Quantity in ns
   scalar = ds.scalar(("xx", "xx"))  # Quantity in Mpc3 / (Hz sr littleh3)
   scalar.value                      # the v0.x number
 

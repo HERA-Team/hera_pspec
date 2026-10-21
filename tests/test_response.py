@@ -343,7 +343,7 @@ class TestQMatrices:
 
         assert_close(ds.q_hat(KEY1, KEY2, q_matrices=make_q), ds.q_hat(KEY1, KEY2))
         assert seen["freqs"].unit == u.Hz and seen["freqs"].size == 40
-        assert seen["delays"].unit == u.s and seen["delays"].size == 20
+        assert seen["delays"].unit == u.ns and seen["delays"].size == 20
 
     @pytest.mark.filterwarnings("ignore:Poorly conditioned covariance:UserWarning")
     def test_user_estimator_matches_explicit_trace(self, ds) -> None:

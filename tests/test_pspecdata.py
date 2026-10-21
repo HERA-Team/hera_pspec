@@ -1836,11 +1836,11 @@ def test_delays(uvd: UVData) -> None:
     d = ds.delays()
     assert len(d) == ds.dsets[0].Nfreqs
     assert isinstance(d, u.Quantity)
-    assert d.unit == u.s
-    # the old return value: utils.get_delays in ns
+    assert d.unit == u.ns
+    # the same numbers as the old float return value: utils.get_delays in ns
     old_ns = utils.get_delays(ds.freqs, n_dlys=ds.spw_Ndlys) * 1e9
-    np.testing.assert_allclose(d.to_value(u.ns), old_ns, rtol=1e-15, atol=0)
-    np.testing.assert_allclose(d.value, old_ns * 1e-9, rtol=1e-15, atol=0)
+    np.testing.assert_array_equal(d.value, old_ns)
+    np.testing.assert_allclose(d.to_value(u.s), old_ns * 1e-9, rtol=1e-15, atol=0)
 
 
 def test_delays_spw(pspec_ds: pspecdata.PSpecData) -> None:
@@ -1849,7 +1849,7 @@ def test_delays_spw(pspec_ds: pspecdata.PSpecData) -> None:
     pspec_ds.set_Ndlys(10)
     freqs = pspec_ds.freqs[10:30]
     np.testing.assert_array_equal(
-        pspec_ds.delays().to_value(u.s), utils.get_delays(freqs, n_dlys=10)
+        pspec_ds.delays().to_value(u.ns), utils.get_delays(freqs, n_dlys=10) * 1e9
     )
     uvp = pspec_ds.pspec(
         pspec_bls,
@@ -1861,8 +1861,11 @@ def test_delays_spw(pspec_ds: pspecdata.PSpecData) -> None:
         verbose=False,
     )
     # pspec leaves the last spw selected
-    np.testing.assert_array_equal(
-        uvp.get_dlys(1).to_value(u.s), pspec_ds.delays().to_value(u.s)
+    np.testing.assert_allclose(
+        uvp.get_dlys(1).to_value(u.s),
+        pspec_ds.delays().to_value(u.s),
+        rtol=1e-15,
+        atol=0,
     )
     np.testing.assert_array_equal(
         uvp.get_dlys(0).to_value(u.s), utils.get_delays(freqs, n_dlys=10)
