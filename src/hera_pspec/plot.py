@@ -1,6 +1,5 @@
 import copy
 
-import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
 import uvtools
@@ -8,9 +7,6 @@ from pyuvdata import UVData
 
 from . import conversions, utils, uvpspec
 from . import uvpspec_utils as uvputils
-
-# k axes of delay_spectrum / delay_waterfall are labelled in h Mpc^-1
-_LITTLEH_LENGTH = u.Mpc / cu.littleh
 
 
 def _units_latex(unit):
@@ -32,6 +28,26 @@ def _units_latex(unit):
     if unit == u.dimensionless_unscaled:
         return ""
     return unit.to_string("latex_inline").strip("$")
+
+
+def _k_axis_label(component, length_unit):
+    r"""
+    Return the axis label of a k component in units of 1 / ``length_unit``.
+
+    Parameters
+    ----------
+    component : str
+        LaTeX subscript of k, e.g. ``r"\parallel"`` or ``r"\perp"``.
+
+    length_unit : astropy.units.UnitBase
+        Cosmological length unit L; the label shows 1 / L, e.g.
+        ``h_{100}\,Mpc^{-1}`` for ``u.Mpc / cu.littleh``.
+
+    Returns
+    -------
+    str
+    """
+    return rf"$k_{{{component}}}\ [{_units_latex(length_unit**-1)}]$"
 
 
 def _is_antpair_tuple(value):
@@ -363,13 +379,15 @@ def delay_spectrum(
     if fold:
         uvp_plt.fold_spectra()
 
-    # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
+    # Get x-axis units (delays in ns, or k_parallel in 1 / L for the object's
+    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives by default)
+    length_unit = uvp_plt._default_length_unit()
     if delay:
         dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw, length_unit=_LITTLEH_LENGTH).to_value(
-            1 / _LITTLEH_LENGTH
+        k_para = uvp_plt.get_kparas(spw, length_unit=length_unit).to_value(
+            length_unit**-1
         )
         x = k_para
 
@@ -553,7 +571,7 @@ def delay_spectrum(
         if delay:
             ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
         else:
-            ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+            ax.set_xlabel(_k_axis_label(r"\parallel", length_unit), fontsize=16)
     if ax.get_ylabel() == "" and plot_stats is None:
         # Power spectrum units in LaTeX
         psunits = _units_latex(uvp_plt.units)
@@ -711,13 +729,15 @@ def delay_waterfall(
     if deltasq and not delay:
         uvp_plt.convert_to_deltasq()
 
-    # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
+    # Get x-axis units (delays in ns, or k_parallel in 1 / L for the object's
+    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives by default)
+    length_unit = uvp_plt._default_length_unit()
     if delay:
         dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw, length_unit=_LITTLEH_LENGTH).to_value(
-            1 / _LITTLEH_LENGTH
+        k_para = uvp_plt.get_kparas(spw, length_unit=length_unit).to_value(
+            length_unit**-1
         )
         x = k_para
 
@@ -879,7 +899,9 @@ def delay_waterfall(
                     if delay:
                         ax.set_xlabel(r"$\tau$ $[{\rm ns}]$", fontsize=16)
                     else:
-                        ax.set_xlabel(r"$k_{\parallel}\ h\ Mpc^{-1}$", fontsize=16)
+                        ax.set_xlabel(
+                            _k_axis_label(r"\parallel", length_unit), fontsize=16
+                        )
             else:
                 ax.set_xticklabels([])
 
@@ -1074,8 +1096,9 @@ def delay_wedge(
     assert isinstance(pol, (int, np.integer, tuple))
     fix_negval = component in ["real", "imag"] and log10
 
-    # check pspec units for little h
-    little_h = uvputils.is_littleh(uvp.norm_units)
+    # cosmological length unit of the k axes: the object's own (as for
+    # get_kparas / get_kperps), so axes and horizon lines agree with them
+    length_unit = uvp._default_length_unit()
 
     # Create new ax if none specified
     new_plot = False
@@ -1121,9 +1144,8 @@ def delay_wedge(
         x_axis = uvp.get_dlys(spw).to_value(u.ns)
         y_axis = blpair_seps
     else:
-        length_unit = conversions.length_unit_from_little_h(little_h)
-        x_axis = uvp.get_kparas(spw, length_unit=length_unit).to_value(1 / length_unit)
-        y_axis = uvp.get_kperps(spw, length_unit=length_unit).to_value(1 / length_unit)
+        x_axis = uvp.get_kparas(spw, length_unit=length_unit).to_value(length_unit**-1)
+        y_axis = uvp.get_kperps(spw, length_unit=length_unit).to_value(length_unit**-1)
     if rotate:
         _x_axis = y_axis
         y_axis = x_axis
@@ -1245,8 +1267,8 @@ def delay_wedge(
         xlabel = r"$\tau$ $[{\rm ns}]$"
         ylabel = r"$|\vec{b}|$ $[{\rm m}]$"
     else:
-        xlabel = r"$k_{\parallel}\ [h\ \rm Mpc^{-1}]$"
-        ylabel = r"$k_{\perp}\ [h\ \rm Mpc^{-1}]$"
+        xlabel = _k_axis_label(r"\parallel", length_unit)
+        ylabel = _k_axis_label(r"\perp", length_unit)
     if rotate:
         _xlabel = ylabel
         ylabel = xlabel
@@ -1274,9 +1296,8 @@ def delay_wedge(
             avg_z = conversions.f2z(
                 np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
             )
-            length_unit = conversions.length_unit_from_little_h(little_h)
             tau_to_kpara = conversions.tau_to_kpara(avg_z, uvp.cosmo, length_unit)
-            horizons *= tau_to_kpara.to_value(1 / length_unit / u.s) / 1e9
+            horizons *= tau_to_kpara.to_value(length_unit**-1 / u.s) / 1e9
 
         # iterate over bins and plot lines
         if rotate:
