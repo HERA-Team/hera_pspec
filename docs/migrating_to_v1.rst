@@ -54,9 +54,10 @@ Breaking changes
   ``UVWindow.check_kunits`` returns the converted Quantity.
 * ``UVPSpec.get_param_unit`` returns ``None`` for ``window_function_kperp`` and
   ``window_function_kpara``; use ``UVPSpec.window_k_unit()`` for these.
-* A cosmology with an explicit ``Om_k`` that differs from
-  ``1 - Om_L - Om_M`` can no longer be used. Astropy derives the curvature
-  from ``Om0`` and ``Ode0``, so it cannot represent such a model.
+* Non-flat cosmologies work as before (the default is slightly open). What
+  no longer works is giving ``Om_k`` separately with a value that differs from
+  ``1 - Om_L - Om_M``, which ``Cosmo_Conversions`` allowed. Astropy derives the
+  curvature from ``Om0`` and ``Ode0``, so it cannot represent such a model.
 * Physical constants come from ``astropy.constants`` (CODATA 2018, was 2014).
   ``Jy_to_mK`` changes by -3.5e-7 relative, and spectra in mK² by about
   -7e-7.
