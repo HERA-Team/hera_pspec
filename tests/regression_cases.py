@@ -247,15 +247,16 @@ def uvpspec_outputs(uvp: UVPSpec, prefix: str = "") -> dict[str, np.ndarray]:
     }
     for spw in uvp.spw_array:
         out[f"{prefix}data_array_{spw}"] = uvp.data_array[spw]
-        out[f"{prefix}get_dlys_{spw}"] = uvp.get_dlys(spw)
+        out[f"{prefix}get_dlys_{spw}"] = uvp.get_dlys(spw).to_value(units.s)
         for little_h in (True, False):
             tag = "h" if little_h else "noh"
+            length_unit = conversions.length_unit_from_little_h(little_h)
             out[f"{prefix}get_kparas_{tag}_{spw}"] = uvp.get_kparas(
-                spw, little_h=little_h
-            )
+                spw, length_unit=length_unit
+            ).to_value(1 / length_unit)
             out[f"{prefix}get_kperps_{tag}_{spw}"] = uvp.get_kperps(
-                spw, little_h=little_h
-            )
+                spw, length_unit=length_unit
+            ).to_value(1 / length_unit)
         if hasattr(uvp, "cov_array_real"):
             out[f"{prefix}cov_array_real_{spw}"] = uvp.cov_array_real[spw]
             out[f"{prefix}cov_array_imag_{spw}"] = uvp.cov_array_imag[spw]

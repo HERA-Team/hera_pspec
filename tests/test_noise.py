@@ -283,7 +283,7 @@ class TestAnalyticNoise:
         frac_ratio = (
             uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]
         ) / uvp.stats_array["P_N"][0]
-        dlys = uvp.get_dlys(0) * 1e9
+        dlys = uvp.get_dlys(0).to_value(u.ns)
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 
@@ -302,7 +302,7 @@ class TestAnalyticNoise:
         frac_ratio = (
             uvp.stats_array["P_SN"][0] - uvp.stats_array["P_N"][0]
         ) / uvp.stats_array["P_N"][0]
-        dlys = uvp.get_dlys(0) * 1e9
+        dlys = uvp.get_dlys(0).to_value(u.ns)
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
 

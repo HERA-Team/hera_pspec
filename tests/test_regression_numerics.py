@@ -95,4 +95,8 @@ def test_legacy_uvp_file_metadata() -> None:
         [3.20990444e10 - 3.65748031e-06j, 2.16634414e11 - 3.70675734e-05j],
         rtol=1e-8,
     )
-    np.testing.assert_allclose(uvp.get_kparas(0)[1], -0.16775573211036096, rtol=1e-12)
+    np.testing.assert_allclose(
+        uvp.get_kparas(0)[1].to_value(cu.littleh / units.Mpc),
+        -0.16775573211036096,
+        rtol=1e-12,
+    )

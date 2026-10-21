@@ -1579,7 +1579,9 @@ def uvp_noise_error(
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0]))
+        spw_start = np.argmin(
+            np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0].to_value(u.Hz))
+        )
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs

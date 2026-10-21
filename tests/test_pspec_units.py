@@ -220,8 +220,9 @@ class TestDeltasq:
         assert dsq.norm_unit == units.dimensionless_unscaled
         assert dsq.units == units.mK**2
         # k was taken in littleh / Mpc only for the littleh normalisation
-        k_para = uvp.get_kparas(0, little_h=little_h)
-        k_perp = uvp.get_kperps(0, little_h=little_h)
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        k_para = uvp.get_kparas(0, length_unit=length_unit).to_value(1 / length_unit)
+        k_perp = uvp.get_kperps(0, length_unit=length_unit).to_value(1 / length_unit)
         coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)
         np.testing.assert_allclose(
             dsq.data_array[0][..., 0], uvp.data_array[0][..., 0] * coeff, rtol=1e-12

@@ -30,6 +30,9 @@ _KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION,)
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
 
+# Default cosmological length unit (h^-1 Mpc).
+_LITTLEH_LENGTH = units.Mpc / cu.littleh
+
 
 @functools.lru_cache(maxsize=32)
 def _cosmology_from_yaml(cosmo_yaml):
@@ -90,6 +93,18 @@ def _value_in_unit(value, unit):
     if isinstance(value, units.Quantity):
         return value.to_value(unit)
     return value
+
+
+def _spw_range_to_hz(spw_range):
+    """
+    Return a ``get_spw_ranges`` tuple with its frequencies as floats in Hz.
+
+    Frequency Quantities are converted; plain numbers are taken to be in Hz
+    (the pre-v1.0 form of the tuples).
+    """
+    return tuple(_value_in_unit(freq, units.Hz) for freq in spw_range[:2]) + tuple(
+        spw_range[2:]
+    )
 
 
 @functools.lru_cache(maxsize=64)
@@ -994,10 +1009,17 @@ class UVPSpec:
 
         Returns
         -------
-        dlys : float ndarray, contains delays of pspectra in nanosec, given spw
+        dlys : astropy.units.Quantity
+            Delays of the power spectra in the given spw, in seconds.
+
+        Notes
+        -----
+        Changed in v1.0: this returned a float ndarray (in seconds, although
+        the docstring said nanoseconds) before. Use ``.to_value(u.s)`` for
+        the old numbers.
         """
         indices = self.spw_to_dly_indices(key)
-        return self.dly_array[indices]
+        return self.dly_array[indices] << units.s
 
     def get_blpair_seps(self):
         """
@@ -1007,9 +1029,18 @@ class UVPSpec:
 
         Returns
         -------
-        blp_avg_sep : float ndarray
-            shape=(Nbltpairs,)
+        blp_avg_sep : astropy.units.Quantity
+            Baseline separations in meters, shape=(Nbltpairs,).
+
+        Notes
+        -----
+        Changed in v1.0: this returned a float ndarray (in meters) before.
+        Use ``.to_value(u.m)`` for the old numbers.
         """
+        return self._blpair_seps_m() << units.m
+
+    def _blpair_seps_m(self):
+        """Return :meth:`get_blpair_seps` as a float ndarray in meters."""
         # get list of bl separations
         bl_vecs = self.get_ENU_bl_vecs()
         bls = self.bl_array.tolist()
@@ -1063,7 +1094,7 @@ class UVPSpec:
 
         return np.array(blp_blvecs)
 
-    def get_kperps(self, spw, little_h=True):
+    def get_kperps(self, spw, little_h=None, length_unit=None):
         """
         Get transverse (perpendicular) cosmological wavevector for each
         baseline-pair given an adopted cosmology and a spw selection.
@@ -1072,14 +1103,30 @@ class UVPSpec:
         ----------
         spw : int, choice of spectral window
 
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+        little_h : bool, optional
+            Deprecated, use ``length_unit``. True means
+            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
+
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit; k is returned in ``1 / length_unit``.
+            Default: None, the length unit of this object's normalisation
+            (see :meth:`_default_length_unit`): ``u.Mpc / cu.littleh`` if
+            ``norm_units`` contains littleh or the spectra are not
+            cosmologically normalised, ``u.Mpc`` otherwise.
 
         Returns
         -------
-        k_perp : float ndarray, transverse wave-vectors, shape=(Nblpairs,)
+        k_perp : astropy.units.Quantity
+            Transverse wave-vectors in ``1 / length_unit``,
+            shape=(Nbltpairs,).
+
+        Notes
+        -----
+        Changed in v1.0: this returned a float ndarray in h Mpc^-1 by default
+        before, whatever the object's normalisation; for an object normalised
+        in ``Mpc3`` the default is now 1 / Mpc.
         """
+        length_unit = self._resolve_length_unit(length_unit, little_h)
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
@@ -1090,16 +1137,16 @@ class UVPSpec:
         avg_z = conversions.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
 
         # get kperps
-        blpair_seps = self.get_blpair_seps()
-        length_unit = conversions.length_unit_from_little_h(little_h)
+        blpair_seps = self._blpair_seps_m()
         cosmo = conversions.as_astropy_cosmology(self.cosmo)
+        k_unit = 1 / length_unit
         k_perp = blpair_seps * conversions.bl_to_kperp(
             avg_z, cosmo, length_unit
-        ).to_value(1 / length_unit / units.m)
+        ).to_value(k_unit / units.m)
 
-        return k_perp
+        return k_perp << k_unit
 
-    def get_kparas(self, spw, little_h=True, dlys=None):
+    def get_kparas(self, spw, little_h=None, dlys=None, length_unit=None):
         """
         Get radial (parallel) cosmological wavevectors for
         power spectra given an adopted cosmology and a spw selection.
@@ -1109,29 +1156,45 @@ class UVPSpec:
         spw : int
             Choice of spectral window
 
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+        little_h : bool, optional
+            Deprecated, use ``length_unit``. True means
+            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
-        dlys: array of floats
-            List of delay values to compute the k_parallel over.
-            If used, it overrides spw.
-            Default is None (delay values are read from self.get_dlys).
+        dlys : array_like or astropy.units.Quantity, optional
+            Delays to compute k_parallel for (the spw still sets the
+            redshift). A Quantity may be in any time unit; plain floats are
+            seconds. Default is None (the delays of the spw, see
+            :meth:`get_dlys`).
 
-        Returns (k_perp, k_para)
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit; k is returned in ``1 / length_unit``.
+            Default: None, the length unit of this object's normalisation
+            (see :meth:`get_kperps`).
+
+        Returns
         -------
-        k_para : float ndarray
-            Radial wave-vectors, shape=(Ndlys given spw)
+        k_para : astropy.units.Quantity
+            Radial wave-vectors in ``1 / length_unit``, shape=(Ndlys given
+            spw).
+
+        Notes
+        -----
+        Changed in v1.0: this returned a float ndarray in h Mpc^-1 by default
+        before, whatever the object's normalisation; for an object normalised
+        in ``Mpc3`` the default is now 1 / Mpc.
         """
+        length_unit = self._resolve_length_unit(length_unit, little_h)
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
             "wave-vectors. See self.set_cosmology()"
         )
 
-        # check inputs
+        # check inputs (plain float seconds)
         if dlys is None:
-            dlys = self.get_dlys(spw)
+            dlys = self.dly_array[self.spw_to_dly_indices(spw)]
+        elif isinstance(dlys, units.Quantity):
+            dlys = dlys.to_value(units.s)
         else:
             dlys = np.array(dlys)
 
@@ -1139,12 +1202,54 @@ class UVPSpec:
         avg_z = conversions.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
 
         # get kparas
-        length_unit = conversions.length_unit_from_little_h(little_h)
         cosmo = conversions.as_astropy_cosmology(self.cosmo)
+        k_unit = 1 / length_unit
         k_para = dlys * conversions.tau_to_kpara(avg_z, cosmo, length_unit).to_value(
-            1 / length_unit / units.s
+            k_unit / units.s
         )
-        return k_para
+        return k_para << k_unit
+
+    def _default_length_unit(self):
+        """
+        Cosmological length unit of this object's power spectra.
+
+        ``u.Mpc / cu.littleh`` if ``norm_units`` (the P(k) normalisation)
+        contains littleh, or if the spectra were not cosmologically
+        normalised (``Hz sr``, where littleh was the old default);
+        ``u.Mpc`` otherwise. Used when a ``length_unit`` argument is None.
+
+        Returns
+        -------
+        astropy.units.UnitBase
+        """
+        norm_units = getattr(self, "norm_units", None)
+        if norm_units is None:
+            return _LITTLEH_LENGTH
+        try:
+            norm_unit = _norm_unit(norm_units, False)
+        except ValueError:
+            # an unparsable norm_units string: keep the old littleh default
+            return _LITTLEH_LENGTH
+        if uvputils.is_littleh(norm_unit) or norm_unit.is_equivalent(
+            units.Hz * units.sr
+        ):
+            return _LITTLEH_LENGTH
+        return units.Mpc
+
+    def _resolve_length_unit(self, length_unit, little_h):
+        """
+        Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
+
+        None for both gives :meth:`_default_length_unit`. Strings are parsed
+        with :func:`uvpspec_utils.parse_unit_string`; the rest is
+        :func:`conversions.resolve_length_unit`, whose deprecation warning
+        points at the caller of the public method that called this one.
+        """
+        if length_unit is None and little_h is None:
+            return self._default_length_unit()
+        if isinstance(length_unit, (str, bytes)):
+            length_unit = uvputils.parse_unit_string(length_unit)
+        return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
     def get_blpairs(self):
         """
@@ -1197,11 +1302,23 @@ class UVPSpec:
         Returns
         -------
         spw_ranges : list of len-4 tuples
-            Tuples: (freq_start, freq_end, Nfreqs, Ndlys) in Hz. Contains
-            start, stop and Nfreqs and Ndlys [Hz] of each spectral window.
-            To turn this into the frequency array of the spectral window use
-            `spw_freqs = np.linspace(*spw_range[:3], endpoint=False)`
+            Tuples: (freq_start, freq_end, Nfreqs, Ndlys), with freq_start
+            and freq_end astropy Quantities in Hz. To turn this into the
+            frequency array of the spectral window use
+            ``spw_freqs = np.linspace(*spw_range[:3], endpoint=False)``
+            (a Quantity in Hz).
+
+        Notes
+        -----
+        Changed in v1.0: the frequencies were plain floats in Hz before.
         """
+        return [
+            (start << units.Hz, stop << units.Hz, Nfreqs, Ndlys)
+            for start, stop, Nfreqs, Ndlys in self._spw_ranges_hz(spws)
+        ]
+
+    def _spw_ranges_hz(self, spws=None):
+        """Return :meth:`get_spw_ranges` with the frequencies as floats in Hz."""
         # type check
         if isinstance(spws, (int, np.integer)):
             spws = [spws]
@@ -1320,11 +1437,11 @@ class UVPSpec:
         """
         assert stat in self.stats_array, f"{stat} not found in stats_array"
         blpairs = self.get_blpairs()
-        bllens = self.get_blpair_seps()
+        bllens = self._blpair_seps_m()
         # iterate over spws
         for i in range(self.Nspws):
-            # get this spw dlys
-            dlys = self.get_dlys(i) * 1e9
+            # get this spw dlys in ns
+            dlys = self.dly_array[self.spw_to_dly_indices(i)] * 1e9
             # iterate over blpairs
             for blp in blpairs:
                 # get time-blpair inds
@@ -1383,14 +1500,18 @@ class UVPSpec:
         else:
             uvp = copy.deepcopy(self)
 
-        # determine if little_h is required
-        little_h = uvputils.is_littleh(uvp.norm_units)
+        # k in the length unit of norm_units (this is what norm_unit assumes)
+        if uvputils.is_littleh(uvp.norm_units):
+            length_unit = _LITTLEH_LENGTH
+        else:
+            length_unit = units.Mpc
+        k_unit = 1 / length_unit
 
         # loop over spectral windows
         for spw in range(uvp.Nspws):
             # get k vectors
-            k_perp = uvp.get_kperps(spw, little_h=little_h)
-            k_para = uvp.get_kparas(spw, little_h=little_h)
+            k_perp = uvp.get_kperps(spw, length_unit=length_unit).to_value(k_unit)
+            k_para = uvp.get_kparas(spw, length_unit=length_unit).to_value(k_unit)
             k_mag = np.sqrt(k_perp[:, None, None] ** 2 + k_para[None, :, None] ** 2)
             # shape of (Nbltpairs, spw_Ndlys, Npols)
             coeff = k_mag**3 / (2 * np.pi**2)
@@ -1538,8 +1659,8 @@ class UVPSpec:
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = self.get_spw_ranges()
-            spw = [spw_ranges.index(s) for s in spw]
+            spw_ranges = self._spw_ranges_hz()
+            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_freq_array for s in spw]).all(), (
@@ -1575,8 +1696,8 @@ class UVPSpec:
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = self.get_spw_ranges()
-            spw = [spw_ranges.index(s) for s in spw]
+            spw_ranges = self._spw_ranges_hz()
+            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_dly_array for s in spw]).all(), (
@@ -1616,8 +1737,8 @@ class UVPSpec:
 
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
-            spw_ranges = self.get_spw_ranges()
-            spw = [spw_ranges.index(s) for s in spw]
+            spw_ranges = self._spw_ranges_hz()
+            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_array for s in spw]).all(), (
@@ -3151,8 +3272,13 @@ class UVPSpec:
 
         # Get k vectors
         if form == "DelSq":
-            k_perp = self.get_kperps(spw, little_h=little_h)
-            k_para = self.get_kparas(spw, little_h=little_h)
+            length_unit = conversions.length_unit_from_little_h(little_h)
+            k_perp = self.get_kperps(spw, length_unit=length_unit).to_value(
+                1 / length_unit
+            )
+            k_para = self.get_kparas(spw, length_unit=length_unit).to_value(
+                1 / length_unit
+            )
             k_mag = np.sqrt(k_perp[:, None] ** 2 + k_para[None, :] ** 2)
 
         # get blpairs
@@ -3561,7 +3687,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     Npols = len(new_polpairs)
 
     # get each uvp's data axes
-    uvp_spws = [_uvp.get_spw_ranges() for _uvp in uvps]
+    uvp_spws = [_uvp._spw_ranges_hz() for _uvp in uvps]
     uvp_blpts = [
         list(zip(_uvp.blpair_array, _uvp.time_1_array, _uvp.time_2_array))
         for _uvp in uvps
@@ -4020,7 +4146,8 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     unique_spws : list
         List of unique spectral window tuples (spw_freq_start, spw_freq_end,
-        spw_Nfreqs, spw_Ndlys) across all input uvps
+        spw_Nfreqs, spw_Ndlys) across all input uvps, with the frequencies
+        as plain floats in Hz.
 
     unique_blpts : list
         List of unique baseline-pair-time tuples (blpair_integer,
@@ -4093,7 +4220,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
 
     # find unique items
     for uvp1 in uvps:
-        for s in uvp1.get_spw_ranges():
+        for s in uvp1._spw_ranges_hz():
             if s not in unique_spws:
                 unique_spws.append(s)
         for p in uvp1.polpair_array:
@@ -4114,7 +4241,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     # iterate over uvps
     for i, uvp1 in enumerate(uvps):
         # get uvp1 sets and append to unique lists
-        uvp1_spws = uvp1.get_spw_ranges()
+        uvp1_spws = uvp1._spw_ranges_hz()
         uvp1_blpts = list(zip(uvp1.blpair_array, uvp1.time_1_array, uvp1.time_2_array))
         uvp1_polpairs = uvp1.polpair_array
 
@@ -4123,7 +4250,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
             if j <= i:
                 continue
             # get uvp2 sets
-            uvp2_spws = uvp2.get_spw_ranges()
+            uvp2_spws = uvp2._spw_ranges_hz()
             uvp2_blpts = list(
                 zip(uvp2.blpair_array, uvp2.time_1_array, uvp2.time_2_array)
             )

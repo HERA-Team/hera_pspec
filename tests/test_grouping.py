@@ -1,6 +1,7 @@
 import copy
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import numpy as np
 import pytest
 from astropy import units as u
@@ -769,7 +770,7 @@ class TestSpherical:
         )
         assert sph.Nblpairs == 1
         assert "checking 1 2 3" in sph.history
-        assert np.isclose(sph.get_blpair_seps(), 0).all()
+        assert np.isclose(sph.get_blpair_seps().to_value(u.m), 0).all()
         assert "err" in sph.stats_array
 
     def test_average_without_window_function_array(
@@ -794,7 +795,9 @@ class TestSpherical:
         )
         for spw in sph.spw_array:
             # binning and normalization
-            assert np.isclose(sph.get_kparas(spw), self.KBINS).all()
+            assert np.isclose(
+                sph.get_kparas(spw).to_value(cu.littleh / u.Mpc), self.KBINS
+            ).all()
             assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()
             # basic "averaged data smell test": low k modes > high k modes
             assert np.all(

@@ -1,5 +1,6 @@
 import copy
 
+import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
 import uvtools
@@ -7,6 +8,9 @@ from pyuvdata import UVData
 
 from . import conversions, utils, uvpspec
 from . import uvpspec_utils as uvputils
+
+# k axes of delay_spectrum / delay_waterfall are labelled in h Mpc^-1
+_LITTLEH_LENGTH = u.Mpc / cu.littleh
 
 
 def _units_latex(unit):
@@ -361,10 +365,12 @@ def delay_spectrum(
 
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
-        dlys = uvp_plt.get_dlys(spw) * 1e9  # ns
+        dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw)
+        k_para = uvp_plt.get_kparas(spw, length_unit=_LITTLEH_LENGTH).to_value(
+            1 / _LITTLEH_LENGTH
+        )
         x = k_para
 
     # Check plot_stats
@@ -707,10 +713,12 @@ def delay_waterfall(
 
     # Get x-axis units (delays in ns, or k_parallel in Mpc^-1 or h Mpc^-1)
     if delay:
-        dlys = uvp_plt.get_dlys(spw) * 1e9  # ns
+        dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw)
+        k_para = uvp_plt.get_kparas(spw, length_unit=_LITTLEH_LENGTH).to_value(
+            1 / _LITTLEH_LENGTH
+        )
         x = k_para
 
     # Extract power spectra into array
@@ -884,7 +892,9 @@ def delay_waterfall(
         else:
             units = r"$%sP(k_\parallel)$ $[%s]$" % (logunits, psunits)
 
-        spwrange = np.around(np.array(uvp_plt.get_spw_ranges()[spw][:2]) / 1e6, 2)
+        spwrange = np.around(
+            u.Quantity(uvp_plt.get_spw_ranges()[spw][:2]).to_value(u.MHz), 2
+        )
         axes[0][0].get_figure().suptitle(
             "{}\n{} polarization | {} -- {} MHz".format(units, pol, *spwrange),
             y=1.03,
@@ -1089,7 +1099,7 @@ def delay_wedge(
     )
 
     # get blpairs and order by len and enforce bl len ordering anyways
-    blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps()
+    blpairs, blpair_seps = uvp.get_blpairs(), uvp.get_blpair_seps().to_value(u.m)
     osort = np.argsort(blpair_seps)
     blpairs, blpair_seps = [blpairs[oi] for oi in osort], blpair_seps[osort]
     if len(blpairs) < 2:
@@ -1108,11 +1118,12 @@ def delay_wedge(
 
     # Format ticks
     if delay:
-        x_axis = uvp.get_dlys(spw) * 1e9
+        x_axis = uvp.get_dlys(spw).to_value(u.ns)
         y_axis = blpair_seps
     else:
-        x_axis = uvp.get_kparas(spw, little_h=little_h)
-        y_axis = uvp.get_kperps(spw, little_h=little_h)
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        x_axis = uvp.get_kparas(spw, length_unit=length_unit).to_value(1 / length_unit)
+        y_axis = uvp.get_kperps(spw, length_unit=length_unit).to_value(1 / length_unit)
     if rotate:
         _x_axis = y_axis
         y_axis = x_axis

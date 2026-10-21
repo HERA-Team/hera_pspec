@@ -1784,11 +1784,15 @@ def test_delays_spw(pspec_ds: pspecdata.PSpecData) -> None:
         verbose=False,
     )
     # pspec leaves the last spw selected
-    np.testing.assert_array_equal(uvp.get_dlys(1), pspec_ds.delays().to_value(u.s))
-    np.testing.assert_array_equal(uvp.get_dlys(0), utils.get_delays(freqs, n_dlys=10))
+    np.testing.assert_array_equal(
+        uvp.get_dlys(1).to_value(u.s), pspec_ds.delays().to_value(u.s)
+    )
+    np.testing.assert_array_equal(
+        uvp.get_dlys(0).to_value(u.s), utils.get_delays(freqs, n_dlys=10)
+    )
     # dly_array is in seconds and agrees with the old ns delays times 1e-9
     np.testing.assert_allclose(
-        uvp.get_dlys(0),
+        uvp.get_dlys(0).to_value(u.s),
         utils.get_delays(freqs, n_dlys=10) * 1e9 * 1e-9,
         rtol=1e-15,
         atol=0,
@@ -2146,7 +2150,7 @@ class TestGetAnalyticCovariance:
             verbose=False,
             taper="bh",
         )
-        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0) * 1e9) > 1000
+        noise_dlys = np.abs(uvp_auto_cov.get_dlys(0).to_value(u.ns)) > 1000
         rms = [
             np.std(
                 uvp_auto_cov.get_data(key).real
@@ -2184,7 +2188,7 @@ class TestGetAnalyticCovariance:
         )
         # get_dlys() depends only on the spw/taper grid, not the cov_model,
         # so this matches what test_noise_floor_from_autos computes.
-        noise_dlys = np.abs(uvp_fgdep_cov.get_dlys(0) * 1e9) > 1000
+        noise_dlys = np.abs(uvp_fgdep_cov.get_dlys(0).to_value(u.ns)) > 1000
 
         rms = [
             np.std(
@@ -3319,11 +3323,11 @@ class TestPspecRun:
             mpc.data_array[0], default.data_array[0] / h**3, rtol=1e-12
         )
         # k values in the output's own length unit: Mpc^-1 vs h Mpc^-1
-        k_default = default.get_kparas(
-            0, little_h=uvputils.is_littleh(default.norm_units)
-        )
-        k_mpc = mpc.get_kparas(0, little_h=uvputils.is_littleh(mpc.norm_units))
-        np.testing.assert_allclose(k_mpc, k_default * h, rtol=1e-12)
+        k_default = default.get_kparas(0)
+        k_mpc = mpc.get_kparas(0)
+        assert k_default.unit == cu.littleh / u.Mpc
+        assert k_mpc.unit == 1 / u.Mpc
+        np.testing.assert_allclose(k_mpc.value, k_default.value * h, rtol=1e-12)
 
     def test_length_unit_bad_raises_before_reading(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="length_unit must be a length"):
@@ -3422,8 +3426,12 @@ class TestPspecRun:
         assert set(uvp.labels) == set(["bar", "foo"])
 
         # assert spw_ranges and n_dlys specification worked
+        spw_ranges = uvp.get_spw_ranges()
         np.testing.assert_array_equal(
-            uvp.get_spw_ranges(),
+            [
+                (start.to_value(u.Hz), stop.to_value(u.Hz), nfreqs, ndlys)
+                for start, stop, nfreqs, ndlys in spw_ranges
+            ],
             [(163476562.5, 165917968.75, 25, 20), (170312500.0, 172265625.0, 20, 20)],
         )
 

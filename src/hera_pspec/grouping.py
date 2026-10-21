@@ -295,7 +295,9 @@ def average_spectra(
         blpair_groups = [[blp] for blp in uvp.blpair_array[np.sort(idx)]]
         # get baseline length for each group of baseline pairs
         # assuming only redundant baselines are paired together
-        blpair_lens = [blv for blv in uvp.get_blpair_seps()[np.sort(idx)]]
+        blpair_lens = [
+            blv for blv in uvp.get_blpair_seps().to_value(units.m)[np.sort(idx)]
+        ]
         if blpair_weights is not None:
             raise ValueError("Cannot specify blpair_weights if blpair_groups is None.")
 
@@ -880,6 +882,10 @@ def spherical_average(
             )
             Nk_theory = len(kbins_theory)
 
+    # k vectors are taken in h Mpc^-1
+    littleh_length = conversions.length_unit_from_little_h(True)
+    littleh_k_unit = 1 / littleh_length
+
     # iterate over spectral windows
     spw_ranges = uvp.get_spw_ranges()
     for spw in uvp.spw_array:
@@ -931,14 +937,20 @@ def spherical_average(
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
-        # get kperps for this spw: shape (Nbltpairs,)
-        kperps = uvp.get_kperps(spw, little_h=True)
+        # get kperps for this spw: shape (Nbltpairs,), in h Mpc^-1
+        kperps = uvp.get_kperps(spw, length_unit=littleh_length).to_value(
+            littleh_k_unit
+        )
 
         # get kparas for this spw: shape (Ndlys,)
-        kparas = uvp.get_kparas(spw, little_h=True)
+        kparas = uvp.get_kparas(spw, length_unit=littleh_length).to_value(
+            littleh_k_unit
+        )
         # get kparas for this spw: shape (Nfreqs,) - used for window function averaging
         all_dlys = utils.get_delays(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
-        kparas_per_freq = uvp.get_kparas(spw, little_h=True, dlys=all_dlys)
+        kparas_per_freq = uvp.get_kparas(
+            spw, length_unit=littleh_length, dlys=all_dlys
+        ).to_value(littleh_k_unit)
 
         # get k to tau mapping for this spw
         avgz = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
@@ -1376,7 +1388,7 @@ def spherical_wf_from_uvp(
         )
         kparas = conversions.tau_to_kpara(avg_z, uvp.cosmo, length_unit).to_value(
             kpara_unit
-        ) * uvp.get_dlys(spw)
+        ) * uvp.get_dlys(spw).to_value(units.s)
         kmags = np.sqrt(kperps[:, None] ** 2 + kparas**2)
 
         # setup arrays
@@ -2340,7 +2352,7 @@ def average_in_delay_bins(
     spw_dly_array = []
     for spw in uvp.spw_array:
         p = uvp.data_array[spw]
-        dly = uvp.get_dlys(spw)
+        dly = uvp.get_dlys(spw).to_value(units.s)
         slices, kernels = _get_delay_slices(
             dly, kernel=kernel, zero_kernel=zero_bin_kernel
         )
