@@ -26,6 +26,9 @@ from .uvwindow import UVWindow
 UVPSPEC_HDF5_VERSION = "2"
 _KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION,)
 
+# Values of UVPSpec.normalization: how PSpecData.pspec normalised the spectra
+NORMALIZATIONS = ("two-step", "two-step-exact", "one-step")
+
 # Largest difference allowed between the "cosmo" dict and "cosmo_yaml"
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
@@ -428,7 +431,11 @@ class UVPSpec:
             description=(
                 "Power spectrum normalization scalar from pspecbeam module, in "
                 "norm_units / (Hz sr) (e.g. Mpc^3 / littleh^3 / (Hz sr)) when "
-                "a beam was used, else 1."
+                "a beam was used, else 1. For normalization 'two-step' and "
+                "'two-step-exact' it was multiplied into the power spectra. For "
+                "'one-step' it was not: it is the reference scalar (computed as "
+                "for 'two-step'), the band-averaged conversion that "
+                "set_cosmology uses to rescale between cosmologies."
             ),
             expected_type=np.float64,
             form="(Nspws, Npols)",
@@ -503,6 +510,27 @@ class UVPSpec:
                 "normalization was applied, else telescope units ('Hz sr'). "
                 "Multiplied by the unit of k^3 after convert_to_deltasq. See "
                 "norm_unit."
+            ),
+            expected_type=str,
+        )
+        self._normalization = PSpecParam(
+            "normalization",
+            description=(
+                "How PSpecData.pspec normalised the power spectra: 'two-step' "
+                "(M from get_G/get_H, then scalar_array), 'two-step-exact' "
+                "(the same with exact_norm=True) or 'one-step' (M from a "
+                "response matrix in cosmological units; scalar_array is then "
+                "the reference scalar only). Files written before v1.0 read as "
+                "'two-step'."
+            ),
+            expected_type=str,
+        )
+        self._response_model = PSpecParam(
+            "response_model",
+            description=(
+                "Provenance of the response matrix of a 'one-step' "
+                "normalization, e.g. the repr of the hera_pspec.DelayResponse "
+                "used. Not set for 'two-step' normalizations."
             ),
             expected_type=str,
         )
@@ -613,6 +641,7 @@ class UVPSpec:
             "time_avg_array",
             "folded",
             "deltasq",
+            "normalization",
             "scalar_array",
             "labels",
             "label_1_array",
@@ -648,6 +677,8 @@ class UVPSpec:
             "beamfile",
             "folded",
             "deltasq",
+            "normalization",
+            "response_model",
             "exact_windows",
             "symmetric_taper",
         ]
@@ -739,6 +770,7 @@ class UVPSpec:
         # Default parameter values
         self.folded = False
         self.deltasq = False
+        self.normalization = "two-step"
 
         # Set function docstrings
         self.get_red_bls.__func__.__doc__ = uvputils._get_red_bls.__doc__
@@ -2204,6 +2236,8 @@ class UVPSpec:
         astropy strings (e.g. "h^-3 Mpc^3" -> "Mpc3 / littleh3", "UNCALIB" ->
         "uncalib"), whatever the version. A legacy ``norm_units`` ending in
         " k^3 / (2pi^2)" sets ``deltasq``; a missing ``deltasq`` is False.
+        A missing ``normalization`` (files written before v1.0) is
+        ``"two-step"``.
         """
         # Make sure the group is a UVPSpec object
         assert "pspec_type" in grp.attrs, "This object is not a UVPSpec object"
@@ -2279,6 +2313,12 @@ class UVPSpec:
         # strings mark Delta^2 spectra with a " k^3 / (2pi^2)" suffix instead
         if "deltasq" not in grp.attrs:
             self.deltasq = False
+
+        # Backwards compatibility: normalization did not exist before v1.0;
+        # all such files hold two-step spectra (an exact_norm file cannot be
+        # told apart from a default one)
+        if "normalization" not in grp.attrs:
+            self.normalization = "two-step"
 
         # Unit strings: files written before v1.0 (including early version 2
         # files) hold legacy strings such as "h^-3 Mpc^3" and "UNCALIB";
@@ -3088,6 +3128,13 @@ class UVPSpec:
         assert set(self.spw_array) == set(np.arange(self.Nspws)), (
             "spw_array must be np.arange(Nspws)"
         )
+
+        # check the normalization label
+        if hasattr(self, "normalization"):
+            assert self.normalization in NORMALIZATIONS, (
+                f"normalization must be one of {NORMALIZATIONS}; got "
+                f"{self.normalization!r}"
+            )
 
         # check choice of window functions
         if self.exact_windows and not just_meta:
@@ -4276,7 +4323,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         'channel_width', 'telescope_location', 'weighting', 'OmegaP',
         'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units',
         'norm_units', 'folded', 'deltasq', 'cosmo', 'scalar',
-        'symmetric_taper'
+        'symmetric_taper', 'normalization', 'response_model'
 
     Parameters
     ----------
@@ -4344,6 +4391,8 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         "cosmo",
         "exact_windows",
         "symmetric_taper",
+        "normalization",
+        "response_model",
     ]
     for m in static_meta:
         for u in uvps[1:]:

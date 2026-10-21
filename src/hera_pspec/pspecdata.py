@@ -4674,9 +4674,15 @@ class PSpecData:
         uvp.weighting = input_data_weight
         uvp.vis_units, uvp.norm_units = self.units(length_unit=length_unit)
         if one_step:
+            uvp.normalization = "one-step"
+            uvp.response_model = _response_model_string(response)
             # provisional legacy one-step output: no cosmological
             # normalisation, labelled like a spectrum without a beam
             uvp.norm_units = uvputils.unit_to_string(units.Hz * units.sr)
+        elif exact_norm:
+            uvp.normalization = "two-step-exact"
+        else:
+            uvp.normalization = "two-step"
         # SGM: I've kept the same API in hera_pspec for now, but we should
         # probably move to having a `.telescope` attribute on the UVP.
         uvp.telescope_location = np.array(
@@ -4984,6 +4990,19 @@ class PSpecData:
             trim_inds = np.array([l not in common_lsts for l in lst_arrs[i]])
             if np.any(trim_inds):
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
+
+
+def _response_model_string(response):
+    """
+    Provenance string of a one-step response, stored as
+    ``UVPSpec.response_model``: the repr of a ``DelayResponse`` (or of any
+    class defining its own ``__repr__``), else the qualified class name, so
+    the string does not depend on the object's memory address.
+    """
+    cls = type(response)
+    if cls.__repr__ is not object.__repr__:
+        return repr(response)
+    return f"{cls.__module__}.{cls.__qualname__}"
 
 
 def pspec_run(

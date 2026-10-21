@@ -606,6 +606,10 @@ class TestPspecOneStepLegacy:
         )
         assert uvp1.norm_units == "Hz sr"
         assert uvp2.norm_units == "Mpc3 / littleh3"
+        assert uvp1.normalization == "one-step"
+        assert uvp1.response_model == repr(legacy)
+        assert uvp2.normalization == "two-step"
+        assert not hasattr(uvp2, "response_model")
         assert_close(uvp1.data_array[0] * scalar, uvp2.data_array[0])
         cov_scale = np.max(np.abs(uvp2.cov_array_real[0]))
         assert_close(uvp1.cov_array_real[0] * scalar**2, uvp2.cov_array_real[0])
@@ -645,6 +649,9 @@ class TestPspecOneStepLegacy:
         np.testing.assert_array_equal(
             uvp_explicit.data_array[0], uvp_default.data_array[0]
         )
+        assert uvp_default.normalization == "two-step"
+        uvp_exact = run_pspec(ds, exact_norm=True, store_cov=False)
+        assert uvp_exact.normalization == "two-step-exact"
 
     def test_errors(self, ds) -> None:
         legacy = DelayResponse(convention="legacy")
