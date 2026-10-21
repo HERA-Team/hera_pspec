@@ -3725,7 +3725,10 @@ class PSpecData:
 
         sampling : boolean, optional
             Whether output pspec values are samples at various delay bins
-            or are integrated bandpowers over delay bins. Default: False
+            or are integrated bandpowers over delay bins. With
+            ``normalization="one-step"`` and ``response=None`` it selects
+            ``DelayResponse(sampling=sampling)``; it is ignored when a
+            ``response`` is given. Default: False
 
         little_h : boolean, optional
             Deprecated, use ``length_unit``. ``little_h=True`` is
@@ -3870,17 +3873,39 @@ class PSpecData:
         normalization : {"two-step", "one-step"}, optional
             ``"two-step"`` (default): ``M`` from ``get_G`` / ``get_H``, then
             the power spectrum scalar (and ``scalar_delay_adjustment`` for
-            ``norm="I"``). ``"one-step"``: ``M`` from the response matrix
-            ``H = get_response(...)`` alone (``M = diag(1/sum_b H_ab)``,
-            ``H^-1`` or ``V^-1/2`` as for ``norm``), with no scalar.
-            Provisional: only ``response=DelayResponse(convention="legacy")``
-            is supported so far, whose output is not normalised to
-            cosmological units (it is labelled ``Hz sr``, like a spectrum
-            without a beam, and ``scalar_array`` is 1).
+            ``norm="I"``); recorded as ``uvp.normalization = "two-step"``, or
+            ``"two-step-exact"`` with ``exact_norm=True``.
+
+            ``"one-step"`` (#329): ``M`` from the response matrix
+            ``H = get_response(...)`` in cosmological units
+            (``M = diag(1/sum_b H_ab)``, ``H^-1`` or ``V^-1/2`` as for
+            ``norm``), so ``p = M q`` is in vis^2 ``length_unit**3`` directly,
+            ``cov_p = M V_q M^T`` and the window functions are ``W = M H``.
+            No scalar and no ``scalar_delay_adjustment`` are applied. Needs a
+            beam (``primary_beam``). ``uvp.scalar_array`` still holds the
+            reference scalar, computed as for ``"two-step"``: the
+            band-averaged conversion ``set_cosmology`` uses to rescale between
+            cosmologies, not a factor that was applied. The normalisation
+            uses the flagged channels' weights (``T^2 Y`` for identity
+            weighting), whereas the two-step scalar ignores flags. With
+            ``response=DelayResponse(convention="legacy")`` the output is not
+            in cosmological units: it is labelled ``Hz sr``, like a spectrum
+            without a beam, and ``scalar_array`` is 1.
+
+            For ``norm="I"``, ``Ndlys = Nfreqs`` and identity weighting
+            without flags, one-step equals two-step times ``s_disc / s``, the
+            scalar's integral evaluated as a sum over channels divided by the
+            integral (typically a few 0.01% above 1). With a taper and
+            ``norm="H^-1"`` / ``"V^-1/2"``, or with ``Ndlys < Nfreqs``, the
+            two-step normalisation is biased and the one-step one is not.
 
         response : DelayResponse or object, optional
             Response ``dC/dp`` for ``normalization="one-step"``; see
-            ``get_response``. Raises with ``"two-step"``. Default: None.
+            ``get_response``. A ``DelayResponse`` with
+            ``convention="cosmological"`` (the default
+            ``DelayResponse(sampling=sampling)``) or ``"legacy"``, or a user
+            object with a ``matrices()`` method. Its provenance is stored in
+            ``uvp.response_model``. Raises with ``"two-step"``. Default: None.
 
         q_matrices : array_like or callable, optional
             Estimator matrices used instead of ``Q^alt`` for
@@ -3955,17 +3980,33 @@ class PSpecData:
             if q_matrices is not None and allow_fft:
                 raise ValueError("q_matrices cannot be combined with allow_fft=True.")
             if response is None:
-                response = responses.DelayResponse()
-            if not (
-                isinstance(response, responses.DelayResponse)
-                and response.convention == "legacy"
-            ):
-                raise NotImplementedError(
-                    'normalization="one-step" supports only '
-                    'response=DelayResponse(convention="legacy") so far; '
-                    "one-step normalization in cosmological units is not "
-                    "implemented yet."
+                response = responses.DelayResponse(sampling=sampling)
+            is_delay_response = isinstance(response, responses.DelayResponse)
+            if is_delay_response and response.convention == "legacy-exact":
+                # its estimator Delta_tau Q^alt ⊙ B is not the one q_hat uses
+                raise ValueError(
+                    'DelayResponse(convention="legacy-exact") reproduces '
+                    "get_G / get_H with exact_norm=True; use "
+                    'normalization="two-step" with exact_norm=True instead.'
                 )
+            if not is_delay_response and not hasattr(response, "matrices"):
+                raise TypeError(
+                    "response must be a DelayResponse or have a "
+                    "matrices(freqs, delays, beam, pol, cosmo, length_unit) method."
+                )
+        # one-step in cosmological units (design note section 3); the legacy
+        # one-step response is dimensionless
+        one_step_cosmo = one_step and not (
+            isinstance(response, responses.DelayResponse) and response.is_legacy
+        )
+        if one_step_cosmo and self.primary_beam is None:
+            # open question 5: no observer-unit one-step output for now
+            raise ValueError(
+                'normalization="one-step" needs a beam: the response matrix is '
+                "in cosmological units, built from the beam's Omega_p, "
+                "Omega_pp and cosmology. Set PSpecData.primary_beam (or use "
+                'normalization="two-step").'
+            )
 
         self.set_taper(taper)
         self.set_symmetric_taper(symmetric_taper)
@@ -4185,9 +4226,9 @@ class PSpecData:
                 pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
-                if one_step:
-                    # the provisional legacy one-step response is not in
-                    # cosmological units, so nothing converts it
+                if one_step and not one_step_cosmo:
+                    # the legacy one-step response is not in cosmological
+                    # units, so nothing converts it
                     scalar = 1.0
                 elif self.primary_beam is not None:
                     # Raise error if cross-pol is requested
@@ -4200,7 +4241,17 @@ class PSpecData:
 
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
-                    if norm == "H^-1":
+                    if one_step:
+                        # reference scalar (design note section 4): computed
+                        # as the two-step path does (scalar() ignores the
+                        # H^-1 taper override), stored in scalar_array but
+                        # never multiplied into p or cov
+                        scalar = self.scalar(
+                            p,
+                            num_steps=uvpspec.ONE_STEP_SCALAR_NUM_STEPS,
+                            length_unit=length_unit,
+                        ).to_value(scalar_unit)
+                    elif norm == "H^-1":
                         # If using decorrelation, the H^-1 normalization
                         # already deals with the taper, so we need to override
                         # the taper when computing the scalar
@@ -4399,8 +4450,9 @@ class PSpecData:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
 
-                    # Multiply by scalar
-                    if self.primary_beam is not None:
+                    # Multiply by scalar (two-step only: a one-step p = M q is
+                    # already in vis^2 length_unit^3, design note section 3.1)
+                    if self.primary_beam is not None and not one_step:
                         if nper_chunk == 1:
                             logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
@@ -4432,7 +4484,8 @@ class PSpecData:
                             )
                         )
 
-                        if self.primary_beam is not None:
+                        # one-step: cov_p = M V_q M^T as returned
+                        if self.primary_beam is not None and not one_step:
                             cov_real = cov_real * (scalar) ** 2.0
                             cov_imag = cov_imag * (scalar) ** 2.0
 
@@ -4676,9 +4729,10 @@ class PSpecData:
         if one_step:
             uvp.normalization = "one-step"
             uvp.response_model = _response_model_string(response)
-            # provisional legacy one-step output: no cosmological
-            # normalisation, labelled like a spectrum without a beam
-            uvp.norm_units = uvputils.unit_to_string(units.Hz * units.sr)
+            if not one_step_cosmo:
+                # legacy one-step output: no cosmological normalisation,
+                # labelled like a spectrum without a beam
+                uvp.norm_units = uvputils.unit_to_string(units.Hz * units.sr)
         elif exact_norm:
             uvp.normalization = "two-step-exact"
         else:
@@ -5061,6 +5115,8 @@ def pspec_run(
     xant_flag_thresh=0.95,
     allow_fft=False,
     length_unit=None,
+    normalization="two-step",
+    response=None,
 ):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -5353,6 +5409,16 @@ def pspec_run(
         length_unit^3 and their k values are in 1 / length_unit. See
         PSpecData.pspec(). Default: None, which means "Mpc / littleh".
 
+    normalization : str, optional
+        "two-step" (default) or "one-step" (normalization by a response
+        matrix in cosmological units, #329; needs a beam). See
+        PSpecData.pspec().
+
+    response : DelayResponse or object, optional
+        Response matrix model for normalization="one-step", e.g.
+        hera_pspec.DelayResponse(x2y="midpoint"). See PSpecData.pspec().
+        Default: None, which means DelayResponse(sampling=sampling).
+
     Returns
     -------
     ds : PSpecData object
@@ -5369,8 +5435,12 @@ def pspec_run(
         "dsets must be fed as a list of dataset string paths or UVData objects."
     )
 
-    # validate length_unit before any data is read
+    # validate length_unit and normalization before any data is read
     length_unit = _resolve_length_unit(length_unit, None)
+    if normalization not in ("two-step", "one-step"):
+        raise ValueError(
+            f'normalization must be "two-step" or "one-step"; got {normalization!r}.'
+        )
 
     # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
     accepted_cosmo_types = (FLRW,)
@@ -5701,6 +5771,8 @@ def pspec_run(
             exact_windows=exact_windows,
             ftbeam=ftbeam,
             length_unit=length_unit,
+            normalization=normalization,
+            response=response,
         )
 
         # Store output

@@ -343,6 +343,24 @@ def _pspec_exact_norm_bh() -> dict[str, np.ndarray]:
     return uvpspec_outputs(run_even_odd_pspec(norm="I", taper="bh", exact_norm=True))
 
 
+@regression_case("pspec_one_step_bh", rtol=LINALG_RTOL)
+def _pspec_one_step_bh() -> dict[str, np.ndarray]:
+    # one-step normalization (#329) with the default DelayResponse; the second
+    # spw has Ndlys < Nfreqs. Covariances and window functions go through
+    # BLAS, hence LINALG_RTOL.
+    uvp = run_even_odd_pspec(
+        norm="I",
+        taper="bh",
+        store_cov=True,
+        cov_model="autos",
+        normalization="one-step",
+    )
+    out = uvpspec_outputs(uvp)
+    out["normalization"] = np.array(uvp.normalization)
+    out["response_model"] = np.array(uvp.response_model)
+    return out
+
+
 @regression_case("pspec_exact_windows", rtol=LINALG_RTOL)
 def _pspec_exact_windows() -> dict[str, np.ndarray]:
     return uvpspec_outputs(run_exact_windows_pspec())

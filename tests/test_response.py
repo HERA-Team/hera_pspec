@@ -671,11 +671,9 @@ class TestPspecOneStepLegacy:
                 allow_fft=True,
                 q_matrices=np.zeros((40, 40, 40)),
             )
-        with pytest.raises(NotImplementedError, match="cosmological units"):
-            run_pspec(ds, normalization="one-step")
-        with pytest.raises(NotImplementedError, match="cosmological units"):
+        with pytest.raises(ValueError, match="legacy-exact"):
             run_pspec(
                 ds,
                 normalization="one-step",
-                response=UserResponse(np.ones((40, 40)), u.Mpc**-3),
+                response=DelayResponse(convention="legacy-exact"),
             )

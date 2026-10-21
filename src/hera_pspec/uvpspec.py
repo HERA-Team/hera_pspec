@@ -29,6 +29,11 @@ _KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION,)
 # Values of UVPSpec.normalization: how PSpecData.pspec normalised the spectra
 NORMALIZATIONS = ("two-step", "two-step-exact", "one-step")
 
+# Integration steps of the reference scalar of one-step spectra, used both by
+# PSpecData.pspec and by UVPSpec.set_cosmology so that a cosmology change
+# rescales by a ratio of scalars computed the same way
+ONE_STEP_SCALAR_NUM_STEPS = 2000
+
 # Largest difference allowed between the "cosmo" dict and "cosmo_yaml"
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
@@ -2789,6 +2794,26 @@ class UVPSpec:
         get an h^-1 Mpc scalar and ``norm_units`` becomes
         ``"Mpc3 / littleh3"``.
 
+        What happens depends on ``self.normalization``:
+
+        - ``"two-step"`` and ``"two-step-exact"``: as before v1.0, the data
+          are multiplied by the ratio of the recomputed (two-step, 1000
+          integration steps) scalar to the stored one. Covariances and
+          ``stats_array`` are not rescaled, and a ``"two-step-exact"`` object
+          (whose stored scalar is the band-mean X2Y) is rescaled with the
+          two-step scalar all the same, so set_cosmology does not give a
+          correct result for it.
+        - ``"one-step"``: the reference scalar is recomputed the way
+          ``PSpecData.pspec`` computed it (same taper, length unit and
+          ``ONE_STEP_SCALAR_NUM_STEPS``). The data and ``stats_array`` are
+          multiplied by the ratio ``r`` of the new to the stored reference
+          scalar and the covariances by ``r**2``. This is approximate: an
+          exact change rebuilds the response matrix, which depends on the
+          flags and weighting that UVPSpec does not store. The error is
+          ~1e-5 or less for changes of the scalar of tens of percent (design
+          note for #329). One-step spectra not in cosmological units (made
+          with a legacy response, ``Hz sr``) raise a ValueError.
+
         Parameters
         ----------
         new_cosmo : astropy.cosmology.FLRW or dict
@@ -2835,11 +2860,27 @@ class UVPSpec:
             self.OmegaP, self.OmegaPP = new_beam.get_Omegas(self.polpair_array)
             self.beam_freqs = new_beam.beam_freqs
 
+        one_step = getattr(self, "normalization", "two-step") == "one-step"
+        if one_step and uvputils.parse_pspec_unit(self.norm_units).is_equivalent(
+            units.Hz * units.sr
+        ):
+            raise ValueError(
+                "These one-step power spectra are not in cosmological units "
+                "(a legacy response, norm_units 'Hz sr'), so there is no "
+                "reference scalar to rescale them with."
+            )
+
         # Update cosmo
         new_cosmo = conversions.as_astropy_cosmology(new_cosmo)
         if verbose:
             print(f"setting cosmology: \n{new_cosmo}")
         self.cosmo = new_cosmo
+
+        if one_step:
+            if verbose:
+                print("Rescaling one-step power spectra by the reference scalar")
+            self._rescale_one_step_cosmology()
+            return
 
         # Update scalar_array, in the length unit of this object's
         # normalisation (littleh for spectra not yet cosmologically normalised)
@@ -2868,6 +2909,36 @@ class UVPSpec:
             units.Hz * units.sr
         ):
             self.norm_units = uvputils.unit_to_string(units.Mpc**3 / cu.littleh**3)
+
+    def _rescale_one_step_cosmology(self):
+        """
+        Rescale one-step power spectra to ``self.cosmo`` (see set_cosmology).
+
+        ``p`` scales as the reference scalar (design note for #329, section 4:
+        ``p_1step = (s_disc / s) s (M q)``, with ``s_disc / s`` nearly
+        independent of the cosmology), its errors in ``stats_array`` too, and
+        its covariances as the square.
+        """
+        length_unit = self._default_length_unit()
+        scalar_unit = length_unit**3 / (units.Hz * units.sr)
+        for spw in range(self.Nspws):
+            for j, polpair in enumerate(self.polpair_array):
+                scalar = self.compute_scalar(
+                    spw,
+                    polpair,
+                    num_steps=ONE_STEP_SCALAR_NUM_STEPS,
+                    length_unit=length_unit,
+                    noise_scalar=False,
+                ).to_value(scalar_unit)
+                ratio = scalar / self.scalar_array[spw, j]
+                self.data_array[spw][:, :, j] *= ratio
+                for name in ("cov_array_real", "cov_array_imag"):
+                    if hasattr(self, name):
+                        getattr(self, name)[spw][..., j] *= ratio**2
+                if hasattr(self, "stats_array"):
+                    for stat in self.stats_array.values():
+                        stat[spw][:, :, j] *= ratio
+                self.scalar_array[spw, j] = scalar
 
     def get_exact_window_functions(
         self,

@@ -22,6 +22,7 @@ from scipy.signal import windows
 from uvtools import dspec
 
 from hera_pspec import (
+    DelayResponse,
     PSpecBeamUV,
     container,
     conversions,
@@ -3404,6 +3405,48 @@ class TestPspecRun:
         assert k_default.unit == cu.littleh / u.Mpc
         assert k_mpc.unit == 1 / u.Mpc
         np.testing.assert_allclose(k_mpc.value, k_default.value * h, rtol=1e-12)
+
+    def test_normalization(self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV) -> None:
+        """pspec_run passes normalization and response on to pspec()."""
+        uvps = {}
+        for label, kwargs in (
+            ("default", {}),
+            ("one_step", dict(normalization="one-step")),
+            (
+                "midpoint",
+                dict(normalization="one-step", response=DelayResponse(x2y="midpoint")),
+            ),
+        ):
+            fname = str(tmp_path / f"{label}.h5")
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                fname,
+                beam=beam_nf_dipole,
+                blpairs=[((37, 38), (37, 38))],
+                pol_pairs=[("xx", "xx")],
+                spw_ranges=[(50, 60)],
+                verbose=False,
+                overwrite=True,
+                **kwargs,
+            )
+            psc = container.PSpecContainer(fname, keep_open=False)
+            group = psc.groups()[0]
+            uvps[label] = psc.get_pspec(group, psc.spectra(group)[0])
+        assert uvps["default"].normalization == "two-step"
+        assert uvps["one_step"].normalization == "one-step"
+        assert uvps["one_step"].response_model == repr(DelayResponse())
+        assert uvps["midpoint"].response_model == repr(DelayResponse(x2y="midpoint"))
+        assert uvps["one_step"].norm_units == "Mpc3 / littleh3"
+
+    def test_normalization_bad_raises_before_reading(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="normalization must be"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                normalization="one step",
+            )
+        assert not (tmp_path / "out.h5").exists()
 
     def test_length_unit_bad_raises_before_reading(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="length_unit must be a length"):
