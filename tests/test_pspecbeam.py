@@ -2,8 +2,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import astropy.cosmology.units as cu
+import astropy.units as u
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW, LambdaCDM
 from pyuvdata import UVBeam
 from pyuvdata.analytic_beam import AiryBeam, GaussianBeam
 
@@ -26,13 +29,17 @@ def efield_beam() -> pspecbeam.PSpecBeamUV:
     return beam
 
 
+# A non-default cosmology for the constructor tests.
+CUSTOM_COSMO = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+
+
 class TestPSpecBeamUV:
     def test_init(self) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
         bm = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_dipole_power.beamfits")
         assert isinstance(bm.primary_beam, UVBeam)
         assert bm.beam_freqs.size > 0
-        assert isinstance(bm.cosmo, conversions.Cosmo_Conversions)
+        assert bm.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
@@ -72,10 +79,9 @@ class TestPSpecBeamUV:
     def test_custom_cosmology(self) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
         beam = pspecbeam.PSpecBeamUV(
-            DATA_PATH / "HERA_NF_pstokes_power.beamfits",
-            cosmo=conversions.Cosmo_Conversions(),
+            DATA_PATH / "HERA_NF_pstokes_power.beamfits", cosmo=CUSTOM_COSMO
         )
-        assert isinstance(beam.cosmo, conversions.Cosmo_Conversions)
+        assert beam.cosmo is CUSTOM_COSMO
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
@@ -284,11 +290,9 @@ class TestPSpecBeamGauss:
     def test_custom_cosmology(self) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
         bgauss = pspecbeam.PSpecBeamGauss(
-            0.8,
-            np.linspace(115e6, 130e6, 50, endpoint=False),
-            cosmo=conversions.Cosmo_Conversions(),
+            0.8, np.linspace(115e6, 130e6, 50, endpoint=False), cosmo=CUSTOM_COSMO
         )
-        assert isinstance(bgauss.cosmo, conversions.Cosmo_Conversions)
+        assert bgauss.cosmo is CUSTOM_COSMO
 
     def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
@@ -433,9 +437,9 @@ class TestPSpecBeamFromArray:
             OmegaP=gauss_beam.power_beam_int(),
             OmegaPP=gauss_beam.power_beam_sq_int(),
             beam_freqs=gauss_beam.beam_freqs,
-            cosmo=conversions.Cosmo_Conversions(),
+            cosmo=CUSTOM_COSMO,
         )
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
+        assert bm2.cosmo is CUSTOM_COSMO
 
     def test_matches_gauss(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar matches the equivalent Gaussian beam's result."""
@@ -604,9 +608,79 @@ class TestPSpecBeamBase:
     def test_default_construction(self) -> None:
         """Check that the base class can be instantiated with a default cosmology."""
         bm1 = pspecbeam.PSpecBeamBase()
-        assert isinstance(bm1.cosmo, conversions.Cosmo_Conversions)
+        assert bm1.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_custom_cosmology(self) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
+        bm2 = pspecbeam.PSpecBeamBase(cosmo=CUSTOM_COSMO)
+        assert bm2.cosmo is CUSTOM_COSMO
+
+
+def _beam_from_constructor(name: str, cosmo):
+    """Build one of the PSpecBeam classes with the given cosmology."""
+    freqs = np.linspace(115e6, 130e6, 50, endpoint=False)
+    if name == "base":
+        return pspecbeam.PSpecBeamBase(cosmo=cosmo)
+    if name == "uv":
+        return pspecbeam.PSpecBeamUV(
+            DATA_PATH / "HERA_NF_dipole_power.beamfits", cosmo=cosmo
+        )
+    if name == "gauss":
+        return pspecbeam.PSpecBeamGauss(0.8, freqs, cosmo=cosmo)
+    gauss = pspecbeam.PSpecBeamGauss(0.8, freqs)
+    return pspecbeam.PSpecBeamFromArray(
+        OmegaP=gauss.power_beam_int(),
+        OmegaPP=gauss.power_beam_sq_int(),
+        beam_freqs=freqs,
+        cosmo=cosmo,
+    )
+
+
+BEAM_CONSTRUCTORS = ["base", "uv", "gauss", "from_array"]
+
+
+class TestBeamCosmology:
+    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
+    def test_default_is_shared_default_cosmology(self, name: str) -> None:
+        """Every beam class defaults to the one DEFAULT_COSMOLOGY object."""
+        beam = _beam_from_constructor(name, None)
+        assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+
+    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
+    def test_cosmo_conversions_deprecated(self, name: str) -> None:
+        """A Cosmo_Conversions is converted to astropy with a DeprecationWarning."""
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            beam = _beam_from_constructor(name, old)
+        assert isinstance(beam.cosmo, FLRW)
+        assert beam.cosmo.is_equivalent(old.to_astropy())
+
+    def test_set_cosmo(self) -> None:
+        """Setting beam.cosmo accepts astropy, dicts and None; rejects others."""
+        beam = pspecbeam.PSpecBeamBase()
+        beam.cosmo = CUSTOM_COSMO
+        assert beam.cosmo is CUSTOM_COSMO
+        beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
+        assert beam.cosmo.is_equivalent(CUSTOM_COSMO)
+        beam.cosmo = None
+        assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+        with pytest.raises(TypeError, match="FLRW"):
+            beam.cosmo = [0.7, 0.05]
+        del beam.cosmo
+        assert not hasattr(beam, "cosmo")
+
+
+def test_vectorised_x2y_matches_loop() -> None:
+    """The vectorised X2Y gives the per-frequency Cosmo_Conversions values."""
+    with pytest.warns(DeprecationWarning):
+        old = conversions.Cosmo_Conversions()
+    freqs = np.linspace(LOWER_FREQ, UPPER_FREQ, 200)
+    redshifts = conversions.f2z(freqs)
+    for little_h in (True, False):
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        new = conversions.X2Y(
+            redshifts, conversions.DEFAULT_COSMOLOGY, length_unit
+        ).to_value(length_unit**3 / (u.sr * u.Hz))
+        loop = np.array([old.X2Y(z, little_h=little_h) for z in redshifts])
+        np.testing.assert_allclose(new, loop, rtol=1e-14)

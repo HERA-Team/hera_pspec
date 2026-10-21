@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import numpy.typing as npt
+from astropy.cosmology import FLRW
 from scipy.linalg import circulant
 from uvtools import dspec
 
@@ -14,7 +15,7 @@ if TYPE_CHECKING:
     from .pspecbeam import PSpecBeamBase
 
 PowerSpectrum = float | npt.NDArray[np.floating[Any]]
-CosmologyInput = str | dict[str, Any] | conversions.Cosmo_Conversions
+CosmologyInput = FLRW | str | dict[str, Any] | conversions.Cosmo_Conversions
 
 
 def calc_P_N(
@@ -101,7 +102,8 @@ class Sensitivity:
 
         Parameters
         ----------
-        cosmo : hera_pspec.conversions.Cosmo_Conversions instance
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology; see :meth:`set_cosmology` for the accepted forms.
 
         beam : hera_pspec.pspecbeam.PSpecBeam instance
         """
@@ -113,18 +115,20 @@ class Sensitivity:
 
     def set_cosmology(self, cosmo: CosmologyInput) -> None:
         """
-        Set a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+        Set a cosmological model to self.cosmo, an astropy.cosmology object.
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params string, or dictionary
+        cosmo : astropy.cosmology.FLRW, self.cosmo_params string, or dictionary
+            The cosmology, or its parameter dictionary (see
+            ``conversions.cosmology_from_params``) or that dictionary's
+            ``str()``. A ``Cosmo_Conversions`` object is still accepted but
+            deprecated.
         """
         if isinstance(cosmo, str):
             cosmo = ast.literal_eval(cosmo)
-        if isinstance(cosmo, dict):
-            cosmo = conversions.Cosmo_Conversions(**cosmo)
-        self.cosmo = cosmo
-        self.cosmo_params = str(self.cosmo.get_params())
+        self.cosmo = conversions.as_astropy_cosmology(cosmo)
+        self.cosmo_params = str(conversions.params_from_cosmology(self.cosmo))
 
     def set_beam(self, beam: PSpecBeamBase) -> None:
         """
@@ -149,7 +153,7 @@ class Sensitivity:
             else:
                 # neither beam nor self have cosmo, raise AssertionError
                 raise AssertionError(
-                    "neither self nor beam have a Cosmo_Conversions instance attached. "
+                    "neither self nor beam have a cosmology attached. "
                     "See self.set_cosmology()."
                 )
 

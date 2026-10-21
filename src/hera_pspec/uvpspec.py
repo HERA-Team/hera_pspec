@@ -10,7 +10,7 @@ import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 from astropy import units
-from astropy.cosmology import Cosmology
+from astropy.cosmology import FLRW, Cosmology
 from pyuvdata import utils as uvutils
 
 from . import __version__, conversions, grouping, noise, pspecbeam
@@ -42,41 +42,47 @@ def _cosmology_from_yaml(cosmo_yaml):
     return Cosmology.from_format(cosmo_yaml, format="yaml")
 
 
-# YAML of the astropy cosmology written next to each cosmology parameter dict.
-# The YAML depends only on the parameters (Cosmo_Conversions builds its
-# LambdaCDM from them), and dumping it costs ~0.25 ms per write.
-_COSMO_YAML_CACHE = {}
-_COSMO_YAML_CACHE_SIZE = 32
+# The "cosmo" dict string and "cosmo_yaml" written for each cosmology, keyed by
+# the parameter dict plus the class and name (the YAML holds both). Dumping the
+# YAML costs ~0.25 ms per write. The cosmology itself is never rebuilt here:
+# building a LambdaCDM leaves a reference cycle that holds the calling frames
+# (and so any open HDF5 objects in them) alive until the garbage collector runs.
+_COSMO_ATTRS_CACHE = {}
+_COSMO_ATTRS_CACHE_SIZE = 32
 
 
-def _cosmo_yaml_for_writing(cosmo, params):
+def _cosmo_attrs_for_writing(cosmo):
     """
-    Return the astropy YAML of a cosmology for writing, cached by parameters.
+    Return the HDF5 attribute strings of a cosmology, cached.
 
     Parameters
     ----------
-    cosmo : conversions.Cosmo_Conversions
+    cosmo : astropy.cosmology.FLRW
         The cosmology.
-    params : dict
-        ``cosmo.get_params()``.
 
     Returns
     -------
-    str or None
-        ``cosmo._astropy_for_writing().to_format("yaml")``, or None when
-        astropy cannot represent the cosmology.
+    cosmo_params : str
+        ``str(conversions.params_from_cosmology(cosmo))``, the v0.x dict
+        string of the ``cosmo`` attribute.
+    cosmo_yaml : str
+        ``cosmo.to_format("yaml")``.
     """
-    key = tuple(sorted(params.items()))
+    params = conversions.params_from_cosmology(cosmo)
+    key = (type(cosmo), cosmo.name, tuple(sorted(params.items())))
     try:
-        return _COSMO_YAML_CACHE[key]
+        cached_cosmo, attrs = _COSMO_ATTRS_CACHE[key]
     except KeyError:
         pass
-    cosmology = cosmo._astropy_for_writing()
-    cosmo_yaml = None if cosmology is None else cosmology.to_format("yaml")
-    if len(_COSMO_YAML_CACHE) >= _COSMO_YAML_CACHE_SIZE:
-        _COSMO_YAML_CACHE.clear()
-    _COSMO_YAML_CACHE[key] = cosmo_yaml
-    return cosmo_yaml
+    else:
+        # parameters outside the dict (e.g. w0 or Tcmb0) must match too
+        if cached_cosmo is cosmo or cached_cosmo.is_equivalent(cosmo):
+            return attrs
+    attrs = (str(params), cosmo.to_format("yaml"))
+    if len(_COSMO_ATTRS_CACHE) >= _COSMO_ATTRS_CACHE_SIZE:
+        _COSMO_ATTRS_CACHE.clear()
+    _COSMO_ATTRS_CACHE[key] = (cosmo, attrs)
+    return attrs
 
 
 def _value_in_unit(value, unit):
@@ -526,8 +532,8 @@ class UVPSpec:
         )
         self._cosmo = PSpecParam(
             "cosmo",
-            description="Instance of conversion.Cosmo_Conversions class.",
-            expected_type=conversions.Cosmo_Conversions,
+            description="Cosmology, an astropy.cosmology.FLRW object.",
+            expected_type=FLRW,
         )
         desc = "Whether the UVPSpec object have been averaged over delays. Then, Ndlys!=Nfreqs."
         # Collect all parameters: required and non-required
@@ -1077,11 +1083,15 @@ class UVPSpec:
         )
 
         # calculate mean redshift of band
-        avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
+        avg_z = conversions.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
 
         # get kperps
         blpair_seps = self.get_blpair_seps()
-        k_perp = blpair_seps * self.cosmo.bl_to_kperp(avg_z, little_h=little_h)
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        cosmo = conversions.as_astropy_cosmology(self.cosmo)
+        k_perp = blpair_seps * conversions.bl_to_kperp(
+            avg_z, cosmo, length_unit
+        ).to_value(1 / length_unit / units.m)
 
         return k_perp
 
@@ -1122,10 +1132,14 @@ class UVPSpec:
             dlys = np.array(dlys)
 
         # calculate mean redshift of band
-        avg_z = self.cosmo.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
+        avg_z = conversions.f2z(np.mean(self.freq_array[self.spw_to_freq_indices(spw)]))
 
         # get kparas
-        k_para = dlys * self.cosmo.tau_to_kpara(avg_z, little_h=little_h)
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        cosmo = conversions.as_astropy_cosmology(self.cosmo)
+        k_para = dlys * conversions.tau_to_kpara(avg_z, cosmo, length_unit).to_value(
+            1 / length_unit / units.s
+        )
         return k_para
 
     def get_blpairs(self):
@@ -2090,7 +2104,8 @@ class UVPSpec:
                 cosmo_yaml, getattr(self, "cosmo", None)
             )
         elif hasattr(self, "cosmo"):
-            self.cosmo = conversions.Cosmo_Conversions(**ast.literal_eval(self.cosmo))
+            # legacy files: only the dict string (equal dicts share one object)
+            self.cosmo = conversions.as_astropy_cosmology(ast.literal_eval(self.cosmo))
 
         # BACKWARDS COMPATIBILITY for files with Nblpairts.
         # Check whether we are reading a pre Nbltpairs file by looking for the
@@ -2192,13 +2207,14 @@ class UVPSpec:
         cosmo_yaml : str or bytes
             The ``cosmo_yaml`` attribute: an astropy cosmology in YAML.
         cosmo_params : str, optional
-            The ``cosmo`` attribute: the ``str()`` of
-            ``Cosmo_Conversions.get_params()``. If given, its parameters must
-            agree with the YAML ones to 1e-12.
+            The ``cosmo`` attribute: the ``str()`` of the parameter dict (see
+            ``conversions.params_from_cosmology``). If given, its parameters
+            must agree with the YAML ones to 1e-12.
 
         Returns
         -------
-        cosmo : conversions.Cosmo_Conversions
+        cosmo : astropy.cosmology.FLRW
+            Files with the same YAML share one (immutable) object.
 
         Raises
         ------
@@ -2207,12 +2223,10 @@ class UVPSpec:
         """
         if isinstance(cosmo_yaml, bytes):
             cosmo_yaml = cosmo_yaml.decode()
-        cosmo = conversions.Cosmo_Conversions.from_astropy(
-            _cosmology_from_yaml(cosmo_yaml)
-        )
+        cosmo = _cosmology_from_yaml(cosmo_yaml)
         if cosmo_params is not None:
             params = ast.literal_eval(cosmo_params)
-            from_yaml = cosmo.get_params()
+            from_yaml = conversions.params_from_cosmology(cosmo)
             differ = sorted(
                 key
                 for key, value in params.items()
@@ -2322,11 +2336,9 @@ class UVPSpec:
         ``integration_spw*`` and ``window_function_kperp/kpara_spw*``) or a
         ``<name>_unit`` attribute next to group attributes. Quantity values
         are converted to the declared unit first. The cosmology is stored
-        twice: ``cosmo`` holds the ``str()`` of
-        ``Cosmo_Conversions.get_params()``, as in v0.x (which can still read
-        these files), and ``cosmo_yaml`` the equivalent astropy cosmology in
-        YAML (omitted when astropy cannot represent it, e.g. an inconsistent
-        ``Om_k``).
+        twice: ``cosmo`` holds the ``str()`` of the parameter dict
+        (``conversions.params_from_cosmology``), as in v0.x (which can still
+        read these files), and ``cosmo_yaml`` the astropy cosmology in YAML.
 
         The power spectrum datasets carry the unit implied by ``vis_units``
         and ``norm_units`` in a ``unit`` attribute too: ``self.units`` on
@@ -2357,13 +2369,11 @@ class UVPSpec:
                 # handle cosmo: the v0.x dict string (read by every version)
                 # and, when astropy can represent it, the astropy YAML
                 if k == "cosmo":
-                    params = self.cosmo.get_params()
-                    attrs["cosmo"] = str(params)
-                    # None when astropy cannot represent it (e.g. an Om_k
-                    # inconsistent with Om_L and Om_M): then only the dict
-                    cosmo_yaml = _cosmo_yaml_for_writing(self.cosmo, params)
-                    if cosmo_yaml is not None:
-                        attrs["cosmo_yaml"] = cosmo_yaml
+                    cosmo_params, cosmo_yaml = _cosmo_attrs_for_writing(
+                        conversions.as_astropy_cosmology(self.cosmo)
+                    )
+                    attrs["cosmo"] = cosmo_params
+                    attrs["cosmo_yaml"] = cosmo_yaml
                     continue
                 this_attr = getattr(self, k)
 
@@ -2493,8 +2503,8 @@ class UVPSpec:
 
     def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None, verbose=True):
         """
-        Set the cosmology for this UVPSpec object by passing an instance of
-        conversions.Cosmo_Conversions and assigning it to self.cosmo, in
+        Set the cosmology for this UVPSpec object by passing an
+        astropy.cosmology object and assigning it to self.cosmo, in
         addition to re-computing power spectrum normalization quantities like
         self.scalar_array. Because this will attempt to recompute the
         scalar_array, the beam-related metadata (OmegaP, OmegaPP and
@@ -2515,9 +2525,11 @@ class UVPSpec:
 
         Parameters
         ----------
-        new_cosmo : Cosmo_Conversions or dict
-            Cosmo_Conversions instance or cosmological parameter dictionary.
-            The new cosmology you want to adopt for this UVPSpec object.
+        new_cosmo : astropy.cosmology.FLRW or dict
+            Astropy cosmology, or cosmological parameter dictionary (see
+            ``conversions.cosmology_from_params``). The new cosmology you
+            want to adopt for this UVPSpec object. A ``Cosmo_Conversions``
+            object is still accepted but deprecated.
 
         overwrite : bool, optional
             If True, overwrite self.cosmo if it already exists. Default: False.
@@ -2558,8 +2570,7 @@ class UVPSpec:
             self.beam_freqs = new_beam.beam_freqs
 
         # Update cosmo
-        if isinstance(new_cosmo, dict):
-            new_cosmo = conversions.Cosmo_Conversions(**new_cosmo)
+        new_cosmo = conversions.as_astropy_cosmology(new_cosmo)
         if verbose:
             print(f"setting cosmology: \n{new_cosmo}")
         self.cosmo = new_cosmo
@@ -2808,6 +2819,13 @@ class UVPSpec:
                             assert issubclass(
                                 getattr(self, p)[k].dtype.type, a.expected_type
                             ), err_msg
+                    # cosmology: convert a deprecated Cosmo_Conversions (or a
+                    # parameter dict) instead of the generic cast below
+                    elif p == "cosmo":
+                        try:
+                            self.cosmo = conversions.as_astropy_cosmology(self.cosmo)
+                        except (TypeError, ValueError) as err:
+                            raise AssertionError(f"{err_msg}: {err}") from err
                     # immutables
                     elif p in self._immutables:
                         if not isinstance(getattr(self, p), a.expected_type):
@@ -2937,7 +2955,10 @@ class UVPSpec:
                     not hasattr(self, p) and not hasattr(other, p)
                 ):
                     continue
-                if p in self._immutables:
+                if p == "cosmo" and isinstance(getattr(self, p), Cosmology):
+                    # compare the parameters (as v0.x did), not the names
+                    assert getattr(self, p).is_equivalent(getattr(other, p))
+                elif p in self._immutables:
                     assert getattr(self, p) == getattr(other, p)
                 elif p in self._ndarrays:
                     if issubclass(getattr(self, p).dtype.type, str):
@@ -3408,7 +3429,7 @@ class UVPSpec:
         OP = self.OmegaP[:, self.polpair_to_indices(polpair)].squeeze()
         OPP = self.OmegaPP[:, self.polpair_to_indices(polpair)].squeeze()
         scalar = pspecbeam._compute_pspec_scalar(
-            self.cosmo,
+            conversions.as_astropy_cosmology(self.cosmo),
             self.beam_freqs,
             OPP / OP**2,
             spw_freqs,

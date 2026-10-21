@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW, LambdaCDM
 from astropy.utils import iers
 from pyuvdata import UVData
 
@@ -29,13 +30,14 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope="session")
-def cosmo() -> conversions.Cosmo_Conversions:
-    return conversions.Cosmo_Conversions()
+def cosmo() -> FLRW:
+    """The default cosmology, as a separate (equal) astropy object."""
+    return LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.6844, Ob0=0.04911)
 
 
 @pytest.fixture(scope="session")
-def beam_nf_dipole_wcosmo(cosmo: conversions.Cosmo_Conversions) -> PSpecBeamUV:
-    """PSpecBeamUV for HERA NF dipole with a Cosmo_Conversions instance wired in."""
+def beam_nf_dipole_wcosmo(cosmo: FLRW) -> PSpecBeamUV:
+    """PSpecBeamUV for HERA NF dipole with an astropy cosmology wired in."""
     beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
     return PSpecBeamUV(str(beamfile), cosmo=cosmo)
 
@@ -109,7 +111,7 @@ def uvp_example_data(uvd_zen_2458116: UVData) -> UVPSpec:
         taper="bh",
         verbose=False,
     )
-    uvp.cosmo = conversions.Cosmo_Conversions()
+    uvp.cosmo = conversions.DEFAULT_COSMOLOGY
     return uvp
 
 
@@ -148,7 +150,7 @@ def uvp_exact_wfs_wbeam(
         taper="bh",
         verbose=False,
     )
-    # uvp.cosmo = conversions.Cosmo_Conversions()
+    # uvp.cosmo = conversions.DEFAULT_COSMOLOGY
     ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
 
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)

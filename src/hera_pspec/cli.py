@@ -161,13 +161,41 @@ def fast_merge_baselines(
 COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
 
 
+# Defaults of the --cosmo values, in COSMO_PARAM_ORDER (the defaults of the
+# former Cosmo_Conversions constructor; they give conversions.DEFAULT_COSMOLOGY).
+_COSMO_PARAM_DEFAULTS = {
+    "Om_L": 0.68440,
+    "Om_b": 0.04911,
+    "Om_c": 0.26442,
+    "H0": 67.27,
+    "Om_M": None,
+    "Om_k": None,
+}
+
+
 def _validate_cosmo_values(type_, value) -> None:
-    """Reject more values than conversions.Cosmo_Conversions takes positionally."""
+    """Reject more values than the six cosmological parameters."""
     if value is not None and not 1 <= len(value) <= 6:
         raise ValueError(
             f"--cosmo takes 1 to 6 values in the order {COSMO_PARAM_ORDER}; "
             f"got {len(value)}."
         )
+
+
+def _cosmology_from_values(values):
+    """
+    Build an astropy cosmology from the positional --cosmo values.
+
+    Missing trailing values take their defaults; ``Om_M`` defaults to
+    ``Om_b + Om_c`` and ``Om_k`` to ``1 - Om_L - Om_M``.
+    """
+    params = dict(_COSMO_PARAM_DEFAULTS)
+    params.update(zip(_COSMO_PARAM_DEFAULTS, values))
+    if params["Om_M"] is None:
+        params["Om_M"] = params["Om_b"] + params["Om_c"]
+    if params["Om_k"] is None:
+        params["Om_k"] = 1 - params["Om_L"] - params["Om_M"]
+    return conversions.cosmology_from_params(params)
 
 
 # `run` and `bootstrap` are thin wrappers: their parameters deliberately use the
@@ -198,7 +226,7 @@ def run(
         Parameter(
             help=(
                 "Cosmological parameters, in the order "
-                f"{COSMO_PARAM_ORDER}, passed to conversions.Cosmo_Conversions. "
+                f"{COSMO_PARAM_ORDER}, used to build an astropy LambdaCDM. "
                 "Up to 6 values; omitted trailing values keep their defaults. "
                 "Default is the beam's own cosmology."
             ),
@@ -257,7 +285,7 @@ def run(
         norm=norm,
         taper=taper,
         beam=str(beam) if beam is not None else None,
-        cosmo=conversions.Cosmo_Conversions(*cosmo) if cosmo is not None else None,
+        cosmo=_cosmology_from_values(cosmo) if cosmo is not None else None,
         rephase_to_dset=rephase_to_dset,
         trim_dset_lsts=trim_dset_lsts,
         broadcast_dset_flags=broadcast_dset_flags,

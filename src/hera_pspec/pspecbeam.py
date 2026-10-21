@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import astropy.units as u
 import numpy as np
 import scipy.integrate as integrate
 import uvtools.dspec as dspec
@@ -34,8 +35,8 @@ def _compute_pspec_scalar(
 
     Parameters
     ----------
-    cosmo : conversions.Cosmo_Conversions instance
-        Instance of the cosmological conversion object.
+    cosmo : astropy.cosmology.FLRW
+        Cosmology.
 
     beam_freqs : array of floats
         Frequency of beam integrals in omega_ratio in units of Hz.
@@ -75,6 +76,8 @@ def _compute_pspec_scalar(
         [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
         Units: h^-3 Mpc^3 or Mpc^3.
     """
+    length_unit = conversions.length_unit_from_little_h(little_h)
+
     # Get integration freqs
     df = np.median(np.diff(pspec_freqs))
     integration_freqs = np.linspace(
@@ -89,8 +92,10 @@ def _compute_pspec_scalar(
     integration_freqs_MHz = integration_freqs / 1e6
 
     # Get redshifts and cosmological functions
-    redshifts = cosmo.f2z(integration_freqs).flatten()
-    X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
+    redshifts = conversions.f2z(integration_freqs).flatten()
+    X2Y = conversions.X2Y(redshifts, cosmo, length_unit).to_value(
+        length_unit**3 / (u.sr * u.Hz)
+    )
 
     if exact_norm:  # Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
         scalar = integrate.trapezoid(X2Y, x=integration_freqs) / (
@@ -136,14 +141,32 @@ class PSpecBeamBase:
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         """
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
+
+    @property
+    def cosmo(self):
+        """
+        Cosmology of the beam, an ``astropy.cosmology.FLRW``.
+
+        Setting it to None selects ``conversions.DEFAULT_COSMOLOGY``. A
+        ``Cosmo_Conversions`` object is converted (deprecated).
+        """
+        return self._cosmo
+
+    @cosmo.setter
+    def cosmo(self, cosmo):
+        if cosmo is None:
+            cosmo = conversions.DEFAULT_COSMOLOGY
+        self._cosmo = conversions.as_astropy_cosmology(cosmo)
+
+    @cosmo.deleter
+    def cosmo(self):
+        del self._cosmo
 
     def compute_pspec_scalar(
         self,
@@ -372,9 +395,10 @@ class PSpecBeamGauss(PSpecBeamBase):
             Frequencies over which this Gaussian beam is to be created. Units
             assumed to be Hz.
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
 
         beam: pyuvdata.analytic_beam.GaussianBeam, optional
             Ready-made achromatic, sigma-specified GaussianBeam object.
@@ -415,10 +439,7 @@ class PSpecBeamGauss(PSpecBeamBase):
                 sigma=self.fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
             )
         self.beam_freqs = beam_freqs
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
 
     def power_beam_int(self, pol="pI"):
         """
@@ -501,9 +522,10 @@ class PSpecBeamUV(PSpecBeamBase):
         uvbeam: str or UVBeam object
             Path to a pyuvdata UVBeam file or a UVBeam object.
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         """
         # setup uvbeam object
         if isinstance(uvbeam, str | Path):
@@ -514,10 +536,7 @@ class PSpecBeamUV(PSpecBeamBase):
 
         # get frequencies and set cosmology
         self.beam_freqs = uvb.freq_array
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
 
         # setup primary power beam
         self.primary_beam = uvb
@@ -675,9 +694,10 @@ class PSpecBeamFromArray(PSpecBeamBase):
             evaluated, in Hz. This should be specified as a single array, not
             as a dict.
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
 
         x_orientation : str, optional
             Orientation in cardinal direction east or north of X dipole.
@@ -745,10 +765,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
                 self.add_pol(pol, OmegaP[pol], OmegaPP[pol])
 
         # Set cosmology
-        if cosmo is None:
-            self.cosmo = conversions.Cosmo_Conversions()
-        else:
-            self.cosmo = cosmo
+        self.cosmo = cosmo
 
     def add_pol(self, pol, OmegaP, OmegaPP):
         """

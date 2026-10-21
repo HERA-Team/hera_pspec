@@ -8,6 +8,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
+from astropy import units
+from astropy.cosmology import LambdaCDM
 
 from hera_pspec import cli, container, conversions, testing
 from hera_pspec.container import PSpecContainer
@@ -297,8 +299,8 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
     assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
 
 
-def test_run_cosmo_builds_cosmo_conversions(monkeypatch, tmp_path):
-    """--cosmo values must reach pspec_run as a Cosmo_Conversions, not a list."""
+def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
+    """--cosmo values must reach pspec_run as an astropy cosmology, not a list."""
     captured = {}
 
     def fake_pspec_run(dsets, filename, **kwargs):
@@ -323,12 +325,32 @@ def test_run_cosmo_builds_cosmo_conversions(monkeypatch, tmp_path):
     )
     assert result.exit_code == 0, result.output
     cosmo = captured["cosmo"]
-    assert isinstance(cosmo, conversions.Cosmo_Conversions)
-    assert cosmo.Om_L == pytest.approx(0.7)
-    assert cosmo.Om_b == pytest.approx(0.05)
-    assert cosmo.Om_c == pytest.approx(0.25)
-    assert cosmo.H0 == pytest.approx(70.0)
+    assert isinstance(cosmo, LambdaCDM)
+    assert cosmo.Ode0 == pytest.approx(0.7)
+    assert cosmo.Ob0 == pytest.approx(0.05)
+    assert cosmo.Om0 == pytest.approx(0.3)
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == pytest.approx(70.0)
+    assert cosmo.Tcmb0.value == 0
     assert captured["beam"] == str(beamfile)
+
+
+def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
+    """Omitted trailing --cosmo values give the default cosmology's parameters."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo", "0.6844"]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+    assert conversions.params_from_cosmology(cosmo) == (
+        conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+    )
 
 
 def test_run_cosmo_default_is_none(monkeypatch, tmp_path):

@@ -1260,8 +1260,12 @@ def delay_wedge(
         # convert to cosmological wave vector
         if not delay:
             # Get average redshift of spw
-            avg_z = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
-            horizons *= uvp.cosmo.tau_to_kpara(avg_z, little_h=little_h) / 1e9
+            avg_z = conversions.f2z(
+                np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
+            )
+            length_unit = conversions.length_unit_from_little_h(little_h)
+            tau_to_kpara = conversions.tau_to_kpara(avg_z, uvp.cosmo, length_unit)
+            horizons *= tau_to_kpara.to_value(1 / length_unit / u.s) / 1e9
 
         # iterate over bins and plot lines
         if rotate:

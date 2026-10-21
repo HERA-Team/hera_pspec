@@ -229,7 +229,7 @@ class TestDeltasq:
 
     def test_unnormalised(self, uvd_zen_even_xx: UVData) -> None:
         uvp = _pspec(uvd_zen_even_xx, None, "mK")
-        uvp.cosmo = conversions.Cosmo_Conversions()
+        uvp.cosmo = conversions.DEFAULT_COSMOLOGY
         uvp.convert_to_deltasq()
         assert uvp.norm_units == "Hz sr"
         assert uvp.norm_unit == units.Hz * units.sr / units.Mpc**3

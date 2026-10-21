@@ -229,7 +229,7 @@ class TestDelaySpectrum:
         blps = [blp for blp in blpairs]
 
         # Set cosmology and plot in non-delay (i.e. cosmological) units
-        uvp.set_cosmology(conversions.Cosmo_Conversions())
+        uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY)
         f1 = plot.delay_spectrum(
             uvp,
             [blps],
@@ -493,7 +493,7 @@ class TestDelayWaterfall:
         Delta^2."""
         blpairs = np.unique(uvp.blpair_array).tolist()
         blps = [uvp.blpair_to_antnums(blp) for blp in blpairs]
-        uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
+        uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True)
 
         f1 = plot.delay_waterfall(
             uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, delay=False

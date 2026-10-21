@@ -13,6 +13,7 @@ import hera_cal as hc
 import numpy as np
 import uvtools.dspec as dspec
 from astropy import units
+from astropy.cosmology import FLRW
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
@@ -4704,11 +4705,11 @@ def pspec_run(
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
         to a beamfits healpix map (see UVBeam)
 
-    cosmo : conversions.Cosmo_Conversions object, optional
-        A Cosmo_Conversions object to use as the cosmology when normalizing
-        the power spectra. Default is None, which keeps the beam's own
-        cosmology (Cosmo_Conversions() defaults unless the beam sets one).
-        See conversions.Cosmo_Conversions for details.
+    cosmo : astropy.cosmology.FLRW, optional
+        Cosmology to use when normalizing the power spectra. Default is None,
+        which keeps the beam's own cosmology (conversions.DEFAULT_COSMOLOGY
+        unless the beam sets one). A ``Cosmo_Conversions`` object is still
+        accepted but deprecated.
 
     interleave_times : bool
         Only applicable if Ndsets == 1. If True, copy dset[0] into
@@ -4868,7 +4869,10 @@ def pspec_run(
     )
 
     # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
-    accepted_cosmo_types = (conversions.Cosmo_Conversions,)
+    accepted_cosmo_types = (FLRW,)
+    if isinstance(cosmo, conversions.Cosmo_Conversions):
+        # deprecated: converted with a DeprecationWarning
+        cosmo = conversions.as_astropy_cosmology(cosmo)
     if cosmo is not None and not isinstance(cosmo, accepted_cosmo_types):
         accepted_names = ", ".join(t.__name__ for t in accepted_cosmo_types)
         raise TypeError(

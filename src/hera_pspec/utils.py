@@ -6,6 +6,7 @@ import time
 import traceback
 from datetime import UTC, datetime
 
+import astropy.units as u
 import numpy as np
 import uvtools as uvt
 import yaml
@@ -14,8 +15,7 @@ from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 from scipy.interpolate import interp1d
 
-from . import __version__
-from .conversions import Cosmo_Conversions
+from . import __version__, conversions
 
 
 def circular_average(angles, axis=0):
@@ -691,7 +691,9 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append((Cosmo_Conversions.z2f(zmax), Cosmo_Conversions.z2f(zmin)))
+        freq_range.append(
+            (conversions.z2f(zmax).to_value(u.Hz), conversions.z2f(zmin).to_value(u.Hz))
+        )
 
     # Use freq. function to get spectral window
     spw_range = spw_range_from_freqs(

@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import pyuvdata as uv
+from astropy.cosmology import FLRW, LambdaCDM
 from astropy.time import Time
 from hera_cal import redcal
 from pyuvdata import UVCal, UVData
@@ -29,6 +30,7 @@ from hera_pspec import (
     uvwindow,
 )
 from hera_pspec.data import DATA_PATH
+from hera_pspec.uvpspec import UVPSpec
 
 DATA_PATH = Path(DATA_PATH)
 
@@ -2451,6 +2453,24 @@ class TestPspec:
         uvp = ds.pspec([(24, 25)], [(37, 38)], (0, 1), [("xx", "xx")])
         assert np.all(np.isclose(uvp.integration_array[0], 0.0))
 
+    def test_pspec_default_cosmology(
+        self, beam_nf_dipole, uvd: UVData, tmp_path: Path
+    ) -> None:
+        """pspec() attaches the beam's astropy cosmology (DEFAULT_COSMOLOGY by
+        default), and it survives an HDF5 round trip."""
+        ds = pspecdata.PSpecData(
+            dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole
+        )
+        uvp = ds.pspec(
+            [(24, 25)], [(37, 38)], (0, 1), [("xx", "xx")], spw_ranges=[(50, 60)]
+        )
+        assert uvp.cosmo is conversions.DEFAULT_COSMOLOGY
+        uvp.write_hdf5(str(tmp_path / "uvp.h5"))
+        read = UVPSpec()
+        read.read_hdf5(str(tmp_path / "uvp.h5"))
+        assert isinstance(read.cosmo, FLRW)
+        assert read.cosmo == conversions.DEFAULT_COSMOLOGY
+
     def test_pspec_covariance_models(
         self, beam_nf_dipole, uvd: UVData, uvd_std: UVData
     ) -> None:
@@ -2650,7 +2670,7 @@ def normalization_setup(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> tuple:
     bls2 = [(37, 38)]
 
     beam = copy.deepcopy(beam_nf_dipole)
-    cosmo = conversions.Cosmo_Conversions()
+    cosmo = conversions.DEFAULT_COSMOLOGY
 
     # Set to mK scale
     d1.data_array *= beam.Jy_to_mK(freqs, pol="XX")[None, :, None]
@@ -2672,7 +2692,7 @@ class TestNormalization:
         NEB = 1.0
         Bp = np.median(np.diff(freqs)) * len(freqs)
         scalar = (
-            cosmo.X2Y(np.mean(cosmo.f2z(freqs)))
+            conversions.X2Y(np.mean(conversions.f2z(freqs)), cosmo).value
             * np.mean(OmegaP**2 / OmegaPP)
             * Bp
             * NEB
@@ -2712,7 +2732,7 @@ class TestNormalization:
         Bp = np.median(np.diff(freqs)) * len(freqs)
         NEB = Bp / trapezoid(window**2, x=freqs)
         scalar = (
-            cosmo.X2Y(np.mean(cosmo.f2z(freqs)))
+            conversions.X2Y(np.mean(conversions.f2z(freqs)), cosmo).value
             * np.mean(OmegaP**2 / OmegaPP)
             * Bp
             * NEB
@@ -3082,10 +3102,35 @@ class TestPspecRun:
             )
         assert not (tmp_path / "out.h5").exists()
 
+    def test_cosmo_conversions_deprecated(
+        self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV
+    ) -> None:
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(Om_L=0.0)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                beam=beam_nf_dipole,
+                blpairs=[((37, 38), (37, 38))],
+                pol_pairs=[("xx", "xx")],
+                spw_ranges=[(50, 60)],
+                verbose=False,
+                overwrite=True,
+                cosmo=old,
+            )
+        psc = container.PSpecContainer(str(tmp_path / "out.h5"), keep_open=False)
+        group = psc.groups()[0]
+        uvp = psc.get_pspec(group, psc.spectra(group)[0])
+        assert isinstance(uvp.cosmo, FLRW)
+        assert uvp.cosmo.is_equivalent(old.to_astropy())
+        # the beam passed in keeps its own cosmology
+        assert beam_nf_dipole.cosmo is conversions.DEFAULT_COSMOLOGY
+
     def test_jy2mk_blpairs_cosmo_cov_array_spw_ranges_dset_labeling(
         self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV
     ) -> None:
-        cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+        cosmo = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.0, Ob0=0.04911)
 
         pspecdata.pspec_run(
             PSPEC_RUN_FNAMES,

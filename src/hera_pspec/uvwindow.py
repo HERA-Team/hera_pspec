@@ -443,14 +443,7 @@ class FTBeam:
 
     @classmethod
     def gaussian(
-        cls,
-        freq_array,
-        widths,
-        pol,
-        mapsize=1.0,
-        npix=301,
-        cosmo=conversions.Cosmo_Conversions(),
-        **kwargs,
+        cls, freq_array, widths, pol, mapsize=1.0, npix=301, cosmo=None, **kwargs
     ):
         """
         Initiliase a Gaussian beam on a range of frequencies,
@@ -474,9 +467,9 @@ class FTBeam:
         npix : int
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+        cosmo : astropy.cosmology.FLRW, optional
+            Not used: the Fourier-space beam does not depend on the cosmology.
+            Kept for backwards compatibility. Default: None.
         """
 
         # Frequency-related parameters
@@ -700,12 +693,7 @@ class UVWindow:
     """Class for :class:`UVWindow` objects."""
 
     def __init__(
-        self,
-        ftbeam_obj,
-        taper=None,
-        little_h=True,
-        cosmo=conversions.Cosmo_Conversions(),
-        verbose=False,
+        self, ftbeam_obj, taper=None, little_h=True, cosmo=None, verbose=False
     ):
         """
         Class for :class:`UVWindow` objects.
@@ -731,9 +719,10 @@ class UVWindow:
                 ``astropy.cosmology.units.littleh / astropy.units.Mpc``;
                 otherwise they are ``astropy.units.Mpc ** -1``.
                 Default: True (h^-1 Mpc).
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -742,8 +731,8 @@ class UVWindow:
 
         # cosmology
         if cosmo is None:
-            raise ValueError("If no preferred cosmology, do not call input parameter")
-        self.cosmo = cosmo
+            cosmo = conversions.DEFAULT_COSMOLOGY
+        self.cosmo = conversions.as_astropy_cosmology(cosmo)
 
         # units
         self.little_h = bool(little_h)
@@ -793,7 +782,7 @@ class UVWindow:
         self.Nfreqs = len(self.freq_array)
         self.dly_array = utils.get_delays(self.freq_array, n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
-        self.avg_z = self.cosmo.f2z(self.avg_nu)
+        self.avg_z = conversions.f2z(self.avg_nu)
 
     @classmethod
     def from_uvpspec(
@@ -833,7 +822,7 @@ class UVWindow:
 
         # cosmology
         if not hasattr(uvp, "cosmo"):
-            cosmo = conversions.Cosmo_Conversions()
+            cosmo = conversions.DEFAULT_COSMOLOGY
             warnings.warn("uvp has no cosmo attribute. Using fiducial cosmology.")
         else:
             cosmo = uvp.cosmo
@@ -895,6 +884,44 @@ class UVWindow:
             verbose=verbose,
         )
 
+    def _cosmo_factor(self, name, z):
+        """
+        Return a cosmological conversion factor as a float, cached.
+
+        Parameters
+        ----------
+        name : str
+            One of ``"bl_to_kperp"`` ([h] Mpc^-1 per m), ``"tau_to_kpara"``
+            ([h] Mpc^-1 per s), ``"dRperp_dtheta"`` ([h^-1] Mpc per rad) or
+            ``"dRpara_df"`` ([h^-1] Mpc per Hz), with lengths in h^-1 Mpc
+            if :attr:`little_h` else Mpc.
+        z : float
+            Redshift.
+
+        Returns
+        -------
+        float
+            The ``conversions`` helper of that name, evaluated with
+            :attr:`cosmo`. Cached per redshift, since the window function
+            methods call these repeatedly with the same redshift.
+        """
+        key = (name, float(z), self.little_h)
+        cache = self.__dict__.setdefault("_cosmo_factor_cache", {})
+        cached = cache.get(key)
+        if cached is not None and cached[0] is self.cosmo:
+            return cached[1]
+        length_unit = conversions.length_unit_from_little_h(self.little_h)
+        helpers = {
+            "bl_to_kperp": (conversions.bl_to_kperp, 1 / length_unit / units.m),
+            "tau_to_kpara": (conversions.tau_to_kpara, 1 / length_unit / units.s),
+            "dRperp_dtheta": (conversions.dRperp_dtheta, length_unit / units.rad),
+            "dRpara_df": (conversions.dRpara_df, length_unit / units.Hz),
+        }
+        helper, unit = helpers[name]
+        value = float(helper(z, self.cosmo, length_unit).to_value(unit))
+        cache[key] = (self.cosmo, value)
+        return value
+
     def _get_kgrid(self, bl_len, width=0.020):
         """
         Compute the kperp-array the FT of the beam will be interpolated over.
@@ -925,17 +952,15 @@ class UVWindow:
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R)
         # divided by sqrt(2) because 2 dimensions
         kp_centre = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)
-            * bl_len
-            / np.sqrt(2.0)
+            self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_len / np.sqrt(2.0)
         )
         # spacing of the numerical Fourier grid, in cosmological units
         dk = (
             2.0
             * np.pi
             / (2.0 * self.ftbeam_obj_pol[0].mapsize)
-            / self.cosmo.dRperp_dtheta(
-                self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h
+            / self._cosmo_factor(
+                "dRperp_dtheta", conversions.f2z(self.freq_array.max())
             )
         )
         if width <= dk:
@@ -976,8 +1001,8 @@ class UVWindow:
         if not (self.freq_array.min() <= freq <= self.freq_array.max()):
             raise ValueError("Choose frequency within spectral window.")
 
-        z = self.cosmo.f2z(freq)
-        R = self.cosmo.DM(z, little_h=self.little_h)  # Mpc
+        z = conversions.f2z(freq)
+        R = self._cosmo_factor("dRperp_dtheta", z)  # [h^-1] Mpc
         # Fourier dual of sky angle theta
         q = (
             np.fft.fftshift(np.fft.fftfreq(ngrid))
@@ -1128,7 +1153,7 @@ class UVWindow:
 
         # get kparallel grid
         # conversion factor to cosmological units
-        alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
+        alpha = self._cosmo_factor("dRpara_df", self.avg_z)
         # frequency resolution
         delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
@@ -1185,7 +1210,7 @@ class UVWindow:
 
         dk_perp = np.diff(self._get_kgrid(np.min(bl_lens))[1]).mean() * 5
         kperp_max = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.max(bl_lens)
+            self._cosmo_factor("bl_to_kperp", self.avg_z) * np.max(bl_lens)
             + 10.0 * dk_perp
         )
         kperp_bin_edges = np.arange(dk_perp, kperp_max, step=dk_perp)
@@ -1226,16 +1251,12 @@ class UVWindow:
             raise ValueError("Must feed list of frequencies.")
 
         dly_array = utils.get_delays(freq_array, n_dlys=len(freq_array))
-        avg_z = self.cosmo.f2z(np.mean(freq_array))
+        avg_z = conversions.f2z(np.mean(freq_array))
 
         # define default kperp bins,
-        dk_para = (
-            self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)
-            * np.diff(dly_array)[0]
-        )
+        dk_para = self._cosmo_factor("tau_to_kpara", avg_z) * np.diff(dly_array)[0]
         kpara_max = (
-            self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)
-            * abs(dly_array).max()
+            self._cosmo_factor("tau_to_kpara", avg_z) * abs(dly_array).max()
             + 10.0 * dk_para
         )
         kpara_bin_edges = np.arange(dk_para / 2.0, kpara_max, step=dk_para)
@@ -1321,9 +1342,7 @@ class UVWindow:
         kperp_bin_edges = np.arange(
             kperp_bins.min() - dk_perp / 2, kperp_bins.max() + dk_perp, step=dk_perp
         )
-        kperp_centre = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * bl_len
-        )
+        kperp_centre = self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_len
         if (kperp_bin_edges.max() < kperp_centre + 3 * dk_perp) or (
             kperp_bin_edges.min() > kperp_centre - 3 * dk_perp
         ):
@@ -1345,8 +1364,7 @@ class UVWindow:
             kpara_bins.min() - dk_para / 2, kpara_bins.max() + dk_para, step=dk_para
         )
         kpara_centre = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)
-            * abs(self.dly_array).max()
+            self._cosmo_factor("tau_to_kpara", self.avg_z) * abs(self.dly_array).max()
         )
         if (kpara_bin_edges.max() < kpara_centre + 3 * dk_para) or (
             kpara_bin_edges.min() > kpara_centre - 3 * dk_para
@@ -1502,10 +1520,8 @@ class UVWindow:
         kbin_edges = np.arange(kbins.min() - dk / 2, kbins.max() + dk, step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * bl_lens
-        kparas = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) * self.dly_array
-        )
+        kperps = self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_lens
+        kparas = self._cosmo_factor("tau_to_kpara", self.avg_z) * self.dly_array
         kmags = np.sqrt(kperps[:, None] ** 2 + kparas**2)
 
         # take average
@@ -1634,10 +1650,10 @@ class UVWindow:
         )
         # make sure proper kperp values are included in given bins
         # raise warning otherwise
-        kperp_max = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.max(
+        kperp_max = self._cosmo_factor("bl_to_kperp", self.avg_z) * np.max(
             bl_lens
         )  # + 10.*dk_perp
-        kperp_min = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.min(
+        kperp_min = self._cosmo_factor("bl_to_kperp", self.avg_z) * np.min(
             bl_lens
         )  # + 10.*dk_perp
         if kperp_bin_edges.max() <= kperp_max:
@@ -1664,8 +1680,7 @@ class UVWindow:
             kpara_bins.min() - dk_para / 2, kpara_bins.max() + dk_para, step=dk_para
         )
         kpara_centre = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)
-            * abs(self.dly_array).max()
+            self._cosmo_factor("tau_to_kpara", self.avg_z) * abs(self.dly_array).max()
         )
         # make sure proper kpara values are included in given bins
         # raise warning otherwise

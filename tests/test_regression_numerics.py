@@ -12,7 +12,9 @@ import astropy.cosmology.units as cu
 import numpy as np
 import pytest
 from astropy import units
+from astropy.cosmology import FLRW
 
+from hera_pspec import conversions
 from hera_pspec import uvpspec_utils as uvputils
 from tests.regression_cases import CASES, compute_case, read_legacy_uvp
 
@@ -76,7 +78,9 @@ def test_legacy_uvp_file_metadata() -> None:
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert uvp.vis_unit == uvputils.uncalib
     assert uvp.units == uvputils.uncalib**2 * units.Mpc**3 / cu.littleh**3
-    params = uvp.cosmo.get_params()
+    assert isinstance(uvp.cosmo, FLRW)
+    assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+    params = conversions.params_from_cosmology(uvp.cosmo)
     assert sorted(params) == ["H0", "Om_L", "Om_M", "Om_b", "Om_c", "Om_k"]
     np.testing.assert_allclose(
         [params[key] for key in ("H0", "Om_L", "Om_M", "Om_b", "Om_c")],

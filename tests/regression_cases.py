@@ -26,6 +26,7 @@ from hera_pspec import (
     PSpecBeamUV,
     PSpecData,
     UVPSpec,
+    conversions,
     grouping,
     noise,
     utils,
@@ -637,8 +638,7 @@ def _legacy_test_uvp_h5() -> dict[str, np.ndarray]:
     out["get_kperps_h_0"] = out["get_kperps_h_0"][:12]
     out["get_kperps_noh_0"] = out["get_kperps_noh_0"][:12]
     out["units"] = np.array(uvputils.unit_to_string(uvp.units))
-    out["cosmo_params"] = np.array(
-        [uvp.cosmo.get_params()[key] for key in sorted(uvp.cosmo.get_params())]
-    )
-    out["cosmo_param_names"] = np.array(sorted(uvp.cosmo.get_params()))
+    cosmo_params = conversions.params_from_cosmology(uvp.cosmo)
+    out["cosmo_params"] = np.array([cosmo_params[key] for key in sorted(cosmo_params)])
+    out["cosmo_param_names"] = np.array(sorted(cosmo_params))
     return out

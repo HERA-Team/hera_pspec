@@ -6,12 +6,15 @@ Cosmological and instrumental
 conversion functions for hera_pspec
 """
 
+import functools
+import warnings
+
 import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
 import scipy.integrate as integrate
 from astropy import constants
-from astropy.cosmology import LambdaCDM
+from astropy.cosmology import FLRW, LambdaCDM
 
 
 class units:
@@ -96,7 +99,7 @@ def cosmology_from_params(params):
     Parameters
     ----------
     params : dict
-        Cosmological parameters, e.g. ``Cosmo_Conversions().get_params()``.
+        Cosmological parameters, e.g. ``params_from_cosmology(DEFAULT_COSMOLOGY)``.
 
     Returns
     -------
@@ -127,6 +130,137 @@ def cosmology_from_params(params):
             "to convert to an astropy cosmology."
         )
     return LambdaCDM(H0=params["H0"], Om0=Om_M, Ode0=Om_L, Ob0=Om_b)
+
+
+# Fractions of Om_M given to baryons and cold dark matter when a cosmology
+# has no baryon density (the split rule of Cosmo_Conversions).
+_OM_B_FRACTION = 0.156635
+_OM_C_FRACTION = 0.843364
+
+
+def params_from_cosmology(cosmo):
+    """
+    Return the hera_pspec cosmology dictionary of an astropy cosmology.
+
+    The dictionary has the keys and values that ``Cosmo_Conversions.get_params()``
+    gives for the same cosmology: ``Om_L``, ``Om_b``, ``Om_c``, ``Om_M``,
+    ``Om_k`` and ``H0``, as plain floats. This is the form stored in the
+    ``cosmo`` attribute of HDF5 files (readable by hera_pspec v0.x).
+
+    Parameters
+    ----------
+    cosmo : astropy.cosmology.FLRW
+        Cosmology. Only ``H0``, ``Om0``, ``Ode0`` and ``Ob0`` are read, so the
+        dark energy equation of state and any radiation are not represented.
+
+    Returns
+    -------
+    params : dict
+        ``Om_L = Ode0``, ``Om_M = Om0``, ``Om_b = Ob0`` and
+        ``Om_c = Om0 - Ob0``, ``Om_k = 1 - Om_L - Om_M`` and ``H0`` in
+        km/s/Mpc. If ``Ob0`` is unset (None or 0, astropy's default from
+        version 7), ``Om_M`` is split into ``Om_b`` and ``Om_c`` with the
+        fixed fractions 0.156635 / 0.843364, as ``Cosmo_Conversions`` does.
+    """
+    Om_M = float(cosmo.Om0)
+    Om_L = float(cosmo.Ode0)
+    if not cosmo.Ob0:
+        Om_b = Om_M * _OM_B_FRACTION
+        Om_c = Om_M * _OM_C_FRACTION
+    else:
+        Om_b = float(cosmo.Ob0)
+        Om_c = Om_M - Om_b
+    return {
+        "Om_L": Om_L,
+        "Om_b": Om_b,
+        "Om_c": Om_c,
+        "Om_M": Om_M,
+        "Om_k": 1 - Om_L - Om_M,
+        "H0": float(cosmo.H0.to_value(u.km / u.s / u.Mpc)),
+    }
+
+
+@functools.lru_cache(maxsize=32)
+def _cached_cosmology_from_params(params_items):
+    """``cosmology_from_params`` cached on the sorted items of the dictionary."""
+    return cosmology_from_params(dict(params_items))
+
+
+def _cosmology_from_params_cached(params):
+    """
+    Build (or reuse) the astropy cosmology of a parameter dictionary.
+
+    Astropy cosmologies are immutable, so the same parameters give one shared
+    object. This avoids building a new ``LambdaCDM`` (several milliseconds,
+    and a reference cycle) every time, e.g. on each HDF5 read.
+    """
+    try:
+        key = tuple(sorted(params.items()))
+        hash(key)
+    except TypeError:
+        return cosmology_from_params(params)
+    return _cached_cosmology_from_params(key)
+
+
+def as_astropy_cosmology(cosmo):
+    """
+    Return a cosmology as an ``astropy.cosmology.FLRW`` object.
+
+    Parameters
+    ----------
+    cosmo : astropy.cosmology.FLRW, dict or Cosmo_Conversions
+        An astropy cosmology (returned as is), a hera_pspec cosmology
+        dictionary with the keys of :func:`params_from_cosmology` (see
+        :func:`cosmology_from_params`), or a deprecated
+        :class:`Cosmo_Conversions`, which emits a ``DeprecationWarning``.
+
+    Returns
+    -------
+    cosmo : astropy.cosmology.FLRW
+        Equal parameter dictionaries give the same (shared) object.
+
+    Raises
+    ------
+    TypeError
+        If ``cosmo`` is none of the accepted types.
+    ValueError
+        If the parameters cannot be represented by an astropy ``LambdaCDM``
+        (see :func:`cosmology_from_params`).
+    """
+    if isinstance(cosmo, FLRW):
+        return cosmo
+    if isinstance(cosmo, Cosmo_Conversions):
+        warnings.warn(
+            "Passing a Cosmo_Conversions object is deprecated; pass an "
+            "astropy.cosmology object instead (e.g. "
+            "hera_pspec.conversions.DEFAULT_COSMOLOGY).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return _cosmology_from_params_cached(cosmo.get_params())
+    if isinstance(cosmo, dict):
+        return _cosmology_from_params_cached(cosmo)
+    raise TypeError(
+        "cosmo must be an astropy.cosmology.FLRW object (or a cosmology "
+        f"parameter dictionary), got {type(cosmo).__name__}."
+    )
+
+
+def length_unit_from_little_h(little_h):
+    """
+    Return the cosmological length unit for a ``little_h`` flag.
+
+    Parameters
+    ----------
+    little_h : bool
+        Whether lengths are in h^-1 Mpc (True) or Mpc (False).
+
+    Returns
+    -------
+    astropy.units.Unit
+        ``u.Mpc / cu.littleh`` if ``little_h``, else ``u.Mpc``.
+    """
+    return _LITTLEH_LENGTH if little_h else u.Mpc
 
 
 def _to_length_unit(quantity, unit, cosmo):
@@ -323,6 +457,12 @@ class Cosmo_Conversions:
     some of which require a cosmological model, others of which
     do not require a predefined cosmology.
 
+    .. deprecated:: 1.0
+        Use an ``astropy.cosmology`` object (e.g. ``DEFAULT_COSMOLOGY``, or
+        ``cosmology_from_params``) with the module functions ``f2z``,
+        ``z2f``, ``dRperp_dtheta``, ``dRpara_df``, ``X2Y``, ``bl_to_kperp``
+        and ``tau_to_kpara`` instead. This class is kept for the v1.x series.
+
     Default parameter values are Planck 2015 TT,TE,EE+lowP.
     (Table 4 of https://doi.org/10.1051/0004-6361/201525830)
 
@@ -375,6 +515,15 @@ class Cosmo_Conversions:
             curvature energy density at z=0
 
         """
+        warnings.warn(
+            "Cosmo_Conversions is deprecated and will be removed in a future "
+            "version; use an astropy.cosmology object instead, e.g. "
+            "hera_pspec.conversions.DEFAULT_COSMOLOGY or "
+            "hera_pspec.conversions.cosmology_from_params(...), with the "
+            "module functions of hera_pspec.conversions.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Setup parameters
         if Om_M is not None:
             if np.isclose(Om_b + Om_c, Om_M, atol=1e-5) is False:

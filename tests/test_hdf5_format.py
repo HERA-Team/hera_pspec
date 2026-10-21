@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pytest
 from astropy import units
-from astropy.cosmology import Cosmology, FlatLambdaCDM
+from astropy.cosmology import FLRW, Cosmology, FlatLambdaCDM, LambdaCDM, wCDM
 
 from hera_pspec import PSpecContainer, UVPSpec, conversions, uvwindow
 from hera_pspec import uvpspec_utils as uvputils
@@ -19,6 +19,17 @@ from hera_pspec.data import DATA_PATH
 from tests import legacy_fixtures as lf
 
 DATA_PATH = Path(DATA_PATH)
+
+# Cosmo_Conversions().get_params() of hera_pspec v0.x, i.e. the "cosmo"
+# attribute of files written with the default cosmology.
+OLD_DEFAULT_COSMO_PARAMS = {
+    "Om_L": 0.6844,
+    "Om_b": 0.04911,
+    "Om_c": 0.26442,
+    "Om_M": 0.31353,
+    "Om_k": 0.0020700000000000163,
+    "H0": 67.27,
+}
 
 # Parameters with a declared unit, by where write_to_group puts them
 UNIT_DSETS = {
@@ -113,10 +124,16 @@ class TestWriteVersion2:
             cosmo_params = f.attrs["cosmo"]
             cosmo_yaml = f.attrs["cosmo_yaml"]
         # the dict string v0.x reads with ast.literal_eval is unchanged
-        assert ast.literal_eval(cosmo_params) == vanilla_uvp.cosmo.get_params()
+        assert cosmo_params == str(OLD_DEFAULT_COSMO_PARAMS)
+        assert ast.literal_eval(cosmo_params) == conversions.params_from_cosmology(
+            vanilla_uvp.cosmo
+        )
         cosmology = Cosmology.from_format(cosmo_yaml, format="yaml")
-        assert cosmology == vanilla_uvp.cosmo.to_astropy()
-        assert _read(path).cosmo == vanilla_uvp.cosmo
+        assert cosmology == vanilla_uvp.cosmo
+        assert cosmology == conversions.DEFAULT_COSMOLOGY
+        read_cosmo = _read(path).cosmo
+        assert isinstance(read_cosmo, FLRW)
+        assert read_cosmo == conversions.DEFAULT_COSMOLOGY
 
     def test_quantity_attribute_written_plain(
         self, vanilla_uvp: UVPSpec, tmp_path: Path
@@ -145,47 +162,78 @@ class TestWriteVersion2:
         assert not isinstance(uvp_read.dly_array, units.Quantity)
         assert uvp_read == vanilla_uvp
 
-    def test_inconsistent_om_k_writes_only_dict(
+    def test_inconsistent_om_k_cosmo_conversions_rejected(
+        self, vanilla_uvp: UVPSpec, tmp_path: Path
+    ) -> None:
+        # astropy cannot represent an Om_k inconsistent with Om_L and Om_M
+        uvp = copy.deepcopy(vanilla_uvp)
+        with pytest.warns(DeprecationWarning):
+            uvp.cosmo = conversions.Cosmo_Conversions(Om_k=0.05)
+        with (
+            pytest.warns(DeprecationWarning),
+            pytest.raises(AssertionError, match="Om_k"),
+        ):
+            uvp.check()
+
+    def test_cosmo_conversions_converted_on_write(
         self, vanilla_uvp: UVPSpec, tmp_path: Path
     ) -> None:
         uvp = copy.deepcopy(vanilla_uvp)
-        uvp.cosmo = conversions.Cosmo_Conversions(Om_k=0.05)
-        path = _write(uvp, tmp_path / "uvp.h5")
-        with h5py.File(path, "r") as f:
-            assert "cosmo_yaml" not in f.attrs
-            assert f.attrs["uvpspec_version"] == "2"
+        with pytest.warns(DeprecationWarning):
+            uvp.cosmo = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            path = _write(uvp, tmp_path / "uvp.h5")
+        assert isinstance(uvp.cosmo, FLRW)
         assert _read(path).cosmo == uvp.cosmo
 
     @pytest.mark.parametrize(
         "cosmo",
         [
-            conversions.Cosmo_Conversions(),
-            # the cosmology of the 2019 file test_uvp.h5
-            conversions.Cosmo_Conversions(
-                Om_L=0.6844,
-                Om_b=0.04911,
-                Om_c=0.26442,
-                Om_M=0.31353,
-                Om_k=0.0020700000000000163,
-                H0=67.27,
+            conversions.DEFAULT_COSMOLOGY,
+            # the cosmology of the 2019 file test_uvp.h5, built from its dict
+            conversions.cosmology_from_params(
+                {
+                    "Om_L": 0.6844,
+                    "Om_b": 0.04911,
+                    "Om_c": 0.26442,
+                    "Om_M": 0.31353,
+                    "Om_k": 0.0020700000000000163,
+                    "H0": 67.27,
+                }
             ),
-            conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25),
+            LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05, name="custom"),
+            FlatLambdaCDM(H0=70.0, Om0=0.3),
+            wCDM(H0=70.0, Om0=0.3, Ode0=0.7, w0=-0.9, Ob0=0.05),
         ],
-        ids=["default", "test_uvp_h5", "custom"],
+        ids=["default", "test_uvp_h5", "custom", "flat", "wcdm"],
     )
     def test_cosmo_yaml_round_trip(
-        self, vanilla_uvp: UVPSpec, tmp_path: Path, cosmo: conversions.Cosmo_Conversions
+        self, vanilla_uvp: UVPSpec, tmp_path: Path, cosmo: FLRW
     ) -> None:
         uvp = copy.deepcopy(vanilla_uvp)
         uvp.cosmo = cosmo
         path = _write(uvp, tmp_path / "uvp.h5")
         with h5py.File(path, "r") as f:
             assert "cosmo_yaml" in f.attrs
-        params = _read(path).cosmo.get_params()
-        expected = cosmo.get_params()
-        assert sorted(params) == sorted(expected)
-        for key, value in expected.items():
-            assert params[key] == pytest.approx(value, rel=1e-15, abs=1e-15), key
+            assert ast.literal_eval(f.attrs["cosmo"]) == (
+                conversions.params_from_cosmology(cosmo)
+            )
+        read_cosmo = _read(path).cosmo
+        assert type(read_cosmo) is type(cosmo)
+        assert read_cosmo == cosmo
+
+    def test_cosmo_attrs_follow_cosmology_class(
+        self, vanilla_uvp: UVPSpec, tmp_path: Path
+    ) -> None:
+        # same parameter dict, different cosmologies: the cached attributes
+        # must not mix them up
+        lcdm = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+        wcdm = wCDM(H0=70.0, Om0=0.3, Ode0=0.7, w0=-0.9, Ob0=0.05)
+        for cosmo in (lcdm, wcdm, lcdm):
+            uvp = copy.deepcopy(vanilla_uvp)
+            uvp.cosmo = cosmo
+            path = _write(uvp, tmp_path / "uvp.h5")
+            assert _read(path).cosmo == cosmo
 
 
 def _edited_copy(src: Path, dst: Path, edit) -> Path:
@@ -309,19 +357,20 @@ class TestReadVersion2:
             _read(path)
 
     def test_cosmo_yaml_preferred(self, v2_file: Path, tmp_path: Path) -> None:
-        other = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        other = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+        other_params = conversions.params_from_cosmology(other)
 
         def edit(f):
             # a tiny difference, inside the tolerance, keeps the YAML value
             params = ast.literal_eval(f.attrs["cosmo"])
-            params["H0"] = other.H0 * (1 + 1e-14)
+            params["H0"] = other_params["H0"] * (1 + 1e-14)
             for key in ("Om_L", "Om_b", "Om_c", "Om_M", "Om_k"):
-                params[key] = other.get_params()[key]
+                params[key] = other_params[key]
             f.attrs["cosmo"] = str(params)
-            f.attrs["cosmo_yaml"] = other.to_astropy().to_format("yaml")
+            f.attrs["cosmo_yaml"] = other.to_format("yaml")
 
         uvp = _read(_edited_copy(v2_file, tmp_path / "cosmo.h5", edit))
-        assert uvp.cosmo.H0 == other.H0
+        assert uvp.cosmo == other
 
     def test_cosmo_yaml_without_dict(
         self, v2_file: Path, vanilla_uvp_with_beam: UVPSpec, tmp_path: Path
@@ -349,14 +398,11 @@ class TestLegacyFiles:
         with h5py.File(DATA_PATH / "test_uvp.h5", "r") as f:
             assert "uvpspec_version" not in f.attrs
         uvp = _read(DATA_PATH / "test_uvp.h5")
-        assert uvp.cosmo == conversions.Cosmo_Conversions(
-            Om_L=0.6844,
-            Om_b=0.04911,
-            Om_c=0.26442,
-            Om_M=0.31353,
-            Om_k=0.0020700000000000163,
-            H0=67.27,
-        )
+        assert isinstance(uvp.cosmo, FLRW)
+        assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert conversions.params_from_cosmology(uvp.cosmo) == OLD_DEFAULT_COSMO_PARAMS
+        # repeated reads of the same legacy dict reuse one cosmology object
+        assert _read(DATA_PATH / "test_uvp.h5").cosmo is uvp.cosmo
 
     @pytest.mark.parametrize(
         "name,builder",
@@ -404,8 +450,17 @@ class TestLegacyFiles:
             for key in ("avg_nu", "avg_z", "nfreqs", "little_h", "polpair", "taper"):
                 assert legacy.attrs[key] == new.attrs[key], key
             for key in legacy:
+                # the window functions span many orders of magnitude, and
+                # float re-association (~1e-16) in the k grid moves the tiny
+                # tail values by more than rtol, so allow an atol scaled to
+                # the array maximum too
+                expected = legacy[key][()]
                 np.testing.assert_allclose(
-                    new[key][()], legacy[key][()], rtol=1e-9, err_msg=key
+                    new[key][()],
+                    expected,
+                    rtol=1e-9,
+                    atol=1e-12 * np.max(np.abs(expected)),
+                    err_msg=key,
                 )
 
 
@@ -563,20 +618,21 @@ class TestNormUnitsFromLegacyString:
 
 
 class TestCosmologyFromParams:
-    def test_matches_to_astropy(self) -> None:
-        cosmo = conversions.Cosmo_Conversions()
-        lcdm = conversions.cosmology_from_params(cosmo.get_params())
-        assert lcdm == cosmo.to_astropy()
-        assert lcdm.H0.value == cosmo.H0
-        assert lcdm.Om0 == cosmo.Om_M
-        assert lcdm.Ode0 == cosmo.Om_L
-        assert lcdm.Ob0 == cosmo.Om_b
+    def test_matches_default(self) -> None:
+        lcdm = conversions.cosmology_from_params(OLD_DEFAULT_COSMO_PARAMS)
+        assert lcdm.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert lcdm.H0.value == OLD_DEFAULT_COSMO_PARAMS["H0"]
+        assert lcdm.Om0 == OLD_DEFAULT_COSMO_PARAMS["Om_M"]
+        assert lcdm.Ode0 == OLD_DEFAULT_COSMO_PARAMS["Om_L"]
+        assert lcdm.Ob0 == OLD_DEFAULT_COSMO_PARAMS["Om_b"]
         assert lcdm.Tcmb0.value == 0
 
     def test_round_trip(self) -> None:
-        params = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7).get_params()
+        params = {"H0": 70.0, "Om_L": 0.7, "Om_b": 0.04911, "Om_c": 0.26442}
+        params["Om_M"] = params["Om_b"] + params["Om_c"]
+        params["Om_k"] = 1 - params["Om_L"] - params["Om_M"]
         lcdm = conversions.cosmology_from_params(params)
-        back = conversions.Cosmo_Conversions.from_astropy(lcdm).get_params()
+        back = conversions.params_from_cosmology(lcdm)
         for key, value in params.items():
             assert back[key] == pytest.approx(value, rel=1e-15, abs=1e-15), key
 
@@ -589,13 +645,13 @@ class TestCosmologyFromParams:
         assert not isinstance(lcdm, FlatLambdaCDM)
 
     def test_inconsistent_om_k_raises(self) -> None:
-        params = conversions.Cosmo_Conversions().get_params()
+        params = dict(OLD_DEFAULT_COSMO_PARAMS)
         params["Om_k"] = 0.05
         with pytest.raises(ValueError, match="Om_k"):
             conversions.cosmology_from_params(params)
 
     def test_om_b_out_of_range_raises(self) -> None:
-        params = conversions.Cosmo_Conversions().get_params()
+        params = dict(OLD_DEFAULT_COSMO_PARAMS)
         params["Om_b"] = 0.5
         with pytest.raises(ValueError, match="Om_b"):
             conversions.cosmology_from_params(params)

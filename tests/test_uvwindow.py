@@ -8,6 +8,7 @@ import h5py
 import numpy as np
 import pytest
 from astropy import units
+from astropy.cosmology import FLRW, LambdaCDM
 from pyuvdata import UVBeam, UVData
 from pyuvdata import utils as uvutils
 
@@ -51,9 +52,7 @@ def ft_bandwidth() -> np.ndarray:
 
 
 @pytest.fixture()
-def uvwindow_obj(
-    ft_beam_spw: uvwindow.FTBeam, cosmo: conversions.Cosmo_Conversions
-) -> uvwindow.UVWindow:
+def uvwindow_obj(ft_beam_spw: uvwindow.FTBeam, cosmo: FLRW) -> uvwindow.UVWindow:
     return uvwindow.UVWindow(
         ftbeam_obj=ft_beam_spw,
         taper="blackman-harris",
@@ -524,15 +523,33 @@ class TestUVWindowInit:
         with pytest.raises(ValueError, match="Wrong taper"):
             uvwindow.UVWindow(taper="test", ftbeam_obj=ft_beam_spw)
 
-    def test_cosmo(
-        self, ft_beam_spw: uvwindow.FTBeam, cosmo: conversions.Cosmo_Conversions
-    ) -> None:
+    def test_cosmo(self, ft_beam_spw: uvwindow.FTBeam, cosmo: FLRW) -> None:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, cosmo=cosmo)
-        assert test.cosmo is not None
+        assert test.cosmo is cosmo
 
-    def test_cosmo_none_raises(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        with pytest.raises(ValueError, match="If no preferred cosmology"):
-            uvwindow.UVWindow(cosmo=None, ftbeam_obj=ft_beam_spw)
+    def test_cosmo_none_uses_default(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(cosmo=None, ftbeam_obj=ft_beam_spw)
+        assert test.cosmo is conversions.DEFAULT_COSMOLOGY
+        assert uvwindow.UVWindow(ftbeam_obj=ft_beam_spw).cosmo is (
+            conversions.DEFAULT_COSMOLOGY
+        )
+
+    def test_cosmo_conversions_deprecated(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            test = uvwindow.UVWindow(cosmo=old, ftbeam_obj=ft_beam_spw)
+        assert isinstance(test.cosmo, FLRW)
+        assert test.cosmo.is_equivalent(old.to_astropy())
+
+    def test_cosmo_factor_cache_follows_cosmology(
+        self, ft_beam_spw: uvwindow.FTBeam
+    ) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
+        default = test._cosmo_factor("bl_to_kperp", test.avg_z)
+        assert test._cosmo_factor("bl_to_kperp", test.avg_z) == default
+        test.cosmo = LambdaCDM(H0=67.27, Om0=0.5, Ode0=0.5)
+        assert test._cosmo_factor("bl_to_kperp", test.avg_z) != default
 
     def test_verbose(self, ft_beam_spw: uvwindow.FTBeam) -> None:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, verbose=True)
@@ -1126,9 +1143,7 @@ class TestUVWindowGetSphericalWf:
     ) -> None:
         kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens[:1])
         kpara_centre = (
-            uvwindow_obj.cosmo.tau_to_kpara(
-                uvwindow_obj.avg_z, little_h=uvwindow_obj.little_h
-            )
+            uvwindow_obj._cosmo_factor("tau_to_kpara", uvwindow_obj.avg_z)
             * abs(uvwindow_obj.dly_array).max()
         )
         bad_kpara_bins = (
@@ -1600,7 +1615,10 @@ class TestGetWfForTauKnownExamples:
 
     @staticmethod
     def _kpar_norm(uvw: uvwindow.UVWindow, tau: float) -> np.ndarray:
-        alpha = uvw.cosmo.dRpara_df(uvw.avg_z, little_h=uvw.little_h, ghz=False)
+        length_unit = conversions.length_unit_from_little_h(uvw.little_h)
+        alpha = conversions.dRpara_df(uvw.avg_z, uvw.cosmo, length_unit).to_value(
+            length_unit / units.Hz
+        )
         delta_nu = np.median(np.diff(uvw.freq_array))
         eta = np.fft.fftshift(np.fft.fftfreq(uvw.Nfreqs)) / delta_nu
         return np.abs(2.0 * np.pi / alpha * (eta + tau))

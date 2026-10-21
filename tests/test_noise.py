@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -20,40 +21,54 @@ DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
-def sense(
-    beam_nf_pstokes: PSpecBeamUV, cosmo: conversions.Cosmo_Conversions
-) -> noise.Sensitivity:
+def sense(beam_nf_pstokes: PSpecBeamUV, cosmo: FLRW) -> noise.Sensitivity:
     return noise.Sensitivity(beam=beam_nf_pstokes, cosmo=cosmo)
 
 
 class TestSensitivity:
     def test_set_cosmology(self) -> None:
-        """Check that set_cosmology accepts both a Cosmo_Conversions object and its stringified params."""
+        """Check that set_cosmology accepts an astropy cosmology, its params dict and its stringified params."""
         sense = noise.Sensitivity()
-        C = conversions.Cosmo_Conversions()
+        C = conversions.DEFAULT_COSMOLOGY
         sense.set_cosmology(C)
-        assert C.get_params() == sense.cosmo.get_params()
-        params = str(C.get_params())
+        assert sense.cosmo is C
+        params = conversions.params_from_cosmology(C)
+        assert sense.cosmo_params == str(params)
+        sense.set_cosmology(str(params))
+        assert isinstance(sense.cosmo, FLRW)
+        assert sense.cosmo.is_equivalent(C)
         sense.set_cosmology(params)
-        assert C.get_params() == sense.cosmo.get_params()
+        assert sense.cosmo.is_equivalent(C)
+
+    def test_set_cosmology_cosmo_conversions_deprecated(self) -> None:
+        """A Cosmo_Conversions object still works, with a DeprecationWarning."""
+        sense = noise.Sensitivity()
+        with pytest.warns(DeprecationWarning):
+            C = conversions.Cosmo_Conversions(Om_L=0.7, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            sense.set_cosmology(C)
+        assert isinstance(sense.cosmo, FLRW)
+        assert conversions.params_from_cosmology(sense.cosmo) == pytest.approx(
+            C.get_params(), rel=1e-12
+        )
 
     def test_set_beam_with_cosmo(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that set_beam aligns the beam's cosmology with self.cosmo when both are present."""
         sense = noise.Sensitivity()
-        C = conversions.Cosmo_Conversions()
+        C = conversions.DEFAULT_COSMOLOGY
         sense.set_cosmology(C)
 
         beam = copy.deepcopy(beam_nf_pstokes)
         sense.set_beam(beam)
-        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
+        assert sense.cosmo is sense.beam.cosmo
         beam.cosmo = C
         sense.set_beam(beam)
-        assert sense.cosmo.get_params() == sense.beam.cosmo.get_params()
+        assert sense.cosmo is sense.beam.cosmo
 
     def test_set_beam_without_cosmo(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that set_beam attaches self.cosmo to a beam lacking a cosmo attribute, rather than raising."""
         sense = noise.Sensitivity()
-        sense.set_cosmology(conversions.Cosmo_Conversions())
+        sense.set_cosmology(conversions.DEFAULT_COSMOLOGY)
         bm = copy.deepcopy(beam_nf_pstokes)
         delattr(bm, "cosmo")
         sense.set_beam(bm)

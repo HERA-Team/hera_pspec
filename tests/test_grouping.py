@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW
 from hera_cal import redcal
 from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
@@ -54,7 +55,7 @@ def redundant_blpairs(uvd_zen_even_xx: UVData) -> list:
 def uvp_three_red_bls(
     redundant_blpairs: list,
     beam_nf_dipole_wcosmo: PSpecBeamUV,
-    cosmo: conversions.Cosmo_Conversions,
+    cosmo: FLRW,
     uvd_zen_even_xx: UVData,
 ) -> UVPSpec:
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA, first 3 redundant groups."""
@@ -705,7 +706,7 @@ class TestBootstrapRun:
 def uvp_spherical(
     redundant_blpairs: list,
     beam_nf_dipole_wcosmo: PSpecBeamUV,
-    cosmo: conversions.Cosmo_Conversions,
+    cosmo: FLRW,
     uvd_zen_even_xx: UVData,
 ) -> UVPSpec:
     """Two-polarization UVPSpec with identity cov and unit stats for spherical_average tests."""
@@ -811,9 +812,7 @@ class TestSpherical:
         # bug check: cov_array_imag was not updated
         assert sph.cov_array_real[0].shape == sph.cov_array_imag[0].shape
 
-    def test_average_little_h(
-        self, uvp_spherical: UVPSpec, cosmo: conversions.Cosmo_Conversions
-    ) -> None:
+    def test_average_little_h(self, uvp_spherical: UVPSpec, cosmo: FLRW) -> None:
         """Check that little_h=False with scaled kbins gives identical kparas as the default."""
         sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
         sph2 = grouping.spherical_average(

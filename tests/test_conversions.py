@@ -9,10 +9,22 @@ from astropy.cosmology import FlatLambdaCDM, LambdaCDM, wCDM
 from hera_pspec import conversions
 
 
+def _cosmo_conversions(*args, **kwargs) -> conversions.Cosmo_Conversions:
+    """Build the deprecated Cosmo_Conversions, checking that it warns."""
+    with pytest.warns(DeprecationWarning, match="Cosmo_Conversions is deprecated"):
+        return conversions.Cosmo_Conversions(*args, **kwargs)
+
+
+def _from_astropy(cosmo) -> conversions.Cosmo_Conversions:
+    """Cosmo_Conversions.from_astropy, checking that it warns."""
+    with pytest.warns(DeprecationWarning, match="Cosmo_Conversions is deprecated"):
+        return conversions.Cosmo_Conversions.from_astropy(cosmo)
+
+
 @pytest.fixture
 def cosmo_h100() -> conversions.Cosmo_Conversions:
     """Cosmology fixture with H0=100 used as the reference for distance/conversion checks."""
-    return conversions.Cosmo_Conversions(
+    return _cosmo_conversions(
         Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0, Om_M=None, Om_k=None
     )
 
@@ -20,7 +32,7 @@ def cosmo_h100() -> conversions.Cosmo_Conversions:
 @pytest.fixture
 def cosmo_h25() -> conversions.Cosmo_Conversions:
     """Cosmology fixture with H0=25.12, used to check little_h scaling against cosmo_h100."""
-    return conversions.Cosmo_Conversions(
+    return _cosmo_conversions(
         Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=25.12, Om_M=None, Om_k=None
     )
 
@@ -55,14 +67,14 @@ def test_units_match_astropy_constants() -> None:
 
 
 class TestCosmoConversions:
-    def test_init(self, cosmo: conversions.Cosmo_Conversions) -> None:
+    def test_init(self, cosmo_h100: conversions.Cosmo_Conversions) -> None:
         """Check that a default instance exposes expected attributes and that constructor kwargs are applied."""
         # test parameters exist
-        cosmo.Om_b
-        cosmo.H0
+        cosmo_h100.Om_b
+        cosmo_h100.H0
 
         # test parameters get fed to class
-        C = conversions.Cosmo_Conversions(H0=25.5)
+        C = _cosmo_conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
     @pytest.mark.parametrize(
@@ -206,7 +218,7 @@ def _old_quantities(Om_L, Om_M, Om_k, H0, z, little_h):
 
 def _make_cosmo(name):
     Om_L, Om_b, Om_c, H0 = ASTROPY_COSMO_PARAMS[name]
-    return conversions.Cosmo_Conversions(Om_L=Om_L, Om_b=Om_b, Om_c=Om_c, H0=H0)
+    return _cosmo_conversions(Om_L=Om_L, Om_b=Om_b, Om_c=Om_c, H0=H0)
 
 
 class TestAstropyBackend:
@@ -283,7 +295,7 @@ class TestAstropyBackend:
     @pytest.mark.parametrize("z", [0.5, 7.9, 20.0])
     def test_inconsistent_om_k_keeps_old_formulas(self, z) -> None:
         """Check an explicit inconsistent Om_k still works via the fallback."""
-        cosmo = conversions.Cosmo_Conversions(Om_k=0.05)
+        cosmo = _cosmo_conversions(Om_k=0.05)
         assert cosmo.Om_k == 0.05
         expected = _old_quantities(cosmo.Om_L, cosmo.Om_M, 0.05, cosmo.H0, z, True)
         for key, value in expected.items():
@@ -298,7 +310,7 @@ class TestAstropyBackend:
     def test_default_cosmology(self) -> None:
         """Check DEFAULT_COSMOLOGY matches Cosmo_Conversions() defaults."""
         default = conversions.DEFAULT_COSMOLOGY
-        cosmo = conversions.Cosmo_Conversions()
+        cosmo = _cosmo_conversions()
         assert default.Tcmb0.value == 0
         np.testing.assert_allclose(default.Ok0, 0.00207, rtol=1e-10)
         np.testing.assert_allclose(default.H0.value, cosmo.H0, rtol=1e-15)
@@ -323,7 +335,7 @@ class TestAstropyBackend:
         assert isinstance(lcdm, LambdaCDM)
         assert lcdm.Tcmb0.value == 0
         assert lcdm.Ob0 == cosmo.Om_b
-        new = conversions.Cosmo_Conversions.from_astropy(lcdm)
+        new = _from_astropy(lcdm)
         original = cosmo.get_params()
         params = new.get_params()
         assert sorted(params) == sorted(original)
@@ -332,15 +344,13 @@ class TestAstropyBackend:
 
     def test_from_astropy_default(self) -> None:
         """Check DEFAULT_COSMOLOGY converts to Cosmo_Conversions()."""
-        new = conversions.Cosmo_Conversions.from_astropy(conversions.DEFAULT_COSMOLOGY)
-        for key, value in conversions.Cosmo_Conversions().get_params().items():
+        new = _from_astropy(conversions.DEFAULT_COSMOLOGY)
+        for key, value in _cosmo_conversions().get_params().items():
             np.testing.assert_allclose(new.get_params()[key], value, rtol=1e-12)
 
     def test_from_astropy_without_ob0(self) -> None:
         """Check a missing Ob0 is split with the usual baryon fraction."""
-        new = conversions.Cosmo_Conversions.from_astropy(
-            FlatLambdaCDM(H0=70.0, Om0=0.3)
-        )
+        new = _from_astropy(FlatLambdaCDM(H0=70.0, Om0=0.3))
         assert new.Om_M == 0.3
         np.testing.assert_allclose(new.Om_b, 0.3 * 0.156635, rtol=1e-15)
         np.testing.assert_allclose(new.Om_c, 0.3 * 0.843364, rtol=1e-15)
@@ -363,7 +373,7 @@ class TestAstropyBackend:
 
     def test_to_astropy_rejects_large_om_b(self) -> None:
         """Check Om_b > Om_M cannot be converted."""
-        cosmo = conversions.Cosmo_Conversions(Om_M=0.03)
+        cosmo = _cosmo_conversions(Om_M=0.03)
         with pytest.raises(ValueError, match="Om_b"):
             cosmo.to_astropy()
 
@@ -371,7 +381,7 @@ class TestAstropyBackend:
     @pytest.mark.parametrize("method", ["E", "DC", "DM", "DA", "dRpara_df", "X2Y"])
     def test_array_redshifts(self, method, little_h) -> None:
         """Check array z gives the same values as element-wise scalar calls."""
-        cosmo = conversions.Cosmo_Conversions()
+        cosmo = _cosmo_conversions()
         z = np.array(ASTROPY_REDSHIFTS)
         kwargs = {} if method == "E" else {"little_h": little_h}
         result = getattr(cosmo, method)(z, **kwargs)
@@ -388,7 +398,7 @@ class TestAstropyBackend:
         z = conversions.f2z(freqs)
         assert not isinstance(z, u.Quantity)
         np.testing.assert_allclose(
-            z, conversions.Cosmo_Conversions().f2z(freqs.to_value(u.Hz)), rtol=1e-15
+            z, _cosmo_conversions().f2z(freqs.to_value(u.Hz)), rtol=1e-15
         )
         np.testing.assert_allclose(
             conversions.f2z(150e6), conversions.units.f21 / 150e6 - 1, rtol=1e-15
@@ -404,3 +414,83 @@ class TestAstropyBackend:
             [6.0, 8.0],
             rtol=1e-14,
         )
+
+
+class TestAstropyCosmologyObjects:
+    def test_cosmo_conversions_deprecated(self) -> None:
+        """Building Cosmo_Conversions warns and points to astropy.cosmology."""
+        with pytest.warns(DeprecationWarning) as record:
+            conversions.Cosmo_Conversions()
+        message = str(record[0].message)
+        assert "astropy.cosmology" in message
+        assert "DEFAULT_COSMOLOGY" in message
+
+    def test_params_from_default_cosmology(self) -> None:
+        """params_from_cosmology(DEFAULT_COSMOLOGY) is the old default dict."""
+        params = conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+        old = _cosmo_conversions().get_params()
+        assert params == old
+        assert list(params) == list(old)
+        # same string, so files keep the exact v0.x "cosmo" attribute
+        assert str(params) == str(old)
+        assert all(type(value) is float for value in params.values())
+
+    @pytest.mark.parametrize("name", list(ASTROPY_COSMO_PARAMS))
+    def test_params_from_cosmology_matches_get_params(self, name) -> None:
+        """params_from_cosmology agrees with Cosmo_Conversions.get_params."""
+        cosmo = _make_cosmo(name)
+        params = conversions.params_from_cosmology(cosmo.to_astropy())
+        assert list(params) == list(cosmo.get_params())
+        for key, value in cosmo.get_params().items():
+            np.testing.assert_allclose(params[key], value, rtol=1e-12, atol=1e-15)
+
+    def test_params_from_cosmology_without_ob0(self) -> None:
+        """A cosmology without Ob0 uses the fixed baryon split."""
+        params = conversions.params_from_cosmology(FlatLambdaCDM(H0=70.0, Om0=0.3))
+        assert params["Om_M"] == 0.3
+        assert params["Om_b"] == 0.3 * 0.156635
+        assert params["Om_c"] == 0.3 * 0.843364
+        assert params["H0"] == 70.0
+        np.testing.assert_allclose(params["Om_k"], 0.0, atol=1e-15)
+        assert params == _from_astropy(FlatLambdaCDM(H0=70.0, Om0=0.3)).get_params()
+
+    def test_as_astropy_cosmology_flrw(self) -> None:
+        """An astropy cosmology is returned as is."""
+        cosmo = wCDM(H0=67.27, Om0=0.31353, Ode0=0.6844, w0=-0.9)
+        assert conversions.as_astropy_cosmology(cosmo) is cosmo
+        default = conversions.DEFAULT_COSMOLOGY
+        assert conversions.as_astropy_cosmology(default) is default
+
+    def test_as_astropy_cosmology_dict(self) -> None:
+        """A parameter dict gives one shared, equivalent astropy object."""
+        params = conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+        first = conversions.as_astropy_cosmology(params)
+        second = conversions.as_astropy_cosmology(dict(params))
+        assert isinstance(first, LambdaCDM)
+        assert first is second
+        assert first.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+
+    def test_as_astropy_cosmology_cosmo_conversions(self) -> None:
+        """A Cosmo_Conversions is converted with a DeprecationWarning."""
+        old = _cosmo_conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            cosmo = conversions.as_astropy_cosmology(old)
+        assert isinstance(cosmo, LambdaCDM)
+        assert cosmo.is_equivalent(old.to_astropy())
+
+    def test_as_astropy_cosmology_inconsistent_om_k(self) -> None:
+        """A Cosmo_Conversions astropy cannot represent raises ValueError."""
+        old = _cosmo_conversions(Om_k=0.05)
+        with pytest.warns(DeprecationWarning), pytest.raises(ValueError, match="Om_k"):
+            conversions.as_astropy_cosmology(old)
+
+    @pytest.mark.parametrize("value", [[0.7, 0.05], "Planck18", 1.0])
+    def test_as_astropy_cosmology_rejects_other_types(self, value) -> None:
+        """Other types raise TypeError."""
+        with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
+            conversions.as_astropy_cosmology(value)
+
+    def test_length_unit_from_little_h(self) -> None:
+        """little_h maps to Mpc / littleh, otherwise Mpc."""
+        assert conversions.length_unit_from_little_h(True) == u.Mpc / cu.littleh
+        assert conversions.length_unit_from_little_h(False) == u.Mpc

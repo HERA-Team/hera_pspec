@@ -6,8 +6,9 @@ from collections.abc import MutableMapping
 
 import numpy as np
 from astropy import stats as astats
+from astropy import units
 
-from . import __version__, utils
+from . import __version__, conversions, utils
 from . import uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
 
@@ -940,8 +941,11 @@ def spherical_average(
         kparas_per_freq = uvp.get_kparas(spw, little_h=True, dlys=all_dlys)
 
         # get k to tau mapping for this spw
-        avgz = uvp.cosmo.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
-        t2k = uvp.cosmo.tau_to_kpara(avgz, little_h=True)
+        avgz = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
+        length_unit = conversions.length_unit_from_little_h(True)
+        t2k = conversions.tau_to_kpara(avgz, uvp.cosmo, length_unit).to_value(
+            1 / length_unit / units.s
+        )
         taus = kbins / t2k
         dlys_array.extend(taus)
 
@@ -1356,17 +1360,22 @@ def spherical_wf_from_uvp(
     # initialize blank arrays and dicts
     window_function_array = {}
 
+    length_unit = conversions.length_unit_from_little_h(little_h)
+    kperp_unit = 1 / length_unit / units.m
+    kpara_unit = 1 / length_unit / units.s
+
     # iterate over spectral windows
     for spw in spw_array:
         avg_nu = (uvp.get_spw_ranges(spw)[0][1] + uvp.get_spw_ranges(spw)[0][0]) / 2
+        avg_z = conversions.f2z(avg_nu)
 
         # construct array giving the k probed by each baseline-tau pair
         kperps = (
-            uvp.cosmo.bl_to_kperp(uvp.cosmo.f2z(avg_nu), little_h=little_h)
+            conversions.bl_to_kperp(avg_z, uvp.cosmo, length_unit).to_value(kperp_unit)
             * blpair_lens
         )
-        kparas = uvp.cosmo.tau_to_kpara(
-            uvp.cosmo.f2z(avg_nu), little_h=little_h
+        kparas = conversions.tau_to_kpara(avg_z, uvp.cosmo, length_unit).to_value(
+            kpara_unit
         ) * uvp.get_dlys(spw)
         kmags = np.sqrt(kperps[:, None] ** 2 + kparas**2)
 
