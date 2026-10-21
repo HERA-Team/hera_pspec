@@ -4353,7 +4353,7 @@ class PSpecData:
                                 np.isclose(Y, y).all()
                                 for y in self._identity_Y.values()
                             ]
-                            if True in matches:
+                            if any(matches):
                                 match = list(self._identity_Y.keys())[
                                     matches.index(True)
                                 ]
@@ -4391,7 +4391,7 @@ class PSpecData:
                         matches = [
                             np.isclose(Y, y).all() for y in self._identity_Y.values()
                         ]
-                        if True in matches:
+                        if any(matches):
                             # This Y exists, so pick appropriate G and H and continue
                             match = list(self._identity_Y.keys())[matches.index(True)]
                             Gv = self._identity_G[match]
