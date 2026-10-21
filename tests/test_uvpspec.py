@@ -984,8 +984,6 @@ EXPECTED_PARAM_UNITS = {
     "beam_freqs": units.Hz,
     "OmegaP": units.sr,
     "OmegaPP": units.sr,
-    "window_function_kperp": cu.littleh / units.Mpc,
-    "window_function_kpara": cu.littleh / units.Mpc,
 }
 
 # Parameters whose description contains a bracketed phrase that is not the
@@ -1062,9 +1060,64 @@ class TestParamUnits:
             mutable_uvp.check()
 
     def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        # the window k grids of an "Hz sr" object are in 1 / Mpc
+        assert mutable_uvp.window_k_unit() == units.Mpc ** (-1)
         mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
+        mutable_uvp.check()
+        mutable_uvp.window_function_kperp = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
         with pytest.raises(ValueError, match="window_function_kperp has unit"):
             mutable_uvp.check()
+
+    def test_check_window_k_follows_norm_units(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.norm_units = "Mpc3 / littleh3"
+        mutable_uvp.window_function_kpara = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        mutable_uvp.check()
+        mutable_uvp.window_function_kpara = {0: np.ones((2, 2)) / units.Mpc}
+        with pytest.raises(ValueError, match="window_function_kpara has unit"):
+            mutable_uvp.check()
+
+
+class TestWindowKUnit:
+    @pytest.mark.parametrize(
+        ("norm_units", "k_unit", "default_length"),
+        [
+            ("Mpc3 / littleh3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("h^-3 Mpc^3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("Mpc3", units.Mpc ** (-1), units.Mpc),
+            ("Mpc^3", units.Mpc ** (-1), units.Mpc),
+            # documented difference for unnormalised spectra
+            ("Hz sr", units.Mpc ** (-1), units.Mpc / cu.littleh),
+        ],
+    )
+    def test_window_k_unit(
+        self, mutable_uvp: uvpspec.UVPSpec, norm_units: str, k_unit, default_length
+    ) -> None:
+        mutable_uvp.norm_units = norm_units
+        assert mutable_uvp.window_k_unit() == k_unit
+        assert mutable_uvp._default_length_unit() == default_length
+
+    def test_kgrid_without_exact_windows_raises(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(ValueError, match="no exact window functions"):
+            vanilla_uvp.get_window_function_kgrid(0)
+
+    def test_kgrid(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        uvp = uvp_exact_wfs
+        # an "Hz sr" object: its window functions are on a 1 / Mpc grid
+        assert uvp.window_k_unit() == units.Mpc ** (-1)
+        for spw in uvp.spw_array:
+            kperp, kpara = uvp.get_window_function_kgrid(spw)
+            assert kperp.unit == uvp.window_k_unit()
+            assert kpara.unit == uvp.window_k_unit()
+            np.testing.assert_array_equal(kperp.value, uvp.window_function_kperp[spw])
+            np.testing.assert_array_equal(kpara.value, uvp.window_function_kpara[spw])
 
 
 class TestTimeArrays:

@@ -32,6 +32,9 @@ _COSMO_ATTR_TOL = 1e-12
 
 # Default cosmological length unit (h^-1 Mpc).
 _LITTLEH_LENGTH = units.Mpc / cu.littleh
+# k units of the exact window function grids (see UVPSpec.window_k_unit)
+_LITTLEH_K_UNIT = cu.littleh / units.Mpc
+_MPC_K_UNIT = units.Mpc ** (-1)
 
 
 @functools.lru_cache(maxsize=32)
@@ -273,21 +276,29 @@ class UVPSpec:
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
         )
-        desc = "Dictionary of bandpowers given the kperp grid used to compute the window functions [h Mpc^-1]."
+        # The unit of the exact window function k grids depends on norm_units,
+        # so it is not declared on the parameter: see window_k_unit()
+        desc = (
+            "Dictionary of bandpowers given the kperp grid used to compute the "
+            "window functions, in the unit given by window_k_unit() "
+            "(littleh / Mpc or 1 / Mpc)."
+        )
         self._window_function_kperp = PSpecParam(
             "window_function_kperp",
             description=desc,
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
-            unit=cu.littleh / units.Mpc,
         )
-        desc = "Dictionary of bandpowers given the kparallel grid used to compute the window functions [h Mpc^-1]."
+        desc = (
+            "Dictionary of bandpowers given the kparallel grid used to compute "
+            "the window functions, in the unit given by window_k_unit() "
+            "(littleh / Mpc or 1 / Mpc)."
+        )
         self._window_function_kpara = PSpecParam(
             "window_function_kpara",
             description=desc,
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
-            unit=cu.littleh / units.Mpc,
         )
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam(
@@ -1235,6 +1246,64 @@ class UVPSpec:
         ):
             return _LITTLEH_LENGTH
         return units.Mpc
+
+    def window_k_unit(self):
+        """
+        Unit of the k grids of the exact window functions.
+
+        ``cu.littleh / u.Mpc`` if ``norm_units`` (the P(k) normalisation)
+        contains littleh, else ``1 / u.Mpc``. This is the unit
+        :meth:`get_exact_window_functions` (through
+        ``UVWindow.from_uvpspec``) computes ``window_function_kperp`` and
+        ``window_function_kpara`` in, and the unit
+        ``grouping.spherical_wf_from_uvp`` bins them in.
+
+        For spectra that were not cosmologically normalised (``Hz sr``) this
+        is 1 / Mpc, whereas :meth:`_default_length_unit` (used by
+        :meth:`get_kperps` and :meth:`get_kparas`) gives littleh / Mpc. Both
+        are the conventions of hera_pspec v0.x, kept so that stored window
+        functions and k values do not change.
+
+        Returns
+        -------
+        astropy.units.UnitBase
+        """
+        if uvputils.is_littleh(self.norm_units):
+            return _LITTLEH_K_UNIT
+        return _MPC_K_UNIT
+
+    def get_window_function_kgrid(self, spw):
+        """
+        Return the k grids of the exact window functions of a spectral window.
+
+        Parameters
+        ----------
+        spw : int
+            Spectral window index.
+
+        Returns
+        -------
+        kperp, kpara : astropy.units.Quantity
+            ``window_function_kperp[spw]`` and ``window_function_kpara[spw]``
+            (shape ``(Nk, Npols)``) in :meth:`window_k_unit`.
+
+        Raises
+        ------
+        ValueError
+            If the object has no exact window functions.
+        """
+        if not getattr(self, "exact_windows", False) or not hasattr(
+            self, "window_function_kperp"
+        ):
+            raise ValueError(
+                "This object has no exact window functions; compute them with "
+                "get_exact_window_functions."
+            )
+        k_unit = self.window_k_unit()
+        return (
+            _value_in_unit(self.window_function_kperp[spw], k_unit) << k_unit,
+            _value_in_unit(self.window_function_kpara[spw], k_unit) << k_unit,
+        )
 
     def _resolve_length_unit(self, length_unit, little_h):
         """
@@ -2458,8 +2527,9 @@ class UVPSpec:
         such as ``data_spw0``. Parameters with a declared unit (see
         :meth:`get_param_unit`) are stored as plain values in that unit, with
         the unit string in a ``unit`` attribute on datasets (including
-        ``integration_spw*`` and ``window_function_kperp/kpara_spw*``) or a
-        ``<name>_unit`` attribute next to group attributes. Quantity values
+        ``integration_spw*``) or a ``<name>_unit`` attribute next to group
+        attributes. ``window_function_kperp/kpara_spw*`` are stored in, and
+        carry the ``unit`` attribute of, :meth:`window_k_unit`. Quantity values
         are converted to the declared unit first. The cosmology is stored
         twice: ``cosmo`` holds the ``str()`` of the parameter dict
         (``conversions.params_from_cosmology``), as in v0.x (which can still
@@ -2533,8 +2603,9 @@ class UVPSpec:
         data_unit = uvputils.unit_to_string(pspec_unit)
         cov_unit = uvputils.unit_to_string(pspec_unit**2)
         window_unit = uvputils.unit_to_string(units.dimensionless_unscaled)
-        kperp_unit = self._window_function_kperp.unit
-        kpara_unit = self._window_function_kpara.unit
+        if getattr(self, "exact_windows", False):
+            window_k_unit = self.window_k_unit()
+            window_k_unit_string = uvputils.unit_to_string(window_k_unit)
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
@@ -2566,16 +2637,20 @@ class UVPSpec:
                 if self.exact_windows:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
-                        data=_value_in_unit(self.window_function_kperp[i], kperp_unit),
+                        data=_value_in_unit(
+                            self.window_function_kperp[i], window_k_unit
+                        ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = uvputils.unit_to_string(kperp_unit)
+                    dset.attrs["unit"] = window_k_unit_string
                     dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
-                        data=_value_in_unit(self.window_function_kpara[i], kpara_unit),
+                        data=_value_in_unit(
+                            self.window_function_kpara[i], window_k_unit
+                        ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = uvputils.unit_to_string(kpara_unit)
+                    dset.attrs["unit"] = window_k_unit_string
             if hasattr(self, "cov_array_real"):
                 dset = group.create_dataset(
                     f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
@@ -2920,12 +2995,16 @@ class UVPSpec:
                 # Quantity subclasses ndarray, so check its unit before the
                 # type checks below would accept it
                 value = getattr(self, p)
+                declared_unit = a.unit
+                if p in ("window_function_kperp", "window_function_kpara"):
+                    # unit set by norm_units rather than declared
+                    declared_unit = self.window_k_unit()
                 if isinstance(value, units.Quantity):
-                    self._check_quantity_unit(p, value, a.unit)
+                    self._check_quantity_unit(p, value, declared_unit)
                 elif p in self._dicts and isinstance(value, dict):
                     for item in value.values():
                         if isinstance(item, units.Quantity):
-                            self._check_quantity_unit(p, item, a.unit)
+                            self._check_quantity_unit(p, item, declared_unit)
                 if hasattr(a, "expected_type"):
                     err_msg = f"attribute {p} does not have expected data type {a.expected_type}"
 

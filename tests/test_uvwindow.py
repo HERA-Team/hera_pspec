@@ -666,6 +666,31 @@ class TestUVWindowFromUvpspec:
             uvp, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
         )
 
+    @pytest.mark.parametrize(
+        ("norm_units", "kunits"),
+        [
+            ("Mpc3 / littleh3", cu.littleh / units.Mpc),
+            ("Mpc3", units.Mpc ** (-1)),
+            # not cosmologically normalised: 1 / Mpc, unlike get_kparas'
+            # default (littleh), see UVPSpec.window_k_unit
+            ("Hz sr", units.Mpc ** (-1)),
+        ],
+    )
+    def test_kunits_follow_norm_units(
+        self,
+        uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec],
+        norm_units: str,
+        kunits,
+    ) -> None:
+        uvp = copy.deepcopy(uvp_for_uvwindow[0])
+        uvp.norm_units = norm_units
+        assert uvp.window_k_unit() == kunits
+        uvw = uvwindow.UVWindow.from_uvpspec(
+            uvp, ipol=0, spw=0, ftbeam=DATA_PATH / basename
+        )
+        assert uvw.kunits == kunits
+        assert uvw.get_kpara_bins(uvw.freq_array).unit == kunits
+
     def test_crosspol(self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]) -> None:
         _, _, uvp_crosspol = uvp_for_uvwindow
         _ = uvwindow.UVWindow.from_uvpspec(

@@ -1180,8 +1180,11 @@ def _select(
                 statnames = []
 
         # version 2 files store units on the per-spw datasets of parameters
-        # with a declared unit; older files have none
+        # with a declared unit, and on the exact window function k grids
+        # (in uvp.window_k_unit()); older files have none
         read_units = h5file is not None and "uvpspec_version" in h5file.attrs
+        if read_units and exact_windows:
+            window_k_unit = uvp.window_k_unit()
 
         # iterate over spws
         if spw_mapping is None:
@@ -1304,13 +1307,13 @@ def _select(
                     window_function_kperp[s] = convert_from_stored_unit(
                         window_function_kperp[s],
                         _window_function_kperp.attrs.get("unit", None),
-                        uvp.get_param_unit("window_function_kperp"),
+                        window_k_unit,
                         "window_function_kperp",
                     )
                     window_function_kpara[s] = convert_from_stored_unit(
                         window_function_kpara[s],
                         _window_function_kpara.attrs.get("unit", None),
-                        uvp.get_param_unit("window_function_kpara"),
+                        window_k_unit,
                         "window_function_kpara",
                     )
 

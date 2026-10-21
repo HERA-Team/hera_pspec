@@ -113,10 +113,48 @@ class TestWriteVersion2:
         self, uvp_windows: UVPSpec, tmp_path: Path
     ) -> None:
         path = _write(uvp_windows, tmp_path / "uvp.h5")
+        assert uvp_windows.window_k_unit() == cu.littleh / units.Mpc
         with h5py.File(path, "r") as f:
             for name in ("window_function_kperp_spw0", "window_function_kpara_spw0"):
                 assert f[name].attrs["unit"] == "littleh / Mpc"
         assert _read(path) == uvp_windows
+
+    def test_window_function_k_units_inverse_mpc(
+        self, uvp_exact_wfs: UVPSpec, tmp_path: Path
+    ) -> None:
+        # an "Hz sr" object: the window functions are on a 1 / Mpc grid
+        uvp = uvp_exact_wfs
+        assert uvp.window_k_unit() == units.Mpc ** (-1)
+        path = _write(uvp, tmp_path / "uvp.h5")
+        with h5py.File(path, "r") as f:
+            for spw in uvp.spw_array:
+                for name in ("kperp", "kpara"):
+                    dset = f[f"window_function_{name}_spw{spw}"]
+                    assert dset.attrs["unit"] == "1 / Mpc"
+                    np.testing.assert_array_equal(
+                        dset[()], getattr(uvp, f"window_function_{name}")[spw]
+                    )
+        new = _read(path)
+        assert new == uvp
+        for spw in uvp.spw_array:
+            for got, expected in zip(
+                new.get_window_function_kgrid(spw),
+                uvp.get_window_function_kgrid(spw),
+                strict=True,
+            ):
+                assert got.unit == expected.unit
+                np.testing.assert_array_equal(got.value, expected.value)
+
+    def test_window_k_unit_with_littleh_on_inverse_mpc_raises(
+        self, uvp_exact_wfs: UVPSpec, tmp_path: Path
+    ) -> None:
+        def edit(f):
+            f["window_function_kpara_spw0"].attrs["unit"] = "littleh / Mpc"
+
+        src = _write(uvp_exact_wfs, tmp_path / "windows.h5")
+        path = _edited_copy(src, tmp_path / "bad.h5", edit)
+        with pytest.raises(ValueError, match="window_function_kpara"):
+            _read(path)
 
     def test_cosmo_attrs(self, vanilla_uvp: UVPSpec, tmp_path: Path) -> None:
         path = _write(vanilla_uvp, tmp_path / "uvp.h5")

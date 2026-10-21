@@ -1410,12 +1410,9 @@ def spherical_wf_from_uvp(
     # input checks
     _require_uvpspec(uvp_in, "uvp_in")
 
-    # the window functions were computed on a k grid in littleh / Mpc if
-    # norm_units contain littleh, else in 1 / Mpc: bin the k values in that unit
-    length_unit = conversions.length_unit_from_little_h(
-        uvputils.is_littleh(uvp_in.norm_units)
-    )
-    k_unit = 1 / length_unit
+    # bin the k values in the unit of the stored window function k grids
+    k_unit = uvp_in.window_k_unit()
+    length_unit = 1 / k_unit
     k_equivalencies = _k_equivalencies(uvp_in)
     _check_k_bin_inputs(
         {"kbin_edges": kbin_edges, "kbin_edges_theory": kbin_edges_theory},

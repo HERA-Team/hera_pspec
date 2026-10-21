@@ -914,8 +914,8 @@ class UVWindow:
         else:
             cosmo = uvp.cosmo
 
-        # units: the k grid of the window functions stored on uvp
-        kunits = _LITTLEH_KUNITS if uvputils.is_littleh(uvp.norm_units) else _MPC_KUNITS
+        # units: the k unit of the window functions stored on uvp
+        kunits = uvp.window_k_unit()
 
         # spectral window
         if spw >= uvp.Nspws:
