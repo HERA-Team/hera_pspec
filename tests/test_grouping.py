@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy import units as u
 from astropy.cosmology import FLRW
 from hera_cal import redcal
 from pytest_cases import parametrize_with_cases
@@ -577,7 +578,7 @@ class TestBootstrapResampledError:
             norm="I",
             taper="none",
             sampling=False,
-            little_h=False,
+            length_unit=u.Mpc,
             spw_ranges=[(0, 50)],
             verbose=False,
         )

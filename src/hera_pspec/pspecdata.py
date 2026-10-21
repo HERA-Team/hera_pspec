@@ -8,7 +8,6 @@ import time
 import warnings
 from functools import lru_cache
 
-import astropy.cosmology.units as cu
 import hera_cal as hc
 import numpy as np
 import uvtools.dspec as dspec
@@ -21,6 +20,20 @@ from . import __version__, container, conversions, pspecbeam, utils, uvpspec
 from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_length_unit(length_unit, little_h):
+    """
+    Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
+
+    Strings are parsed with :func:`uvpspec_utils.parse_unit_string` (so
+    ``"Mpc / littleh"`` works); the rest is
+    :func:`conversions.resolve_length_unit`, whose deprecation warning points
+    at the caller of the public method that called this helper.
+    """
+    if isinstance(length_unit, (str, bytes)):
+        length_unit = uvputils.parse_unit_string(length_unit)
+    return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
 
 class PSpecData:
@@ -2943,7 +2956,7 @@ class PSpecData:
                             bl_inds[flag_ints], self.spw_range[0] : self.spw_range[1], i
                         ] = True
 
-    def units(self, little_h=True):
+    def units(self, little_h=None, length_unit=None):
         r"""
         Return the units of the power spectrum. These are inferred from the
         units reported by the input visibilities (UVData objects).
@@ -2951,8 +2964,15 @@ class PSpecData:
         Parameters
         ----------
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+                Deprecated, use ``length_unit``. ``little_h=True`` is
+                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
+
+        length_unit : astropy.units.Unit or str, optional
+                Cosmological length unit, e.g. ``u.Mpc / cu.littleh``
+                (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"``
+                are accepted. Default: None, which means
+                ``u.Mpc / cu.littleh``.
 
         Returns
         -------
@@ -2962,16 +2982,21 @@ class PSpecData:
             e.g. ``"mK"``, ``"Jy"``, ``"K sr"`` or ``"uncalib"``.
         norm_units : str
             Unit of the power spectrum normalisation, as a canonical astropy
-            unit string: ``"Mpc3 / littleh3"`` (``little_h=True``) or
-            ``"Mpc3"`` when a beam is set, else ``"Hz sr"`` (no beam
-            normalisation is applied). The power spectrum returned by
-            pspec() is in ``vis_units**2 * norm_units``.
+            unit string: ``length_unit**3`` when a beam is set (e.g.
+            ``"Mpc3 / littleh3"`` by default or ``"Mpc3"`` for
+            ``length_unit=u.Mpc``), else ``"Hz sr"`` (no beam normalisation
+            is applied). The power spectrum returned by pspec() is in
+            ``vis_units**2 * norm_units``.
 
         Raises
         ------
         ValueError
-            If the visibility unit of the first dataset is not understood.
+            If the visibility unit of the first dataset is not understood, if
+            ``length_unit`` is not a length, or if ``little_h`` and
+            ``length_unit`` disagree.
         """
+        length_unit = _resolve_length_unit(length_unit, little_h)
+
         # Work out the power spectrum units
         if len(self.dsets) == 0:
             raise IndexError(
@@ -2985,10 +3010,8 @@ class PSpecData:
         # set pspec norm units
         if self.primary_beam is None:
             norm_unit = units.Hz * units.sr
-        elif little_h:
-            norm_unit = (units.Mpc / cu.littleh) ** 3
         else:
-            norm_unit = units.Mpc**3
+            norm_unit = length_unit**3
         norm_units = uvputils.unit_to_string(norm_unit)
 
         return vis_units, norm_units
@@ -3021,11 +3044,12 @@ class PSpecData:
     def scalar(
         self,
         polpair,
-        little_h=True,
+        little_h=None,
         num_steps=2000,
         beam=None,
         taper_override="no_override",
         exact_norm=False,
+        length_unit=None,
     ):
         r"""
         Computes the scalar function to convert a power spectrum estimate
@@ -3046,8 +3070,9 @@ class PSpecData:
                 itself, e.g. 'XX' implies ('XX', 'XX').
 
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+                Deprecated, use ``length_unit``. ``little_h=True`` is
+                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
 
         num_steps : int, optional
                 Number of steps to use when interpolating primary beams for
@@ -3068,12 +3093,29 @@ class PSpecData:
                 spectral terms are taken into account while constructing
                 power spectrum.
 
+        length_unit : astropy.units.Unit or str, optional
+                Cosmological length unit, e.g. ``u.Mpc / cu.littleh``
+                (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"``
+                are accepted. Default: None, which means
+                ``u.Mpc / cu.littleh``.
+
         Returns
         -------
-        scalar: float
+        scalar: astropy.units.Quantity
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-                in h^-3 Mpc^3 or Mpc^3.
+                in ``length_unit**3 / (u.Hz * u.sr)``: the factor taking a
+                power spectrum in vis^2 Hz sr to vis^2 ``length_unit**3``.
+                Before v1.0 this was a float;
+                ``.to_value(length_unit**3 / (u.Hz * u.sr))`` gives it.
+
+        Raises
+        ------
+        ValueError
+            If ``length_unit`` is not a length, or if ``little_h`` and
+            ``length_unit`` disagree.
         """
+        length_unit = _resolve_length_unit(length_unit, little_h)
+
         # make sure polarizations are the same
         if isinstance(polpair, (int, np.integer)):
             polpair = uvputils.polpair_int2tuple(polpair)
@@ -3105,7 +3147,7 @@ class PSpecData:
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                length_unit=conversions.length_unit_from_little_h(little_h),
+                length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )
@@ -3116,11 +3158,11 @@ class PSpecData:
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                length_unit=conversions.length_unit_from_little_h(little_h),
+                length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )
-        return scalar
+        return scalar * (length_unit**3 / (units.Hz * units.sr))
 
     def scalar_delay_adjustment(
         self, key1=None, key2=None, sampling=False, Gv=None, Hv=None
@@ -3292,7 +3334,7 @@ class PSpecData:
         norm="I",
         taper="none",
         sampling=False,
-        little_h=True,
+        little_h=None,
         spw_ranges=None,
         symmetric_taper=True,
         baseline_tol=1.0,
@@ -3310,6 +3352,7 @@ class PSpecData:
         cov_model="empirical",
         known_cov=None,
         allow_fft=False,
+        length_unit=None,
     ):
         r"""
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -3378,8 +3421,10 @@ class PSpecData:
             or are integrated bandpowers over delay bins. Default: False
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. ``little_h=True`` is
+            ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+            ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``; raises
+            ValueError if it disagrees with ``length_unit``.
 
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total
@@ -3507,6 +3552,14 @@ class PSpecData:
             Use an fft to compute q-hat.
             Default is False.
 
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit of the output, e.g. ``u.Mpc / cu.littleh``
+            (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"`` are
+            accepted. With a beam, the power spectra are normalised in
+            ``length_unit**3`` (``uvp.norm_units``) and ``uvp.scalar_array``
+            is in ``length_unit**3 / (Hz sr)``. Default: None, which means
+            ``u.Mpc / cu.littleh``.
+
         Returns
         -------
         uvp : UVPSpec object
@@ -3552,6 +3605,10 @@ class PSpecData:
 
         """
         # set taper and data weighting
+        length_unit = _resolve_length_unit(length_unit, little_h)
+        # unit of self.scalar(); stripped once per spw/pol below
+        scalar_unit = length_unit**3 / (units.Hz * units.sr)
+
         self.set_taper(taper)
         self.set_symmetric_taper(symmetric_taper)
         self.set_weighting(input_data_weight)
@@ -3784,14 +3841,14 @@ class PSpecData:
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
-                            little_h=little_h,
                             taper_override="none",
                             exact_norm=exact_norm,
-                        )
+                            length_unit=length_unit,
+                        ).to_value(scalar_unit)
                     else:
                         scalar = self.scalar(
-                            p, little_h=little_h, exact_norm=exact_norm
-                        )
+                            p, exact_norm=exact_norm, length_unit=length_unit
+                        ).to_value(scalar_unit)
                 else:
                     raise_warning(
                         "Warning: self.primary_beam is not defined, "
@@ -4201,7 +4258,7 @@ class PSpecData:
         )  # all dsets validated to agree
         uvp.exact_windows = False
         uvp.weighting = input_data_weight
-        uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
+        uvp.vis_units, uvp.norm_units = self.units(length_unit=length_unit)
         # SGM: I've kept the same API in hera_pspec for now, but we should
         # probably move to having a `.telescope` attribute on the UVP.
         uvp.telescope_location = np.array(
@@ -4566,6 +4623,7 @@ def pspec_run(
     include_crosscorrs=True,
     xant_flag_thresh=0.95,
     allow_fft=False,
+    length_unit=None,
 ):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -4852,6 +4910,12 @@ def pspec_run(
         Use an fft to compute q-hat.
         Default is False.
 
+    length_unit : str or astropy.units.Unit, optional
+        Cosmological length unit of the power spectra: "Mpc / littleh"
+        (h^-1 Mpc) or "Mpc". The power spectra are normalised in
+        length_unit^3 and their k values are in 1 / length_unit. See
+        PSpecData.pspec(). Default: None, which means "Mpc / littleh".
+
     Returns
     -------
     ds : PSpecData object
@@ -4867,6 +4931,9 @@ def pspec_run(
     assert isinstance(dsets, (list, tuple, np.ndarray)), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
     )
+
+    # validate length_unit before any data is read
+    length_unit = _resolve_length_unit(length_unit, None)
 
     # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
     accepted_cosmo_types = (FLRW,)
@@ -5196,6 +5263,7 @@ def pspec_run(
             store_window=store_window,
             exact_windows=exact_windows,
             ftbeam=ftbeam,
+            length_unit=length_unit,
         )
 
         # Store output

@@ -6,9 +6,11 @@ import warnings
 from contextlib import nullcontext
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import numpy as np
 import pytest
 import pyuvdata as uv
+from astropy import units as u
 from astropy.cosmology import FLRW, LambdaCDM
 from astropy.time import Time
 from hera_cal import redcal
@@ -29,6 +31,7 @@ from hera_pspec import (
     utils,
     uvwindow,
 )
+from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
 
@@ -1428,6 +1431,7 @@ class TestScalar:
         scalar = ds.scalar(("xx", "xx"))
         scalar_xx = ds.scalar("xx")  # Can use single pol string as shorthand
         assert scalar == scalar_xx
+        assert scalar.unit == (u.Mpc / cu.littleh) ** 3 / (u.Hz * u.sr)
         scalar = ds.scalar(1515)  # polpair-integer = ('xx', 'xx')
         scalar = ds.scalar(("xx", "xx"), taper_override="none")
         scalar = ds.scalar(("xx", "xx"), beam=gauss)
@@ -1439,6 +1443,49 @@ class TestScalar:
         # FIXME: Uncomment when pyuvdata support for this is ready
         # scalar = ds.scalar()
         # np.testing.assert_almost_equal(scalar, 3732415176.85 / 10.**9)
+
+    @pytest.mark.parametrize(
+        "length_unit", [u.Mpc / cu.littleh, u.Mpc, "Mpc / littleh", "Mpc"]
+    )
+    def test_scalar_quantity_matches_beam_scalar(
+        self, d, beam_nf_dipole, length_unit
+    ) -> None:
+        """scalar() is the beam's float scalar with unit length_unit^3 / (Hz sr)."""
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+        freqs = ds.freqs[ds.spw_range[0] : ds.spw_range[1]]
+        unit = (
+            uvputils.parse_unit_string(length_unit)
+            if isinstance(length_unit, str)
+            else length_unit
+        )
+        expected = beam_nf_dipole.compute_pspec_scalar(
+            freqs[0],
+            freqs[0] + np.median(np.diff(freqs)) * len(freqs),
+            len(freqs),
+            pol="xx",
+            taper=ds.taper,
+            length_unit=unit,
+            num_steps=2000,
+        )
+        scalar = ds.scalar("xx", length_unit=length_unit)
+        assert isinstance(scalar, u.Quantity)
+        assert scalar.unit == unit**3 / (u.Hz * u.sr)
+        assert scalar.value == expected
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_scalar_little_h_deprecated(self, d, beam_nf_dipole, little_h) -> None:
+        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+        length_unit = u.Mpc / cu.littleh if little_h else u.Mpc
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            old = ds.scalar("xx", little_h=little_h)
+        new = ds.scalar("xx", length_unit=length_unit)
+        assert old.unit == new.unit == length_unit**3 / (u.Hz * u.sr)
+        assert old.value == new.value
+        with (
+            pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
+            pytest.raises(ValueError, match="disagrees with length_unit"),
+        ):
+            ds.scalar("xx", little_h=not little_h, length_unit=length_unit)
 
 
 @pytest.fixture
@@ -1663,17 +1710,44 @@ def test_units(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
         ds.units()
     ds.add(uvd, None)
     # test basic execution
-    vis_u, norm_u = ds.units(little_h=False)
+    vis_u, norm_u = ds.units(length_unit=u.Mpc)
     assert norm_u == "Hz sr"
     vis_u, norm_u = ds.units()
     assert vis_u == "uncalib"
     assert norm_u == "Hz sr"
     ds_b = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
-    vis_u, norm_u = ds_b.units(little_h=False)
+    vis_u, norm_u = ds_b.units(length_unit=u.Mpc)
     assert vis_u == "uncalib"
     assert norm_u == "Mpc3"
     vis_u, norm_u = ds_b.units()
     assert norm_u == "Mpc3 / littleh3"
+    assert ds_b.units(length_unit="Mpc / littleh")[1] == "Mpc3 / littleh3"
+    assert ds_b.units(length_unit="Mpc")[1] == "Mpc3"
+
+
+@pytest.mark.parametrize(
+    "little_h,expected", [(True, "Mpc3 / littleh3"), (False, "Mpc3")]
+)
+def test_units_little_h_deprecated(
+    beam_nf_dipole: PSpecBeamUV, uvd: UVData, little_h: bool, expected: str
+) -> None:
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
+    with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+        _, norm_u = ds.units(little_h=little_h)
+    assert norm_u == expected
+
+
+def test_units_bad_length_unit(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
+    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
+    with pytest.raises(ValueError, match="length_unit must be a length"):
+        ds.units(length_unit=u.s)
+    with pytest.raises(ValueError):
+        ds.units(length_unit="not a unit")
+    with (
+        pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
+        pytest.raises(ValueError, match="disagrees with length_unit"),
+    ):
+        ds.units(little_h=True, length_unit=u.Mpc)
 
 
 def test_delays(uvd: UVData) -> None:
@@ -2096,6 +2170,23 @@ class TestGetAnalyticCovariance:
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
 
+def _assert_same_pspec(uvp1: UVPSpec, uvp2: UVPSpec) -> None:
+    """Assert two UVPSpecs carry identical power spectra, scalars and units."""
+    assert uvp1.norm_units == uvp2.norm_units
+    assert uvp1.vis_units == uvp2.vis_units
+    np.testing.assert_array_equal(uvp1.scalar_array, uvp2.scalar_array)
+    np.testing.assert_array_equal(uvp1.dly_array, uvp2.dly_array)
+    for spw in uvp1.spw_array:
+        np.testing.assert_array_equal(uvp1.data_array[spw], uvp2.data_array[spw])
+        np.testing.assert_array_equal(uvp1.wgt_array[spw], uvp2.wgt_array[spw])
+        np.testing.assert_array_equal(
+            uvp1.window_function_array[spw], uvp2.window_function_array[spw]
+        )
+        np.testing.assert_array_equal(
+            uvp1.cov_array_real[spw], uvp2.cov_array_real[spw]
+        )
+
+
 class TestPspec:
     def test_pspec_basic_execution(self, pspec_ds) -> None:
         """Test basic pspec() execution: output shapes, dtypes, and input parameter variants."""
@@ -2107,7 +2198,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
         )
         assert len(uvp.bl_array) == len(pspec_bls)
@@ -2122,6 +2213,72 @@ class TestPspec:
             pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=10, spw_ranges=[(10, 20)]
         )
         pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=1)
+
+    def test_pspec_length_unit(self, pspec_ds) -> None:
+        """length_unit replaces little_h; outputs match the deprecated flag exactly."""
+        kwargs = dict(
+            input_data_weight="identity",
+            norm="I",
+            taper="bh",
+            spw_ranges=[(10, 30)],
+            store_cov=True,
+            verbose=False,
+        )
+        args = (pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
+        uvp_default = pspec_ds.pspec(*args, **kwargs)
+        uvp_h = pspec_ds.pspec(*args, length_unit=u.Mpc / cu.littleh, **kwargs)
+        uvp_h_str = pspec_ds.pspec(*args, length_unit="Mpc / littleh", **kwargs)
+        uvp_mpc = pspec_ds.pspec(*args, length_unit=u.Mpc, **kwargs)
+        uvp_mpc_str = pspec_ds.pspec(*args, length_unit="Mpc", **kwargs)
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            uvp_old_h = pspec_ds.pspec(*args, little_h=True, **kwargs)
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            uvp_old_mpc = pspec_ds.pspec(*args, little_h=False, **kwargs)
+
+        assert uvp_default.norm_units == "Mpc3 / littleh3"
+        assert uvp_mpc.norm_units == "Mpc3"
+        for uvp in (uvp_h, uvp_h_str, uvp_old_h):
+            _assert_same_pspec(uvp, uvp_default)
+        for uvp in (uvp_mpc_str, uvp_old_mpc):
+            _assert_same_pspec(uvp, uvp_mpc)
+
+        # P in Mpc^3 is P in (Mpc / h)^3 divided by h^3
+        h3 = pspec_ds.primary_beam.cosmo.h**3
+        np.testing.assert_allclose(
+            uvp_mpc.data_array[0], uvp_default.data_array[0] / h3, rtol=1e-12
+        )
+        np.testing.assert_allclose(
+            uvp_mpc.scalar_array, uvp_default.scalar_array / h3, rtol=1e-12
+        )
+
+    def test_pspec_length_unit_errors(self, pspec_ds) -> None:
+        args = (pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
+        with (
+            pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
+            pytest.raises(ValueError, match="disagrees with length_unit"),
+        ):
+            pspec_ds.pspec(*args, little_h=True, length_unit=u.Mpc, verbose=False)
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            pspec_ds.pspec(*args, length_unit=u.Hz, verbose=False)
+
+    def test_pspec_scalar_array_matches_scalar(self, pspec_ds) -> None:
+        """uvp.scalar_array holds scalar() as floats in length_unit^3 / (Hz sr)."""
+        for length_unit in (u.Mpc / cu.littleh, u.Mpc):
+            uvp = pspec_ds.pspec(
+                pspec_bls,
+                pspec_bls,
+                (0, 1),
+                ("xx", "xx"),
+                spw_ranges=[(10, 30)],
+                taper="bh",
+                length_unit=length_unit,
+                verbose=False,
+            )
+            scalar = pspec_ds.scalar("xx", length_unit=length_unit)
+            assert uvp.scalar_array.dtype == np.float64
+            assert uvp.scalar_array[0, 0] == scalar.to_value(
+                length_unit**3 / (u.Hz * u.sr)
+            )
 
     def test_pspec_dayenu_weighting(self, pspec_ds) -> None:
         """Test dayenu (inverse-sinc) weighting: successful run and error handling for bad r_params."""
@@ -2259,7 +2416,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
         )
         assert uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array
@@ -2278,7 +2435,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
         )
 
@@ -2499,7 +2656,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
             spw_ranges=[(10, 20)],
             filter_extensions=[(2, 2)],
@@ -2519,7 +2676,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
             spw_ranges=[(10, 20)],
             exact_norm=True,
@@ -2537,7 +2694,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
             spw_ranges=[(10, 20)],
             exact_norm=True,
@@ -2552,7 +2709,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
             spw_ranges=[(10, 20)],
             exact_norm=True,
@@ -2896,7 +3053,7 @@ class TestRFIFlagPropagation:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
         )
         ds.broadcast_dset_flags(unflag=True)
@@ -2908,7 +3065,7 @@ class TestRFIFlagPropagation:
             input_data_weight="identity",
             norm="I",
             taper="none",
-            little_h=True,
+            length_unit=u.Mpc / cu.littleh,
             verbose=False,
         )
 
@@ -2947,7 +3104,7 @@ class TestRFIFlagPropagation:
                 input_data_weight="identity",
                 norm="I",
                 taper="none",
-                little_h=True,
+                length_unit=u.Mpc / cu.littleh,
                 verbose=False,
             )
 
@@ -2967,7 +3124,7 @@ class TestRFIFlagPropagation:
                 input_data_weight="identity",
                 norm="I",
                 taper="none",
-                little_h=True,
+                length_unit=u.Mpc / cu.littleh,
                 verbose=False,
             )
 
@@ -3091,6 +3248,57 @@ class TestPspecRun:
         assert psc.groups() == ["dset0_dset1"]
         assert psc.spectra(psc.groups()[0]) == ["dset0_x_dset1_0"]
         assert os.path.exists(str(tmp_path / "out.h5"))
+
+    def test_length_unit(self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV) -> None:
+        """pspec_run(length_unit=...) sets the output norm units and k units."""
+        uvps = {}
+        for label, length_unit in (
+            ("default", None),
+            ("mpc", u.Mpc),
+            ("mpc_str", "Mpc"),
+        ):
+            fname = str(tmp_path / f"{label}.h5")
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                fname,
+                beam=beam_nf_dipole,
+                blpairs=[((37, 38), (37, 38))],
+                pol_pairs=[("xx", "xx")],
+                spw_ranges=[(50, 60)],
+                verbose=False,
+                overwrite=True,
+                length_unit=length_unit,
+            )
+            psc = container.PSpecContainer(fname, keep_open=False)
+            group = psc.groups()[0]
+            uvps[label] = psc.get_pspec(group, psc.spectra(group)[0])
+
+        default, mpc = uvps["default"], uvps["mpc"]
+        assert default.norm_units == "Mpc3 / littleh3"
+        assert mpc.norm_units == "Mpc3"
+        assert uvps["mpc_str"].norm_units == "Mpc3"
+        np.testing.assert_array_equal(uvps["mpc_str"].data_array[0], mpc.data_array[0])
+
+        h = beam_nf_dipole.cosmo.h
+        np.testing.assert_allclose(
+            mpc.data_array[0], default.data_array[0] / h**3, rtol=1e-12
+        )
+        # k values in the output's own length unit: Mpc^-1 vs h Mpc^-1
+        k_default = default.get_kparas(
+            0, little_h=uvputils.is_littleh(default.norm_units)
+        )
+        k_mpc = mpc.get_kparas(0, little_h=uvputils.is_littleh(mpc.norm_units))
+        np.testing.assert_allclose(k_mpc, k_default * h, rtol=1e-12)
+
+    def test_length_unit_bad_raises_before_reading(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                length_unit="Hz",
+            )
+        assert not (tmp_path / "out.h5").exists()
 
     def test_cosmo_wrong_type_raises(self, tmp_path: Path) -> None:
         with pytest.raises(TypeError, match="got list"):

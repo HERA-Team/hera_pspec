@@ -42,7 +42,7 @@ def _pspec(
         dsets=(0, 1),
         pols=[("xx", "xx")],
         spw_ranges=[(20, 30)],
-        little_h=little_h,
+        length_unit=units.Mpc / cu.littleh if little_h else units.Mpc,
         store_cov=True,
         verbose=False,
     )

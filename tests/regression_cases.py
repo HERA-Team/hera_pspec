@@ -17,7 +17,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import numpy as np
+from astropy import units
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -37,6 +39,7 @@ from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 FIXTURE_DIR = Path(__file__).parent / "data" / "regression"
+LITTLEH_LENGTH = units.Mpc / cu.littleh
 
 # Default relative tolerance for deterministic code paths.
 DEFAULT_RTOL = 1e-12
@@ -274,12 +277,12 @@ def uvpspec_outputs(uvp: UVPSpec, prefix: str = "") -> dict[str, np.ndarray]:
 
 @regression_case("pspec_norm_I_littleh_mK")
 def _pspec_norm_i_littleh_mk() -> dict[str, np.ndarray]:
-    return uvpspec_outputs(run_even_odd_pspec(norm="I", little_h=True))
+    return uvpspec_outputs(run_even_odd_pspec(norm="I", length_unit=LITTLEH_LENGTH))
 
 
 @regression_case("pspec_norm_I_no_littleh_mK")
 def _pspec_norm_i_no_littleh_mk() -> dict[str, np.ndarray]:
-    return uvpspec_outputs(run_even_odd_pspec(norm="I", little_h=False))
+    return uvpspec_outputs(run_even_odd_pspec(norm="I", length_unit=units.Mpc))
 
 
 @regression_case("pspec_norm_I_littleh_Jy")
@@ -290,7 +293,11 @@ def _pspec_norm_i_littleh_jy() -> dict[str, np.ndarray]:
 @regression_case("pspec_norm_I_bh_cov_autos", rtol_overrides={"cov_array": LINALG_RTOL})
 def _pspec_norm_i_bh_cov_autos() -> dict[str, np.ndarray]:
     uvp = run_even_odd_pspec(
-        norm="I", taper="bh", store_cov=True, cov_model="autos", little_h=True
+        norm="I",
+        taper="bh",
+        store_cov=True,
+        cov_model="autos",
+        length_unit=LITTLEH_LENGTH,
     )
     return uvpspec_outputs(uvp)
 
@@ -490,7 +497,7 @@ def _spherical_average() -> dict[str, np.ndarray]:
         taper="bh",
         store_cov=True,
         cov_model="autos",
-        little_h=True,
+        length_unit=LITTLEH_LENGTH,
     )
     out = {}
     design = {}
@@ -600,7 +607,10 @@ def _noise_uvp_noise_error() -> dict[str, np.ndarray]:
         tag = "h" if little_h else "noh"
         # even x even so the auto Tsys times match both time arrays
         uvp = run_even_odd_pspec(
-            halves=("even", "even"), norm="I", taper="bh", little_h=little_h
+            halves=("even", "even"),
+            norm="I",
+            taper="bh",
+            length_unit=conversions.length_unit_from_little_h(little_h),
         )
         utils.uvp_noise_error(
             uvp,

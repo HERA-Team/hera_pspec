@@ -399,7 +399,11 @@ class UVPSpec:
         )
         self._scalar_array = PSpecParam(
             "scalar_array",
-            description="Power spectrum normalization scalar from pspecbeam module.",
+            description=(
+                "Power spectrum normalization scalar from pspecbeam module, in "
+                "norm_units / (Hz sr) (e.g. Mpc^3 / littleh^3 / (Hz sr)) when "
+                "a beam was used, else 1."
+            ),
             expected_type=np.float64,
             form="(Nspws, Npols)",
         )

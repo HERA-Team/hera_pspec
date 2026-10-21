@@ -1,8 +1,10 @@
 import copy
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import numpy as np
 import pytest
+from astropy import units as u
 from astropy.cosmology import FLRW
 from pyuvdata import UVData
 
@@ -135,7 +137,7 @@ def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
         norm="I",
         taper="none",
         sampling=False,
-        little_h=True,
+        length_unit=u.Mpc / cu.littleh,
         spw_ranges=[(0, 50)],
         verbose=False,
     )
@@ -201,7 +203,7 @@ def analytic_noise_uvps(
         norm="I",
         taper=taper,
         sampling=False,
-        little_h=True,
+        length_unit=u.Mpc / cu.littleh,
         spw_ranges=spw_ranges,
         verbose=False,
         cov_model="autos",
@@ -216,7 +218,7 @@ def analytic_noise_uvps(
         norm="I",
         taper=taper,
         sampling=False,
-        little_h=True,
+        length_unit=u.Mpc / cu.littleh,
         spw_ranges=spw_ranges,
         verbose=False,
         cov_model="foreground_dependent",
