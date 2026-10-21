@@ -11,6 +11,7 @@ import pytest
 from astropy import cosmology as astropy_cosmology
 from astropy import units
 from astropy.cosmology import FlatLambdaCDM, LambdaCDM
+from pyuvdata.analytic_beam import GaussianBeam
 
 from hera_pspec import cli, container, conversions, testing
 from hera_pspec.container import PSpecContainer
@@ -825,17 +826,31 @@ def wf_pspec_file(tmp_path_factory, vanilla_uvp: UVPSpec) -> Path:
     return fname
 
 
-WF_BEAMFILE = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+@pytest.fixture(scope="module")
+def wf_beamfile(tmp_path_factory, vanilla_uvp: UVPSpec) -> Path:
+    """A small analytic Gaussian power beam (beamfits) covering vanilla_uvp's band."""
+    fname = tmp_path_factory.mktemp("wf-beam") / "gaussian_power.beamfits"
+    freqs = np.unique(vanilla_uvp.freq_array)
+    uvb = GaussianBeam(sigma=0.15).to_uvbeam(
+        freq_array=np.linspace(freqs.min(), freqs.max(), 5),
+        beam_type="power",
+        pixel_coordinate_system="healpix",
+        nside=16,
+    )
+    uvb.write_beamfits(fname)
+    return fname
 
 
 class TestComputeFtBeam:
     @pytest.fixture(scope="class")
-    def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
+    def ft_beam_run(
+        self, wf_pspec_file: Path, wf_beamfile: Path, tmp_path_factory
+    ) -> tuple[Result, Path]:
         out_dir = tmp_path_factory.mktemp("ftcache")
         result = invoke(
             [
                 "compute-ft-beam",
-                str(WF_BEAMFILE),
+                str(wf_beamfile),
                 "xx",
                 str(wf_pspec_file),
                 "--out-dir",
@@ -866,7 +881,7 @@ class TestComputeFtBeam:
         assert ftb.pol == "xx"
 
     def test_second_call_reuses_cache(
-        self, ft_beam_run: tuple[Result, Path], wf_pspec_file: Path
+        self, ft_beam_run: tuple[Result, Path], wf_pspec_file: Path, wf_beamfile: Path
     ):
         result, out_dir = ft_beam_run
         path = self._output_path(result)
@@ -874,7 +889,7 @@ class TestComputeFtBeam:
         result2 = invoke(
             [
                 "compute-ft-beam",
-                str(WF_BEAMFILE),
+                str(wf_beamfile),
                 "xx",
                 str(wf_pspec_file),
                 "--out-dir",
@@ -890,12 +905,14 @@ class TestComputeFtBeam:
 
 class TestComputeWindowFunctions:
     @pytest.fixture(scope="class")
-    def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
+    def wf_run(
+        self, wf_pspec_file: Path, wf_beamfile: Path, tmp_path_factory
+    ) -> tuple[Result, Path]:
         ft_dir = tmp_path_factory.mktemp("ftcache-wf")
         ft_result = invoke(
             [
                 "compute-ft-beam",
-                str(WF_BEAMFILE),
+                str(wf_beamfile),
                 "xx",
                 str(wf_pspec_file),
                 "--out-dir",
