@@ -55,7 +55,7 @@ The library is organized around three persistent object types and a computation 
 
 ### Data files
 
-`src/hera_pspec/data/` is shipped with the wheel (`tool.setuptools.package-data`). It holds beamfits files and small `.uvh5` / `.uvA` visibility cutouts that the test suite and example notebooks load by absolute path via `from hera_pspec.data import DATA_PATH`. Don't move or rename these without updating both tests and notebooks under `examples/`.
+`src/hera_pspec/data/` is shipped with the wheel (`tool.setuptools.package-data`). It holds beamfits files and small `.uvh5` / `.uvA` visibility cutouts that the test suite and example notebooks load by absolute path via `from hera_pspec.data import DATA_PATH`. Don't move or rename these without updating both tests and notebooks under `docs/examples/`.
 
 ### Scripts vs CLI
 
