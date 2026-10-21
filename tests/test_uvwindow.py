@@ -407,6 +407,48 @@ class TestFTBeamFromBeam:
             atol=0.02 * np.abs(ft_direct.ft_beam).max(),
         )
 
+    def test_gaussian_beam_has_analytic_transform(self, tmp_path: Path) -> None:
+        """The flat-sky Fourier transform of a Gaussian power beam
+        exp(-theta^2 / w^2) is pi w^2 exp(-pi^2 w^2 |u|^2), a Gaussian of width
+        1 / (pi w) in u (the Fourier dual of the sky angle in radians), on a grid
+        of spacing 1 / (2 mapsize). FTBeam stores it divided by 2 mapsize, the
+        normalisation FTBeam.gaussian uses for the same beam. This pins the
+        projection of the beam onto the flat sky, the Fourier grid and the
+        normalisation of from_beam.
+
+        pyuvdata's GaussianBeam(sigma) is an efield beam whose power beam is
+        exp(-theta^2 / sigma^2), so w = sigma. On an NSIDE=64 HEALPix map the
+        transform agrees with the analytic one to ~0.5% of its peak."""
+        sigma, mapsize, freqs = 0.15, 1.0, np.linspace(120e6, 180e6, 3)
+        beamfile = tmp_path / "gaussian.beamfits"
+        GaussianBeam(sigma=sigma).to_uvbeam(
+            freq_array=freqs,
+            beam_type="efield",
+            pixel_coordinate_system="healpix",
+            nside=64,
+        ).write_beamfits(beamfile)
+        ftbeam = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile, pol="xx", freq_array=freqs, mapsize=mapsize, npix=141
+        )
+        ngrid = ftbeam.ft_beam.shape[-1]
+        u = np.fft.fftshift(np.fft.fftfreq(ngrid)) * ngrid / (2 * mapsize)
+        usq = u[:, None] ** 2 + u[None, :] ** 2
+        expected = (
+            np.pi * sigma**2 * np.exp(-(np.pi**2) * sigma**2 * usq) / (2 * mapsize)
+        )
+        for ft in ftbeam.ft_beam:
+            np.testing.assert_allclose(ft, expected, rtol=0, atol=1e-2 * expected.max())
+        # the analytic beam of FTBeam.gaussian is the same transform
+        analytic = uvwindow.FTBeam.gaussian(
+            freq_array=freqs,
+            widths=np.degrees(sigma),
+            pol="xx",
+            mapsize=mapsize,
+            npix=ngrid,
+        )
+        for ft in analytic.ft_beam:
+            np.testing.assert_allclose(ft, expected, rtol=1e-10, atol=1e-300)
+
 
 class TestFTBeamFromFile:
     def test_happy_path(self, ft_bandwidth: np.ndarray) -> None:
@@ -1816,6 +1858,30 @@ class TestUVWindowPhysics:
         expected = uvw.cosmo.tau_to_kpara(uvw.avg_z) * np.abs(uvw.dly_array)
         peak = kpara[np.argmax(cyl_wf.sum(axis=1), axis=1)]
         assert np.all(np.abs(peak - expected) <= np.diff(kpara).mean() * (1 + 1e-6))
+
+    def test_kpara_peak_with_ftbeam_on_another_grid(self, vanilla_uvp) -> None:
+        """The k_para of a delay is set by the data's frequency channels, not by
+        those the FT beam was computed on. With an FT beam on 80 kHz channels
+        and data on 100 kHz channels, UVWindow.from_uvpspec must interpolate the
+        beam onto the data channels, so that the window function of every
+        nonzero data delay tau peaks in the k_para bin containing
+        tau_to_kpara |tau| (the bins are centred on multiples of that value).
+        Taking the FT beam's channels as they are would stretch the k_para
+        axis by the ratio of the channel widths."""
+        ftbeam = uvwindow.FTBeam.gaussian(
+            freq_array=np.arange(99e6, 106e6, 80e3), widths=10.0, pol="xx", npix=151
+        )
+        with pytest.warns(UserWarning, match="interpolating"):
+            uvw = uvwindow.UVWindow.from_uvpspec(vanilla_uvp, 0, 0, ftbeam=ftbeam)
+        _, kpara, cyl_wf = uvw.get_cylindrical_wf(14.6, return_bins="unweighted")
+        dlys = vanilla_uvp.get_dlys(0)
+        expected = uvw.cosmo.tau_to_kpara(uvw.avg_z, little_h=uvw.little_h) * np.abs(
+            dlys
+        )
+        peak = kpara[np.argmax(cyl_wf.sum(axis=1), axis=1)]
+        nonzero = dlys != 0
+        assert nonzero.sum() == dlys.size - 1
+        assert np.all(np.abs(peak - expected)[nonzero] < 0.5 * np.diff(kpara).mean())
 
     @pytest.mark.xfail(
         strict=True,
