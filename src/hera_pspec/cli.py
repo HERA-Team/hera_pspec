@@ -6,6 +6,7 @@ import glob
 import logging
 import pickle
 import sys
+import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Annotated, Literal
@@ -13,7 +14,8 @@ from typing import Annotated, Literal
 import h5py
 import numpy as np
 from astropy import units
-from cyclopts import App, Parameter
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM, realizations
+from cyclopts import App, Group, Parameter
 from rich.console import Console
 from rich.logging import RichHandler
 from tqdm import tqdm
@@ -199,6 +201,99 @@ def _cosmology_from_values(values):
     return conversions.cosmology_from_params(params)
 
 
+DEFAULT_COSMOLOGY_NAME = "hera_pspec_default"
+
+
+def _cosmology_names() -> tuple[str, ...]:
+    """Names accepted by ``pspec run --cosmology``."""
+    return (DEFAULT_COSMOLOGY_NAME, *realizations.available)
+
+
+def _validate_cosmology_name(type_, value) -> None:
+    """Reject a --cosmology name that is not a known realization."""
+    if value is not None and value not in _cosmology_names():
+        raise ValueError(
+            f"unknown cosmology {value!r}; available: {', '.join(_cosmology_names())}."
+        )
+
+
+def _cosmology_from_name(name: str):
+    """Return the astropy cosmology named by ``pspec run --cosmology``."""
+    if name == DEFAULT_COSMOLOGY_NAME:
+        return conversions.DEFAULT_COSMOLOGY
+    return getattr(realizations, name)
+
+
+# The cosmology options of `pspec run`, in their CLI spelling. Only one of the
+# three ways of giving a cosmology may be used at a time.
+_COSMOLOGY_NAME_OPTION = "--cosmology"
+_COSMOLOGY_PARAM_OPTIONS = ("--h0", "--om0", "--ode0", "--ob0", "--tcmb0")
+_COSMOLOGY_REQUIRED_PARAM_OPTIONS = ("--h0", "--om0")
+_DEPRECATED_COSMO_OPTION = "--cosmo"
+
+
+def _validate_cosmology_options(argument_collection) -> None:
+    """Allow one of --cosmology, the parameter options or --cosmo."""
+    given = [arg.name for arg in argument_collection.filter_by(value_set=True)]
+    styles = []
+    if _COSMOLOGY_NAME_OPTION in given:
+        styles.append(_COSMOLOGY_NAME_OPTION)
+    if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
+        styles.append("/".join(_COSMOLOGY_PARAM_OPTIONS))
+    if _DEPRECATED_COSMO_OPTION in given:
+        styles.append(_DEPRECATED_COSMO_OPTION)
+    if len(styles) > 1:
+        raise ValueError(f"give the cosmology one way only; got {', '.join(styles)}.")
+    if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
+        missing = [
+            name for name in _COSMOLOGY_REQUIRED_PARAM_OPTIONS if name not in given
+        ]
+        if missing:
+            raise ValueError(
+                f"{' and '.join(missing)} must be given with the cosmological "
+                f"parameter options {'/'.join(_COSMOLOGY_PARAM_OPTIONS)}."
+            )
+
+
+COSMOLOGY_GROUP = Group(
+    "Cosmology (one of --cosmology, --h0/--om0/..., or --cosmo)",
+    validator=_validate_cosmology_options,
+    sort_key=1,
+)
+
+
+def _cosmology_from_parameters(H0, Om0, Ode0=None, Ob0=None, Tcmb0=None):
+    """
+    Build the astropy cosmology given by the --h0/--om0/... options.
+
+    ``LambdaCDM`` when ``Ode0`` is given, else ``FlatLambdaCDM``. ``Tcmb0``
+    defaults to 0 (no radiation), as in hera_pspec's default cosmology.
+    """
+    kwargs = {"H0": H0, "Om0": Om0, "Tcmb0": 0.0 if Tcmb0 is None else Tcmb0}
+    if Ob0 is not None:
+        kwargs["Ob0"] = Ob0
+    if Ode0 is None:
+        return FlatLambdaCDM(**kwargs)
+    return LambdaCDM(Ode0=Ode0, **kwargs)
+
+
+def _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo):
+    """Return the cosmology selected by the `pspec run` options, or None."""
+    if cosmology is not None:
+        return _cosmology_from_name(cosmology)
+    if H0 is not None:
+        return _cosmology_from_parameters(H0, Om0, Ode0=Ode0, Ob0=Ob0, Tcmb0=Tcmb0)
+    if cosmo is not None:
+        warnings.warn(
+            "--cosmo is deprecated and will be removed in a future version; use "
+            "--cosmology NAME or --h0/--om0/--ode0/--ob0/--tcmb0 instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return _cosmology_from_values(cosmo)
+    return None
+
+
 # `run` and `bootstrap` are thin wrappers: their parameters deliberately use the
 # wrapped library function's names so cyclopts maps each option's --help text from
 # the reused __doc__ (assigned just after each definition). Annotated
@@ -222,14 +317,64 @@ def run(
     norm: Literal["I", "H^-1", "V^-1/2"] = "I",
     taper: str = "none",
     beam: Path | None = None,
+    cosmology: Annotated[
+        str | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help=(
+                "Named cosmology: an astropy realization "
+                f"({', '.join(realizations.available)}) or "
+                f"{DEFAULT_COSMOLOGY_NAME} (hera_pspec's default LambdaCDM). "
+                "Default is the beam's own cosmology."
+            ),
+            validator=_validate_cosmology_name,
+        ),
+    ] = None,
+    H0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP, help="Hubble constant in km/s/Mpc. Needs --om0."
+        ),
+    ] = None,
+    Om0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP, help="Matter density parameter today. Needs --h0."
+        ),
+    ] = None,
+    Ode0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help=(
+                "Dark energy density parameter today; gives a LambdaCDM. "
+                "If omitted, the cosmology is flat (FlatLambdaCDM)."
+            ),
+        ),
+    ] = None,
+    Ob0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help="Baryon density parameter today. Default: astropy's (0).",
+        ),
+    ] = None,
+    Tcmb0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help="CMB temperature today in K. Default: 0 (no radiation).",
+        ),
+    ] = None,
     cosmo: Annotated[
         list[float] | None,
         Parameter(
+            group=COSMOLOGY_GROUP,
             help=(
+                "Deprecated: use --cosmology or --h0/--om0/... instead. "
                 "Cosmological parameters, in the order "
                 f"{COSMO_PARAM_ORDER}, used to build an astropy LambdaCDM. "
-                "Up to 6 values; omitted trailing values keep their defaults. "
-                "Default is the beam's own cosmology."
+                "Up to 6 values; omitted trailing values keep their defaults."
             ),
             validator=_validate_cosmo_values,
             consume_multiple=True,
@@ -266,7 +411,10 @@ def run(
     xant_flag_thresh: float = 0.95,
     store_window: bool = False,
     allow_fft: bool = False,
+    length_unit: Literal["Mpc / littleh", "Mpc"] = "Mpc / littleh",
+    normalization: Literal["two-step", "one-step"] = "two-step",
 ) -> None:
+    cosmo = _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo)
     pspecdata.pspec_run(
         dsets=[str(d) for d in dsets],
         filename=str(filename),
@@ -286,7 +434,7 @@ def run(
         norm=norm,
         taper=taper,
         beam=str(beam) if beam is not None else None,
-        cosmo=_cosmology_from_values(cosmo) if cosmo is not None else None,
+        cosmo=cosmo,
         rephase_to_dset=rephase_to_dset,
         trim_dset_lsts=trim_dset_lsts,
         broadcast_dset_flags=broadcast_dset_flags,
@@ -315,6 +463,8 @@ def run(
         xant_flag_thresh=xant_flag_thresh,
         store_window=store_window,
         allow_fft=allow_fft,
+        length_unit=length_unit,
+        normalization=normalization,
         history=" ".join(sys.argv),
     )
 

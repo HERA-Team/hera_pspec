@@ -5223,8 +5223,9 @@ def pspec_run(
         of this size. See utils.calc_blpair_reds() for details. Default: None
 
     bl_len_range : len-2 float tuple
-        A tuple containing the minimum and maximum baseline length to use
-        in utils.calc_blpair_reds call. Only used if blpairs is None.
+        A tuple containing the minimum and maximum baseline length, in
+        metres, to use in utils.calc_blpair_reds call. Only used if blpairs
+        is None.
 
     bl_deg_range : len-2 float tuple
         A tuple containing the min and max baseline angle (ENU frame in degrees)
@@ -5232,8 +5233,8 @@ def pspec_run(
         degrees.
 
     bl_error_tol : float, optional
-        Baseline vector error tolerance when constructing redundant groups.
-        Default: 1.0.
+        Baseline vector error tolerance, in metres, when constructing
+        redundant groups. Default: 1.0.
 
     store_window : bool
         If True, store computed window functions (warning, these can be large!)
