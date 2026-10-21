@@ -11,6 +11,8 @@ or CI.
 | --- | --- |
 | `pspec_full` | `PSpecData` + `Jy_to_mK` + `pspec` over all 152 redundant baseline pairs of the shipped LST cutout (even x even), 2 spws of 40 channels, Blackman-Harris taper, `PSpecBeamUV`, `store_cov=True` |
 | `pspec_full_exact_norm` | the same with `exact_norm=True` |
+| `pspec_full_one_step` | the same with `normalization="one-step"` (default `DelayResponse`, no scalar) |
+| `pspec_full_ic` | the same with `input_data_weight="iC"` (two-step), which builds `G` and `H` for every baseline pair |
 | `spherical_average` | `grouping.spherical_average` of the `pspec_full` output |
 | `uvwindow_spherical_wf` | `UVWindow.get_spherical_wf` from the HERA dipole FT beam for 120 baseline lengths |
 | `hdf5_write` | 200 x `UVPSpec.write_hdf5` of a 3-spw pspec output over the same 152 blpairs x 10 times (~6 MB; no cov or window functions, which would make this a disk benchmark) |

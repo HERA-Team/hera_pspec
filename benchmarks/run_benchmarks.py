@@ -124,7 +124,12 @@ class PSpecInputs:
         }
 
 
-def run_pspec(state: dict[str, Any], exact_norm: bool) -> UVPSpec:
+def run_pspec(
+    state: dict[str, Any],
+    exact_norm: bool,
+    normalization: str = "two-step",
+    input_data_weight: str = "identity",
+) -> UVPSpec:
     """Build a PSpecData, convert to mK and estimate the power spectra."""
     ds = PSpecData(
         dsets=state["dsets"],
@@ -143,6 +148,8 @@ def run_pspec(state: dict[str, Any], exact_norm: bool) -> UVPSpec:
         store_cov=True,
         cov_model="autos",
         exact_norm=exact_norm,
+        input_data_weight=input_data_weight,
+        normalization=normalization,
         verbose=False,
     )
 
@@ -224,6 +231,31 @@ PSPEC_FULL_EXACT_NORM = Workflow(
     setup=pspec_inputs,
     prepare=lambda inputs: inputs.fresh(),
     run=lambda state: run_pspec(state, exact_norm=True),
+    sizes=_pspec_sizes,
+)
+
+PSPEC_FULL_ONE_STEP = Workflow(
+    name="pspec_full_one_step",
+    description=(
+        'pspec_full with normalization="one-step" (default DelayResponse, '
+        "response matrix in cosmological units, no scalar)"
+    ),
+    setup=pspec_inputs,
+    prepare=lambda inputs: inputs.fresh(),
+    run=lambda state: run_pspec(state, exact_norm=False, normalization="one-step"),
+    sizes=_pspec_sizes,
+)
+
+
+PSPEC_FULL_IC = Workflow(
+    name="pspec_full_ic",
+    description=(
+        'pspec_full with input_data_weight="iC" (two-step): G and H are '
+        "built for every blpair instead of once per flag pattern"
+    ),
+    setup=pspec_inputs,
+    prepare=lambda inputs: inputs.fresh(),
+    run=lambda state: run_pspec(state, exact_norm=False, input_data_weight="iC"),
     sizes=_pspec_sizes,
 )
 
@@ -379,6 +411,8 @@ WORKFLOWS: dict[str, Workflow] = {
     for workflow in [
         PSPEC_FULL,
         PSPEC_FULL_EXACT_NORM,
+        PSPEC_FULL_ONE_STEP,
+        PSPEC_FULL_IC,
         SPHERICAL_AVERAGE,
         UVWINDOW_SPHERICAL_WF,
         HDF5_WRITE,
