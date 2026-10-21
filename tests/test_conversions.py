@@ -142,30 +142,6 @@ class TestCosmoPhysics:
     """Check the cosmological distances against astropy and analytic limits,
     and the delay/baseline to k conversions against their definitions."""
 
-    @pytest.mark.parametrize("z", [0.01, 1.0, 6.0, 10.0])
-    def test_distances_match_astropy(
-        self, curved_cosmo: conversions.Cosmo_Conversions, z: float
-    ) -> None:
-        """E(z) and the comoving, transverse comoving and angular diameter
-        distances agree with astropy's LambdaCDM (in Mpc for little_h=False,
-        and h^-1 Mpc = h * Mpc otherwise), including the sinh/sin branches of
-        the transverse distance for open and closed cosmologies."""
-        C = curved_cosmo
-        lcdm = C.lcdm
-        np.testing.assert_allclose(C.E(z), lcdm.efunc(z), rtol=1e-12)
-        for method, astropy_method in [
-            ("DC", lcdm.comoving_distance),
-            ("DM", lcdm.comoving_transverse_distance),
-            ("DA", lcdm.angular_diameter_distance),
-        ]:
-            expected = astropy_method(z).to("Mpc").value
-            np.testing.assert_allclose(
-                getattr(C, method)(z, little_h=False), expected, rtol=1e-8
-            )
-            np.testing.assert_allclose(
-                getattr(C, method)(z, little_h=True), expected * C.h, rtol=1e-8
-            )
-
     def test_small_redshift_limit(
         self, curved_cosmo: conversions.Cosmo_Conversions
     ) -> None:

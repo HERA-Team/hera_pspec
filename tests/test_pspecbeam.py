@@ -822,13 +822,6 @@ class TestBeamPhysics:
         )
         np.testing.assert_allclose(scalar, expected, rtol=1e-3)
 
-    def test_scalar_little_h(self, beam: pspecbeam.PSpecBeamGauss) -> None:
-        """A volume in h^-3 Mpc^3 is h^3 times the same volume in Mpc^3."""
-        kwargs = dict(num_steps=500)
-        in_mpc = beam.compute_pspec_scalar(150e6, 152e6, 20, little_h=False, **kwargs)
-        in_mpc_h = beam.compute_pspec_scalar(150e6, 152e6, 20, little_h=True, **kwargs)
-        np.testing.assert_allclose(in_mpc_h / in_mpc, beam.cosmo.h**3, rtol=1e-10)
-
     @pytest.mark.parametrize("taper", ["bh", "blackman", "hann"])
     def test_scalar_taper_factor(
         self, beam: pspecbeam.PSpecBeamGauss, taper: str

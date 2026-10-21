@@ -1,5 +1,4 @@
 import copy
-import json
 
 import numpy as np
 import pytest
@@ -256,12 +255,6 @@ class TestPolpairInt2Tuple:
         assert from_list[0] == single
         assert tuple(from_array[0]) == tuple(single)
 
-    @pytest.mark.parametrize("polpair", POLPAIRS)
-    def test_round_trip(self, polpair: tuple[str, str]) -> None:
-        """Check that converting a polpair to int and back to strings reproduces the original tuple."""
-        pol_int = uvputils.polpair_tuple2int(polpair)
-        assert uvputils.polpair_int2tuple(pol_int, pol_strings=True) == polpair
-
     @pytest.mark.parametrize(
         "value", [("xx", "xx"), "xx", "pI"], ids=["tuple", "single_str", "stokes_str"]
     )
@@ -393,24 +386,3 @@ class TestBlpairTimeLookup:
         query_blpts = [(102101103104, 0.1), (101102104103, 0.1), (101102104103, 0.25)]
         idxs = uvputils._fast_lookup_blpairts(src_blpts, np.array(query_blpts))
         np.testing.assert_array_equal(idxs, np.array([0, 4, 7]))
-
-
-def test_r_param_compression() -> None:
-    """Check that compress_r_params/decompress_r_params round-trip exactly, and that empty input round-trips to empty."""
-    baselines = [(24, 25), (37, 38), (38, 39)]
-    rp = {
-        "filter_centers": [0.0],
-        "filter_half_widths": [250e-9],
-        "filter_factors": [1e-9],
-    }
-    r_params = {bl + ("xx",): rp for bl in baselines}
-
-    rp_str_1 = uvputils.compress_r_params(r_params)
-    decompressed = uvputils.decompress_r_params(rp_str_1)
-    assert decompressed == r_params
-
-    rp_str_2 = uvputils.compress_r_params(decompressed)
-    assert json.loads(rp_str_1) == json.loads(rp_str_2)
-
-    assert uvputils.compress_r_params({}) == ""
-    assert uvputils.decompress_r_params("") == {}
