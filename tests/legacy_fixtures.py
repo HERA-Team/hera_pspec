@@ -89,14 +89,13 @@ def build_ftbeam() -> uvwindow.FTBeam:
 
 
 def build_uvwindow() -> uvwindow.UVWindow:
-    """UVWindow (little_h) on ten channels of the test FT beam."""
+    """UVWindow (default k unit, littleh / Mpc) on ten channels of the test FT beam."""
     bandwidth = uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)
     ftbeam = uvwindow.FTBeam.from_file(
         ftfile=FT_BEAM_FILE, freq_array=bandwidth[UVWINDOW_CHANNELS]
     )
-    return uvwindow.UVWindow(
-        ftbeam_obj=ftbeam, taper="blackman-harris", little_h=True, verbose=False
-    )
+    # no k unit argument, so v0.x code (little_h=True default) builds the same
+    return uvwindow.UVWindow(ftbeam_obj=ftbeam, taper="blackman-harris", verbose=False)
 
 
 def write_container(path: Path = CONTAINER_FILE) -> None:

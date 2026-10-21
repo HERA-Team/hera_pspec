@@ -428,8 +428,9 @@ WINDOW_BL_WEIGHTS = [2.0, 1.0]
 def make_uvwindow(little_h: bool) -> uvwindow.UVWindow:
     bandwidth = uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)
     ftbeam = uvwindow.FTBeam.from_file(ftfile=FT_BEAM_FILE, freq_array=bandwidth[5:25])
+    kunits = cu.littleh / units.Mpc if little_h else 1 / units.Mpc
     return uvwindow.UVWindow(
-        ftbeam_obj=ftbeam, taper="blackman-harris", little_h=little_h, verbose=False
+        ftbeam_obj=ftbeam, taper="blackman-harris", kunits=kunits, verbose=False
     )
 
 

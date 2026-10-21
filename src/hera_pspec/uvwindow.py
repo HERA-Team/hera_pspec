@@ -689,11 +689,78 @@ class FTBeam:
         self.ft_beam = self.ft_beam[self.spw_range[0] : self.spw_range[-1], :, :]
 
 
+# The k units UVWindow works in: littleh / Mpc (lengths in h^-1 Mpc, the
+# default) or 1 / Mpc (lengths in Mpc).
+_LITTLEH_KUNITS = cu.littleh / units.Mpc
+_MPC_KUNITS = units.Mpc ** (-1)
+
+
+def _resolve_kunits(kunits, little_h, stacklevel=3):
+    """
+    Resolve the ``kunits`` / deprecated ``little_h`` arguments of UVWindow.
+
+    Parameters
+    ----------
+    kunits : astropy.units.UnitBase or str or None
+        ``littleh / Mpc`` or ``1 / Mpc`` (strings are parsed with littleh
+        enabled). None means littleh / Mpc unless ``little_h`` is given.
+    little_h : bool or None
+        Deprecated flag: True for littleh / Mpc, False for 1 / Mpc. Emits a
+        ``DeprecationWarning`` when not None.
+    stacklevel : int, optional
+        Stack level of the deprecation warning, counted from this function.
+
+    Returns
+    -------
+    astropy.units.UnitBase
+        ``_LITTLEH_KUNITS`` or ``_MPC_KUNITS``.
+
+    Raises
+    ------
+    ValueError
+        If ``kunits`` is neither unit, or if ``little_h`` disagrees with it.
+    """
+    if kunits is not None:
+        if isinstance(kunits, (str, bytes)):
+            kunits = uvputils.parse_unit_string(kunits)
+        else:
+            kunits = units.Unit(kunits)
+        if kunits == _LITTLEH_KUNITS:
+            kunits = _LITTLEH_KUNITS
+        elif kunits == _MPC_KUNITS:
+            kunits = _MPC_KUNITS
+        else:
+            raise ValueError(
+                "kunits must be astropy.cosmology.units.littleh / "
+                f"astropy.units.Mpc or 1 / astropy.units.Mpc, got '{kunits}'."
+            )
+    if little_h is None:
+        return _LITTLEH_KUNITS if kunits is None else kunits
+    warnings.warn(
+        "The little_h argument is deprecated; pass kunits=cu.littleh / u.Mpc "
+        "(little_h=True) or kunits=1 / u.Mpc (little_h=False) instead.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+    from_flag = _LITTLEH_KUNITS if little_h else _MPC_KUNITS
+    if kunits is not None and kunits != from_flag:
+        raise ValueError(
+            f"little_h={little_h} disagrees with kunits='{kunits}'; pass only kunits."
+        )
+    return from_flag
+
+
 class UVWindow:
     """Class for :class:`UVWindow` objects."""
 
     def __init__(
-        self, ftbeam_obj, taper=None, little_h=True, cosmo=None, verbose=False
+        self,
+        ftbeam_obj,
+        taper=None,
+        kunits=None,
+        cosmo=None,
+        verbose=False,
+        little_h=None,
     ):
         """
         Class for :class:`UVWindow` objects.
@@ -713,18 +780,22 @@ class UVWindow:
         taper : str
             Type of data tapering applied along bandwidth.
             See :func:`uvtools.dspec.gen_window` for options.
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc.
-                With little_h, k units (:attr:`kunits`) are
-                ``astropy.cosmology.units.littleh / astropy.units.Mpc``;
-                otherwise they are ``astropy.units.Mpc ** -1``.
-                Default: True (h^-1 Mpc).
+        kunits : astropy.units.UnitBase or str, optional
+            Unit of the k modes (:attr:`kunits`):
+            ``astropy.cosmology.units.littleh / astropy.units.Mpc``
+            (cosmological lengths in h^-1 Mpc) or ``1 / astropy.units.Mpc``
+            (lengths in Mpc). Strings such as ``"littleh / Mpc"`` are
+            accepted. Default: None, which means littleh / Mpc.
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
             ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
             is still accepted but deprecated.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
+        little_h : bool, optional
+            Deprecated, use ``kunits``. True is ``kunits=littleh / Mpc`` and
+            False is ``kunits=1 / Mpc``; emits a ``DeprecationWarning`` and
+            raises a ``ValueError`` if it disagrees with ``kunits``.
 
         """
         # Summary attributes
@@ -734,12 +805,8 @@ class UVWindow:
             cosmo = conversions.DEFAULT_COSMOLOGY
         self.cosmo = conversions.as_astropy_cosmology(cosmo)
 
-        # units
-        self.little_h = bool(little_h)
-        if self.little_h:
-            self.kunits = cu.littleh / units.Mpc
-        else:
-            self.kunits = units.Mpc ** (-1)
+        # units: k in kunits, cosmological lengths in length_unit = 1 / kunits
+        self.kunits = _resolve_kunits(kunits, little_h)
 
         # verbose
         self.verbose = bool(verbose)
@@ -784,6 +851,26 @@ class UVWindow:
         self.avg_nu = np.mean(self.freq_array)
         self.avg_z = conversions.f2z(self.avg_nu)
 
+    @property
+    def length_unit(self):
+        """Cosmological length unit, ``1 / kunits`` (h^-1 Mpc or Mpc)."""
+        return 1 / self.kunits
+
+    @property
+    def little_h(self):
+        """
+        Deprecated: whether :attr:`kunits` is littleh / Mpc.
+
+        Use :attr:`kunits` instead.
+        """
+        warnings.warn(
+            "UVWindow.little_h is deprecated; use UVWindow.kunits "
+            "(cu.littleh / u.Mpc or 1 / u.Mpc) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return uvputils.is_littleh(self.kunits)
+
     @classmethod
     def from_uvpspec(
         cls, uvp, ipol, spw, ftbeam=None, x_orientation=None, verbose=False
@@ -827,8 +914,8 @@ class UVWindow:
         else:
             cosmo = uvp.cosmo
 
-        # units
-        little_h = uvputils.is_littleh(uvp.norm_units)
+        # units: the k grid of the window functions stored on uvp
+        kunits = _LITTLEH_KUNITS if uvputils.is_littleh(uvp.norm_units) else _MPC_KUNITS
 
         # spectral window
         if spw >= uvp.Nspws:
@@ -880,7 +967,7 @@ class UVWindow:
             ftbeam_obj=ftbeam_obj_pol,
             taper=uvp.taper,
             cosmo=cosmo,
-            little_h=little_h,
+            kunits=kunits,
             verbose=verbose,
         )
 
@@ -893,8 +980,8 @@ class UVWindow:
         name : str
             One of ``"bl_to_kperp"`` ([h] Mpc^-1 per m), ``"tau_to_kpara"``
             ([h] Mpc^-1 per s), ``"dRperp_dtheta"`` ([h^-1] Mpc per rad) or
-            ``"dRpara_df"`` ([h^-1] Mpc per Hz), with lengths in h^-1 Mpc
-            if :attr:`little_h` else Mpc.
+            ``"dRpara_df"`` ([h^-1] Mpc per Hz), with lengths in
+            :attr:`length_unit` (h^-1 Mpc or Mpc).
         z : float
             Redshift.
 
@@ -905,12 +992,12 @@ class UVWindow:
             :attr:`cosmo`. Cached per redshift, since the window function
             methods call these repeatedly with the same redshift.
         """
-        key = (name, float(z), self.little_h)
+        key = (name, float(z), self.kunits)
         cache = self.__dict__.setdefault("_cosmo_factor_cache", {})
         cached = cache.get(key)
         if cached is not None and cached[0] is self.cosmo:
             return cached[1]
-        length_unit = conversions.length_unit_from_little_h(self.little_h)
+        length_unit = 1 / self.kunits
         helpers = {
             "bl_to_kperp": (conversions.bl_to_kperp, 1 / length_unit / units.m),
             "tau_to_kpara": (conversions.tau_to_kpara, 1 / length_unit / units.s),
@@ -1287,7 +1374,7 @@ class UVWindow:
         kperp_bins : array_like of astropy quantity, with units.
             1D float array of ascending k_perp bin centers, in littleh / Mpc
             (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
-            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for cylindrical binning.
             Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
             is deprecated; the values are read as littleh / Mpc.
@@ -1458,7 +1545,7 @@ class UVWindow:
             If only one bl_lens is given, then axis 0 can be omitted.
         kbins : array-like astropy.quantity with units
             1D float array of ascending |k| bin centers, in littleh / Mpc if
-            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for spherical binning. Must be linearly spaced.
         ktot : array_like
             2-dimensional array giving the magnitude of k corresponding to
@@ -1577,7 +1664,7 @@ class UVWindow:
         kbins : array-like astropy.quantity with units
             1D float array of ascending |k| bin centers, in littleh / Mpc
             (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
-            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for spherical binning.
             Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
             is deprecated; the values are read as littleh / Mpc.
@@ -1592,7 +1679,7 @@ class UVWindow:
         kperp_bins : array-like astropy.quantity with units, optional.
             1D float array of ascending k_perp bin centers, in littleh / Mpc
             (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
-            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for cylindrical binning.
             Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
             is deprecated; the values are read as littleh / Mpc.
@@ -1766,7 +1853,7 @@ class UVWindow:
         kperp_bins : array-like astropy.quantity with unit, optional.
             1D float array of ascending k_perp bin centers, in littleh / Mpc
             (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
-            :attr:`little_h` is True, else in 1 / Mpc (see :attr:`kunits`).
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for cylindrical binning.
             Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
             is deprecated; the values are read as littleh / Mpc.
@@ -1780,7 +1867,8 @@ class UVWindow:
         Notes
         -----
         The file has attributes ``uvwindow_version = "2"``, ``avg_nu`` (with
-        ``avg_nu_unit = "Hz"``), ``avg_z``, ``nfreqs``, ``little_h``,
+        ``avg_nu_unit = "Hz"``), ``avg_z``, ``nfreqs``, ``little_h`` (True
+        if :attr:`kunits` is littleh / Mpc, kept for v0.x readers),
         ``polpair`` and ``taper``, and datasets ``kperp_bins`` and
         ``kpara_bins`` (``unit`` attribute: :attr:`kunits`, i.e.
         ``"littleh / Mpc"`` or ``"1 / Mpc"``), ``bl_lens`` (``unit = "m"``),
@@ -1846,7 +1934,7 @@ class UVWindow:
             f.attrs["avg_nu_unit"] = units.Hz.to_string()
             f.attrs["avg_z"] = self.avg_z
             f.attrs["nfreqs"] = self.Nfreqs
-            f.attrs["little_h"] = self.little_h
+            f.attrs["little_h"] = self.kunits == _LITTLEH_KUNITS
             f.attrs["polpair"] = uvputils.polpair_tuple2int(self.pols)
             # cannot write None to file
             if self.taper is None:
@@ -1885,11 +1973,11 @@ class UVWindow:
         ----------
         karray : array-like astropy.quantity with units
             Array of Fourier modes. Units must be equivalent to
-            :attr:`kunits`: ``astropy.cosmology.units.littleh / astropy.units.Mpc``
-            if :attr:`little_h` is True, ``astropy.units.Mpc ** -1`` otherwise.
-            For little_h=True, hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
-            is still accepted with a DeprecationWarning and its values are
-            read as littleh / Mpc.
+            :attr:`kunits` (``astropy.cosmology.units.littleh /
+            astropy.units.Mpc`` or ``astropy.units.Mpc ** -1``). When
+            :attr:`kunits` is littleh / Mpc, hour / Mpc
+            (``astropy.units.h / astropy.units.Mpc``) is still accepted with a
+            DeprecationWarning and its values are read as littleh / Mpc.
 
         Returns
         -------
@@ -1901,7 +1989,7 @@ class UVWindow:
         except AttributeError:
             raise AttributeError("Feed k array with units (astropy.units).")
         hour_kunits = units.h / units.Mpc
-        if self.little_h and karray_unit.is_equivalent(hour_kunits):
+        if self.kunits == _LITTLEH_KUNITS and karray_unit.is_equivalent(hour_kunits):
             warnings.warn(
                 "k arrays in hour / Mpc (astropy.units.h / astropy.units.Mpc) "
                 "are deprecated; use astropy.cosmology.units.littleh / "
@@ -1911,7 +1999,9 @@ class UVWindow:
             )
             return karray.to_value(hour_kunits) * self.kunits
         if not self.kunits.is_equivalent(karray_unit):
-            raise ValueError("k array units not consistent with little_h")
+            raise ValueError(
+                f"k array units not consistent with kunits '{self.kunits}'"
+            )
         return karray.to(self.kunits)
 
 

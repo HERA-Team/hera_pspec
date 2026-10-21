@@ -57,7 +57,7 @@ def uvwindow_obj(ft_beam_spw: uvwindow.FTBeam, cosmo: FLRW) -> uvwindow.UVWindow
         ftbeam_obj=ft_beam_spw,
         taper="blackman-harris",
         cosmo=cosmo,
-        little_h=True,
+        kunits=cu.littleh / units.Mpc,
         verbose=False,
     )
 
@@ -555,15 +555,106 @@ class TestUVWindowInit:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, verbose=True)
         assert test.verbose
 
-    def test_little_h_true(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=True)
+    def test_default_kunits(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
         assert test.kunits == cu.littleh / units.Mpc
+        assert test.length_unit == units.Mpc / cu.littleh
         # astropy's units.h is the hour, not little h
         assert not test.kunits.is_equivalent(units.h / units.Mpc)
 
-    def test_little_h_false(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
+    @pytest.mark.parametrize(
+        "kunits", [1 / units.Mpc, units.Mpc ** (-1), "1 / Mpc", "Mpc-1"]
+    )
+    def test_inverse_mpc_kunits(self, ft_beam_spw: uvwindow.FTBeam, kunits) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=kunits)
         assert test.kunits == units.Mpc ** (-1)
+        assert str(test.kunits) == "1 / Mpc"
+        assert test.length_unit == units.Mpc
+
+    @pytest.mark.parametrize("kunits", [cu.littleh / units.Mpc, "littleh / Mpc"])
+    def test_littleh_kunits(self, ft_beam_spw: uvwindow.FTBeam, kunits) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=kunits)
+        assert test.kunits == cu.littleh / units.Mpc
+
+    @pytest.mark.parametrize(
+        "kunits", [1 / units.kpc, units.Mpc, units.h / units.Mpc, "not_a_unit"]
+    )
+    def test_bad_kunits_raise(self, ft_beam_spw: uvwindow.FTBeam, kunits) -> None:
+        with pytest.raises(ValueError):
+            uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=kunits)
+
+    @pytest.mark.parametrize(
+        ("little_h", "kunits"),
+        [(True, cu.littleh / units.Mpc), (False, units.Mpc ** (-1))],
+    )
+    def test_little_h_deprecated(
+        self, ft_beam_spw: uvwindow.FTBeam, little_h: bool, kunits
+    ) -> None:
+        with pytest.warns(DeprecationWarning, match="little_h argument") as record:
+            test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=little_h)
+        assert record[0].filename == __file__
+        assert test.kunits == kunits
+        # agreeing kunits and little_h is accepted (still with the warning)
+        with pytest.warns(DeprecationWarning, match="little_h argument"):
+            both = uvwindow.UVWindow(
+                ftbeam_obj=ft_beam_spw, kunits=kunits, little_h=little_h
+            )
+        assert both.kunits == kunits
+
+    @pytest.mark.parametrize(
+        ("little_h", "kunits"), [(True, 1 / units.Mpc), (False, cu.littleh / units.Mpc)]
+    )
+    def test_little_h_disagreement_raises(
+        self, ft_beam_spw: uvwindow.FTBeam, little_h: bool, kunits
+    ) -> None:
+        with pytest.warns(DeprecationWarning, match="little_h argument"):
+            with pytest.raises(ValueError, match="disagrees with kunits"):
+                uvwindow.UVWindow(
+                    ftbeam_obj=ft_beam_spw, kunits=kunits, little_h=little_h
+                )
+
+    @pytest.mark.parametrize(
+        ("kunits", "expected"), [(cu.littleh / units.Mpc, True), (1 / units.Mpc, False)]
+    )
+    def test_little_h_property_deprecated(
+        self, ft_beam_spw: uvwindow.FTBeam, kunits, expected: bool
+    ) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=kunits)
+        with pytest.warns(DeprecationWarning, match="UVWindow.little_h"):
+            assert test.little_h is expected
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_kunits_matches_old_little_h(
+        self, ft_beam_spw: uvwindow.FTBeam, little_h: bool
+    ) -> None:
+        # kunits gives the same object, window functions and bins as the
+        # deprecated flag did
+        kunits = cu.littleh / units.Mpc if little_h else 1 / units.Mpc
+        new = uvwindow.UVWindow(
+            ftbeam_obj=ft_beam_spw, taper="blackman-harris", kunits=kunits
+        )
+        with pytest.warns(DeprecationWarning, match="little_h argument"):
+            old = uvwindow.UVWindow(
+                ftbeam_obj=ft_beam_spw, taper="blackman-harris", little_h=little_h
+            )
+        assert new.kunits == old.kunits
+        bl_len = 14.6
+        new_kperp, new_kpara, new_wf = new.get_cylindrical_wf(
+            bl_len, return_bins="unweighted"
+        )
+        old_kperp, old_kpara, old_wf = old.get_cylindrical_wf(
+            bl_len, return_bins="unweighted"
+        )
+        np.testing.assert_array_equal(new_kperp, old_kperp)
+        np.testing.assert_array_equal(new_kpara, old_kpara)
+        np.testing.assert_array_equal(new_wf, old_wf)
+        assert new.get_kperp_bins([bl_len]).unit == kunits
+        np.testing.assert_array_equal(
+            new.get_kperp_bins([bl_len]), old.get_kperp_bins([bl_len])
+        )
+        np.testing.assert_array_equal(
+            new.get_kpara_bins(new.freq_array), old.get_kpara_bins(old.freq_array)
+        )
 
 
 class TestUVWindowFromUvpspec:
@@ -1245,20 +1336,20 @@ class TestUVWindowCheckKunits:
     def test_inverse_mpc_with_little_h_raises(
         self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
     ) -> None:
-        with pytest.raises(ValueError, match="not consistent with little_h"):
+        with pytest.raises(ValueError, match="not consistent with kunits"):
             uvwindow_obj.check_kunits(kbins.value / units.Mpc)
 
     def test_littleh_without_little_h_raises(
         self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
     ) -> None:
-        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        with pytest.raises(ValueError, match="not consistent with little_h"):
+        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=1 / units.Mpc)
+        with pytest.raises(ValueError, match="not consistent with kunits"):
             uvw.check_kunits(kbins)
 
     def test_dimensionless_raises(
         self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
     ) -> None:
-        with pytest.raises(ValueError, match="not consistent with little_h"):
+        with pytest.raises(ValueError, match="not consistent with kunits"):
             uvwindow_obj.check_kunits(kbins.value * units.dimensionless_unscaled)
 
     def test_hour_per_mpc_deprecated(
@@ -1272,8 +1363,8 @@ class TestUVWindowCheckKunits:
     def test_hour_per_mpc_without_little_h_raises(
         self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
     ) -> None:
-        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        with pytest.raises(ValueError, match="not consistent with little_h"):
+        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=1 / units.Mpc)
+        with pytest.raises(ValueError, match="not consistent with kunits"):
             uvw.check_kunits(kbins.value * units.h / units.Mpc)
 
 
@@ -1458,7 +1549,7 @@ class TestUVWindowRunAndWrite:
     ) -> None:
         kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
         with pytest.raises(
-            ValueError, match="k array units not consistent with little_h"
+            ValueError, match="k array units not consistent with kunits"
         ):
             uvwindow_obj.run_and_write(
                 filepath=str(tmp_path / outfile),
@@ -1615,7 +1706,7 @@ class TestGetWfForTauKnownExamples:
 
     @staticmethod
     def _kpar_norm(uvw: uvwindow.UVWindow, tau: float) -> np.ndarray:
-        length_unit = conversions.length_unit_from_little_h(uvw.little_h)
+        length_unit = uvw.length_unit
         alpha = conversions.dRpara_df(uvw.avg_z, uvw.cosmo, length_unit).to_value(
             length_unit / units.Hz
         )

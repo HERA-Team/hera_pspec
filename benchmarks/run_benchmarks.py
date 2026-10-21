@@ -244,9 +244,8 @@ def _uvwindow_setup() -> dict[str, Any]:
     ft_file = DATA_PATH / FT_BEAM_FILE
     bandwidth = uvwindow.FTBeam.get_bandwidth(ft_file)
     ftbeam = uvwindow.FTBeam.from_file(ftfile=ft_file, freq_array=bandwidth)
-    uvw = uvwindow.UVWindow(
-        ftbeam_obj=ftbeam, taper=PSPEC_TAPER, little_h=True, verbose=False
-    )
+    # default k unit: littleh / Mpc
+    uvw = uvwindow.UVWindow(ftbeam_obj=ftbeam, taper=PSPEC_TAPER, verbose=False)
     kperp_bins = uvw.get_kperp_bins(UVWINDOW_BL_LENS)
     kpara_bins = uvw.get_kpara_bins(uvw.freq_array)
     ktot = np.sqrt(kperp_bins.value[:, None] ** 2 + kpara_bins.value**2)
