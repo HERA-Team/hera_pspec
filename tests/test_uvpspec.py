@@ -1579,6 +1579,13 @@ def test_set_cosmology(
     assert uvp.norm_units == "Mpc3 / littleh3"
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert (uvp.scalar_array > 1.0).all()
+    # an unnormalised object gets a littleh scalar
+    np.testing.assert_array_equal(
+        uvp.scalar_array[0, 0],
+        uvp.compute_scalar(0, uvp.polpair_array[0]).to_value(
+            LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        ),
+    )
     assert (uvp.data_array[0] > 1e5).all()
 
     # test exception
@@ -1591,6 +1598,75 @@ def test_set_cosmology(
     uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=beam_nf_dipole)
     assert uvp.cosmo == new_cosmo2
     assert hasattr(uvp, "OmegaP")
+
+
+@pytest.fixture(scope="module")
+def set_cosmology_uvps(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> dict[str, uvpspec.UVPSpec]:
+    """pspec outputs normalised in Mpc3 / littleh3 and in Mpc3."""
+    return {
+        name: testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39), (52, 53)],
+            spw_ranges=[(20, 30), (60, 90)],
+            beam=beam_nf_dipole,
+            length_unit=length_unit,
+        )
+        for name, length_unit in (("littleh", LITTLEH_LENGTH), ("mpc", units.Mpc))
+    }
+
+
+@pytest.mark.parametrize(
+    "name, norm_units", [("littleh", "Mpc3 / littleh3"), ("mpc", "Mpc3")]
+)
+def test_set_cosmology_same_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec], name: str, norm_units: str
+) -> None:
+    """Re-setting the same cosmology keeps the data and the normalisation."""
+    uvp = copy.deepcopy(set_cosmology_uvps[name])
+    assert uvp.norm_units == norm_units
+    old = copy.deepcopy(uvp)
+    uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True, verbose=False)
+    assert uvp.norm_units == norm_units
+    # only the scalar's integration grid differs from pspec's (num_steps)
+    np.testing.assert_allclose(uvp.scalar_array, old.scalar_array, rtol=1e-4)
+    for spw in uvp.spw_array:
+        np.testing.assert_allclose(
+            uvp.data_array[spw], old.data_array[spw], rtol=1e-4, atol=0
+        )
+    # the scalar is in the object's own length unit
+    length_unit = LITTLEH_LENGTH if name == "littleh" else units.Mpc
+    for spw in uvp.spw_array:
+        np.testing.assert_array_equal(
+            uvp.scalar_array[spw, 0],
+            uvp.compute_scalar(
+                spw, uvp.polpair_array[0], length_unit=length_unit
+            ).to_value(length_unit**3 / (units.Hz * units.sr)),
+        )
+
+
+def test_set_cosmology_new_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec],
+) -> None:
+    """A new cosmology rescales the data by the scalar ratio, consistently
+    for littleh and Mpc objects."""
+    new_cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+    h_ratio = new_cosmo.h / conversions.DEFAULT_COSMOLOGY.h
+    ratios = {}
+    for name, original in set_cosmology_uvps.items():
+        uvp = copy.deepcopy(original)
+        uvp.set_cosmology(new_cosmo, overwrite=True, verbose=False)
+        assert uvp.norm_units == original.norm_units
+        ratios[name] = uvp.scalar_array / original.scalar_array
+        for spw in uvp.spw_array:
+            np.testing.assert_allclose(
+                uvp.data_array[spw],
+                original.data_array[spw] * ratios[name][spw],
+                rtol=1e-12,
+            )
+    # P in Mpc3 / littleh3 is P in Mpc3 times h^3
+    np.testing.assert_allclose(ratios["littleh"], ratios["mpc"] * h_ratio**3, rtol=1e-4)
 
 
 @pytest.mark.parametrize("form", ["astropy", "dict", "cosmo_conversions"])

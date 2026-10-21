@@ -2648,6 +2648,12 @@ class UVPSpec:
         then propagate these re-normalization changes into the data_array by
         multiplying the data by (new_scalar_array / old_scalar_array).
 
+        The scalar is computed in the length unit of the object's
+        ``norm_units`` (h^-1 Mpc or Mpc, see :meth:`_default_length_unit`).
+        Power spectra that were not cosmologically normalised (``Hz sr``)
+        get an h^-1 Mpc scalar and ``norm_units`` becomes
+        ``"Mpc3 / littleh3"``.
+
         Parameters
         ----------
         new_cosmo : astropy.cosmology.FLRW or dict
@@ -2700,18 +2706,21 @@ class UVPSpec:
             print(f"setting cosmology: \n{new_cosmo}")
         self.cosmo = new_cosmo
 
-        # Update scalar_array
+        # Update scalar_array, in the length unit of this object's
+        # normalisation (littleh for spectra not yet cosmologically normalised)
         if verbose:
             print("Updating scalar array and re-normalizing power spectra")
+        length_unit = self._default_length_unit()
+        scalar_unit = length_unit**3 / (units.Hz * units.sr)
         for spw in range(self.Nspws):
             for j, polpair in enumerate(self.polpair_array):
                 scalar = self.compute_scalar(
                     spw,
                     polpair,
                     num_steps=1000,
-                    length_unit=_LITTLEH_LENGTH,
+                    length_unit=length_unit,
                     noise_scalar=False,
-                ).to_value(_LITTLEH_LENGTH**3 / (units.Hz * units.sr))
+                ).to_value(scalar_unit)
 
                 # renormalize power spectra with new scalar
                 self.data_array[spw][:, :, j] *= scalar / self.scalar_array[spw, j]
