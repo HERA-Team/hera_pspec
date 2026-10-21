@@ -10,6 +10,7 @@ import pytest
 from astropy import units
 from pyuvdata import UVData
 from pyuvdata import utils as uvutils
+from pyuvdata.analytic_beam import GaussianBeam
 from uvtools import dspec
 
 from hera_pspec import PSpecData, UVPSpec, conversions, utils, uvwindow
@@ -227,7 +228,24 @@ class TestFTBeamInit:
 
 
 nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
-nf_efield_beamfits = DATA_PATH / "HERA_NF_efield.beamfits"
+
+
+@pytest.fixture(scope="module")
+def analytic_beamfits(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Beamfits files of one analytic Gaussian beam, as an efield and as a power
+    beam (keyed by beam type), on an NSIDE=16 HEALPix map at 120-180 MHz."""
+    tmp_path = tmp_path_factory.mktemp("analytic_beams")
+    files = {}
+    for beam_type in ["efield", "power"]:
+        uvb = GaussianBeam(sigma=0.15).to_uvbeam(
+            freq_array=np.linspace(120e6, 180e6, 3),
+            beam_type=beam_type,
+            pixel_coordinate_system="healpix",
+            nside=16,
+        )
+        files[beam_type] = tmp_path / f"gaussian_{beam_type}.beamfits"
+        uvb.write_beamfits(files[beam_type])
+    return files
 
 
 @pytest.fixture(scope="module")
@@ -342,17 +360,24 @@ class TestFTBeamFromBeam:
         assert np.all(np.isfinite(test.ft_beam))
 
     @pytest.mark.parametrize("pol", ["xx", "pI"])
-    def test_efield_beam_is_converted(self, pol: str) -> None:
-        # efield beams are converted to power (xx) or pseudo-Stokes (pI)
+    def test_efield_beam_is_converted(
+        self, analytic_beamfits: dict[str, Path], pol: str
+    ) -> None:
+        # efield beams are converted to power (xx) or pseudo-Stokes (pI). The
+        # x and y feeds of the analytic beam have the same power response, so
+        # once peak-normalized both equal the xx power beam of the same model.
+        kwargs = dict(freq_array=np.linspace(120e6, 180e6, 3), mapsize=1.0, npix=29)
         test = uvwindow.FTBeam.from_beam(
-            beamfile=nf_efield_beamfits,
-            pol=pol,
-            freq_array=np.linspace(120e6, 180e6, 3),
-            mapsize=1.0,
-            npix=29,
+            beamfile=analytic_beamfits["efield"], pol=pol, **kwargs
+        )
+        expected = uvwindow.FTBeam.from_beam(
+            beamfile=analytic_beamfits["power"], pol="xx", **kwargs
         )
         assert test.pol == pol
-        assert np.all(np.isfinite(test.ft_beam))
+        assert test.ft_beam.shape == expected.ft_beam.shape
+        np.testing.assert_allclose(
+            test.ft_beam, expected.ft_beam, atol=1e-12 * expected.ft_beam.max()
+        )
 
     def test_select_freqs_matches_direct_computation(
         self, nf_dipole_beam_freqs: np.ndarray
