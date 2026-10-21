@@ -478,6 +478,8 @@ class PSpecData:
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
+            # get_integral_beam results, keyed by spectral window and pol
+            self._integral_beam = {}
         else:
             for k in keys:
                 try:
@@ -2764,8 +2766,30 @@ class PSpecData:
         -------
         integral_beam : array_like
             integral containing the spectral beam and tapering.
+
+        Notes
+        -----
+        The result is cached per spectral window, polarization and beam
+        object, so the many calls made on the ``exact_norm`` path (one per
+        q_hat, get_G, get_H and get_unnormed_E) compute it once. The cache
+        is emptied by ``clear_cache()`` (called by ``pspec()`` for every
+        spectral window); call it after changing a beam in place. A copy is
+        returned, so callers may modify it.
         """
         nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
+
+        # The integral depends only on the frequencies, the polarization and
+        # the beam, so cache it (keyed on the frequencies themselves, since
+        # add() can change self.freqs) and check the beam by identity.
+        try:
+            cache_key = (tuple(self.spw_range), pol, nu.tobytes())
+            hash(cache_key)
+        except TypeError:
+            cache_key = None
+        if cache_key is not None:
+            cached = self._integral_beam.get(cache_key)
+            if cached is not None and cached[0] is self.primary_beam:
+                return cached[1].copy()
 
         try:
             # Get beam response in (frequency, pixel), beam area(freq) and
@@ -2780,6 +2804,12 @@ class PSpecData:
             # The nside term is dtheta^2, where dtheta is the resolution in
             # healpix map
             integral_beam = np.pi / (3.0 * N * N) * np.dot(beam_prod, beam_prod.T)
+
+            # the uniform-beam fallback below is not cached, so it keeps
+            # warning on every call
+            if cache_key is not None:
+                self._integral_beam[cache_key] = (self.primary_beam, integral_beam)
+                integral_beam = integral_beam.copy()
 
         except AttributeError:
             warnings.warn(

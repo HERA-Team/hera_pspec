@@ -687,6 +687,82 @@ def test_get_integral_beam(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     assert integral_matrix.shape == (ds.spw_Nfreqs, ds.spw_Nfreqs)
 
 
+class TestIntegralBeamCache:
+    """get_integral_beam is computed once per spectral window, pol and beam."""
+
+    @pytest.fixture
+    def counting_ds(self, beam_nf_dipole, uvd, monkeypatch):
+        calls = []
+        original = beam_nf_dipole.beam_normalized_response
+
+        def counting(pol, freq, *args, **kwargs):
+            calls.append((pol, len(freq)))
+            return original(pol, freq, *args, **kwargs)
+
+        monkeypatch.setattr(beam_nf_dipole, "beam_normalized_response", counting)
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=beam_nf_dipole)
+        ds.set_spw((10, 30))
+        return ds, calls
+
+    def test_repeated_calls_compute_once(self, counting_ds) -> None:
+        ds, calls = counting_ds
+        first = ds.get_integral_beam("xx")
+        second = ds.get_integral_beam("xx")
+        assert len(calls) == 1
+        assert first.tobytes() == second.tobytes()
+        # the cached value matches a fresh computation bit for bit
+        ds.clear_cache()
+        fresh = ds.get_integral_beam("xx")
+        assert len(calls) == 2
+        assert fresh.tobytes() == first.tobytes()
+
+    def test_returns_copies(self, counting_ds) -> None:
+        ds, _ = counting_ds
+        first = ds.get_integral_beam("xx")
+        expected = first.copy()
+        first *= 0.0
+        np.testing.assert_array_equal(ds.get_integral_beam("xx"), expected)
+
+    def test_new_spw_pol_or_beam_recomputes(self, counting_ds, beam_nf_dipole) -> None:
+        ds, calls = counting_ds
+        b1 = ds.get_integral_beam("xx")
+        ds.set_spw((10, 40))
+        b2 = ds.get_integral_beam("xx")
+        assert len(calls) == 2
+        assert b2.shape == (30, 30)
+        ds.get_integral_beam(-5)
+        assert len(calls) == 3
+        # back to the first window: served from the cache
+        ds.set_spw((10, 30))
+        np.testing.assert_array_equal(ds.get_integral_beam("xx"), b1)
+        assert len(calls) == 3
+        # a different beam object is never served the old result
+        ds.primary_beam = copy.copy(beam_nf_dipole)
+        ds.get_integral_beam("xx")
+        assert len(calls) == 4
+
+    def test_fallback_warns_on_every_call(self, uvd) -> None:
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd])
+        for _ in range(2):
+            with pytest.warns(UserWarning, match="could not be calculated"):
+                ds.get_integral_beam("xx")
+
+    def test_exact_norm_pspec_computes_once_per_spw(self, counting_ds) -> None:
+        ds, calls = counting_ds
+        ds.pspec(
+            [(24, 25), (24, 37)],
+            [(37, 38), (25, 38)],
+            (0, 1),
+            [("xx", "xx")],
+            spw_ranges=[(10, 20), (20, 30)],
+            exact_norm=True,
+            store_cov=True,
+            cov_model="autos",
+            verbose=False,
+        )
+        assert len(calls) == 2
+
+
 class TestGetUnnormedMatrices:
     def test_get_unnormed_E(self, beam_nf_dipole, uvd: UVData) -> None:
         """
