@@ -263,6 +263,67 @@ def length_unit_from_little_h(little_h):
     return _LITTLEH_LENGTH if little_h else u.Mpc
 
 
+def resolve_length_unit(length_unit=None, little_h=None, stacklevel=3):
+    """
+    Resolve a cosmological length unit from a unit argument and a legacy flag.
+
+    Parameters
+    ----------
+    length_unit : astropy.units.Unit or str, optional
+        Requested length unit, ``u.Mpc / cu.littleh`` (h^-1 Mpc) or ``u.Mpc``
+        (or another length, optionally per littleh). Default: None, which
+        means ``u.Mpc / cu.littleh`` unless ``little_h`` is given.
+
+    little_h : bool, optional
+        Deprecated flag: True for h^-1 Mpc, False for Mpc. Emits a
+        ``DeprecationWarning`` when not None.
+
+    stacklevel : int, optional
+        Stack level of the deprecation warning, counted from this function.
+
+    Returns
+    -------
+    astropy.units.Unit
+
+    Raises
+    ------
+    ValueError
+        If ``length_unit`` is not a length (optionally per littleh), or if
+        both arguments are given and disagree.
+    """
+    if length_unit is not None:
+        if isinstance(length_unit, str):
+            # strings such as "Mpc / littleh" need littleh enabled to parse
+            with u.add_enabled_units([cu.littleh]):
+                length_unit = u.Unit(length_unit)
+        else:
+            length_unit = u.Unit(length_unit)
+        if not (
+            length_unit.is_equivalent(u.Mpc)
+            or length_unit.is_equivalent(_LITTLEH_LENGTH)
+        ):
+            raise ValueError(
+                f"length_unit must be a length such as u.Mpc or u.Mpc / "
+                f"cu.littleh, got '{length_unit}'."
+            )
+    if little_h is None:
+        return _LITTLEH_LENGTH if length_unit is None else length_unit
+    warnings.warn(
+        "The little_h argument is deprecated; pass length_unit=u.Mpc / "
+        "cu.littleh (little_h=True) or length_unit=u.Mpc (little_h=False) "
+        "instead.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
+    from_flag = length_unit_from_little_h(little_h)
+    if length_unit is not None and length_unit != from_flag:
+        raise ValueError(
+            f"little_h={little_h} disagrees with length_unit='{length_unit}'; "
+            "pass only length_unit."
+        )
+    return from_flag
+
+
 def _to_length_unit(quantity, unit, cosmo):
     """Convert a Quantity to ``unit``, resolving littleh with ``cosmo.H0``."""
     return quantity.to(unit, cu.with_H0(cosmo.H0))

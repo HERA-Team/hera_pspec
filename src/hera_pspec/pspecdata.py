@@ -3105,7 +3105,7 @@ class PSpecData:
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                little_h=little_h,
+                length_unit=conversions.length_unit_from_little_h(little_h),
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )
@@ -3116,7 +3116,7 @@ class PSpecData:
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                little_h=little_h,
+                length_unit=conversions.length_unit_from_little_h(little_h),
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )

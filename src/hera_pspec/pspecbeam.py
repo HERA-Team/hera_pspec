@@ -20,9 +20,10 @@ def _compute_pspec_scalar(
     pspec_freqs,
     num_steps=5000,
     taper="none",
-    little_h=True,
+    little_h=None,
     noise_scalar=False,
     exact_norm=False,
+    length_unit=None,
 ):
     r"""
     This is not to be used by the novice user to calculate a pspec scalar.
@@ -58,8 +59,8 @@ def _compute_pspec_scalar(
         power spectrum estimation. Default: 'none'.
 
     little_h : boolean, optional
-        Whether to have cosmological length units be h^-1 Mpc or Mpc. Value of
-        h is obtained from cosmo object stored in pspecbeam. Default: h^-1 Mpc.
+        Deprecated, use ``length_unit``. Whether to have cosmological length
+        units be h^-1 Mpc (True) or Mpc (False).
 
     noise_scalar : boolean, optional
         Whether to calculate power spectrum scalar, or noise power scalar. The
@@ -70,13 +71,17 @@ def _compute_pspec_scalar(
         returns only X2Y for scalar if True, else uses the existing framework
         involving antenna beam and spectral tapering factors. Default: False.
 
+    length_unit : astropy.units.Unit, optional
+        Cosmological length unit. Default: ``u.Mpc / cu.littleh`` (h^-1 Mpc,
+        with h from ``cosmo``); use ``u.Mpc`` for Mpc.
+
     Returns
     -------
     scalar: float
         [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-        Units: h^-3 Mpc^3 or Mpc^3.
+        in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
     """
-    length_unit = conversions.length_unit_from_little_h(little_h)
+    length_unit = conversions.resolve_length_unit(length_unit, little_h)
 
     # Get integration freqs
     df = np.median(np.diff(pspec_freqs))
@@ -176,9 +181,10 @@ class PSpecBeamBase:
         num_steps=5000,
         pol="pI",
         taper="none",
-        little_h=True,
+        little_h=None,
         noise_scalar=False,
         exact_norm=False,
+        length_unit=None,
     ):
         r"""
         Computes the scalar function to convert a power spectrum estimate
@@ -217,9 +223,8 @@ class PSpecBeamBase:
             the power spectrum estimation. Default: none.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc. Value
-            of h is obtained from cosmo object stored in pspecbeam.
-            Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. Whether to have cosmological
+            length units be h^-1 Mpc (True) or Mpc (False).
 
         noise_scalar : boolean, optional
             Whether to calculate power spectrum scalar, or noise power scalar.
@@ -230,12 +235,19 @@ class PSpecBeamBase:
             returns only X2Y for scalar if True, else uses the existing framework
             involving antenna beam and spectral tapering factors. Default: False.
 
+        length_unit : astropy.units.Unit, optional
+            Cosmological length unit. Default: ``u.Mpc / cu.littleh``
+            (h^-1 Mpc, with h from ``self.cosmo``); use ``u.Mpc`` for Mpc
+            (the old ``little_h=False``).
+
         Returns
         -------
         scalar: float
             [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-            Units: h^-3 Mpc^3 or Mpc^3.
+            in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
         """
+        length_unit = conversions.resolve_length_unit(length_unit, little_h)
+
         # Get pspec_freqs
         pspec_freqs = np.linspace(lower_freq, upper_freq, num_freqs, endpoint=False)
 
@@ -250,9 +262,9 @@ class PSpecBeamBase:
             pspec_freqs,
             num_steps=num_steps,
             taper=taper,
-            little_h=little_h,
             noise_scalar=noise_scalar,
             exact_norm=exact_norm,
+            length_unit=length_unit,
         )
         return scalar
 

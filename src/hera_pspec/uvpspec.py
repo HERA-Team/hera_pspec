@@ -3435,8 +3435,8 @@ class UVPSpec:
             spw_freqs,
             num_steps=num_steps,
             taper=self.taper,
-            little_h=little_h,
             noise_scalar=noise_scalar,
+            length_unit=conversions.length_unit_from_little_h(little_h),
         )
         return scalar
 

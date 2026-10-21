@@ -200,7 +200,7 @@ class Sensitivity:
             len(freqs),
             num_steps=num_steps,
             pol=pol,
-            little_h=little_h,
+            length_unit=conversions.length_unit_from_little_h(little_h),
             noise_scalar=True,
         )
         self.subband = freqs

@@ -379,7 +379,7 @@ def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
                         num_steps=2000,
                         pol=pol,
                         taper=taper,
-                        little_h=little_h,
+                        length_unit=conversions.length_unit_from_little_h(little_h),
                         noise_scalar=noise_scalar,
                         exact_norm=exact_norm,
                     )

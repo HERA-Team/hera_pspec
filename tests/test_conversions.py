@@ -494,3 +494,36 @@ class TestAstropyCosmologyObjects:
         """little_h maps to Mpc / littleh, otherwise Mpc."""
         assert conversions.length_unit_from_little_h(True) == u.Mpc / cu.littleh
         assert conversions.length_unit_from_little_h(False) == u.Mpc
+
+
+class TestResolveLengthUnit:
+    def test_default(self) -> None:
+        assert conversions.resolve_length_unit() == u.Mpc / cu.littleh
+
+    @pytest.mark.parametrize(
+        "unit", [u.Mpc, u.Mpc / cu.littleh, "Mpc", u.kpc, u.Gpc / cu.littleh]
+    )
+    def test_length_units_pass(self, unit) -> None:
+        assert conversions.resolve_length_unit(unit) == u.Unit(unit)
+
+    def test_littleh_string(self) -> None:
+        unit = conversions.resolve_length_unit("Mpc / littleh")
+        assert unit == u.Mpc / cu.littleh
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_little_h_deprecated(self, little_h) -> None:
+        with pytest.warns(DeprecationWarning, match="little_h argument"):
+            unit = conversions.resolve_length_unit(little_h=little_h)
+        assert unit == conversions.length_unit_from_little_h(little_h)
+
+    def test_disagreement_raises(self) -> None:
+        with (
+            pytest.warns(DeprecationWarning),
+            pytest.raises(ValueError, match="disagrees"),
+        ):
+            conversions.resolve_length_unit(u.Mpc, little_h=True)
+
+    @pytest.mark.parametrize("unit", [u.s, u.Mpc**2, cu.littleh])
+    def test_bad_unit_raises(self, unit) -> None:
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            conversions.resolve_length_unit(unit)
