@@ -636,6 +636,26 @@ def test_bootstrap_average_blpairs_multiple_uvps() -> None:
     np.testing.assert_allclose(avgs[1].get_data(key), uvp.get_data(key))
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValueError,
+    reason=(
+        "a UVPSpec that receives no draws in a group has zero total weight and "
+        "average_spectra raises, see #570"
+    ),
+)
+def test_bootstrap_average_blpairs_object_without_draws() -> None:
+    """When the draws of a group all fall on the baseline pairs of some of the
+    UVPSpecs, bootstrapping must still succeed for the others."""
+    uvp, _ = testing.build_vanilla_uvpspec(data="random")
+    uvp1 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
+    uvp2 = uvp.select(blpairs=[101103101103], inplace=False)
+    group = [101102101102, 102103102103, 101103101103]
+    # with this seed, all three draws fall on the baseline pairs of uvp1
+    avgs, _ = grouping.bootstrap_average_blpairs([uvp1, uvp2], [group], seed=0)
+    assert len(avgs) == 2
+
+
 class TestBootstrapResampledError:
     def test_basic(self, tmp_path: Path, uvp_three_red_bls: UVPSpec) -> None:
         """Check that bootstrap_resampled_error returns the expected number of samples and respects the random seed."""
