@@ -793,6 +793,17 @@ class TestSpherical:
         del uvp.window_function_array
         sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
         assert not hasattr(sph, "window_function_array")
+        # the window functions only feed the output window functions: the
+        # averaged power spectra and errors are unchanged without them
+        sph_ref = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
+        for spw in range(sph.Nspws):
+            np.testing.assert_array_equal(sph.data_array[spw], sph_ref.data_array[spw])
+            np.testing.assert_array_equal(
+                sph.cov_array_real[spw], sph_ref.cov_array_real[spw]
+            )
+            np.testing.assert_array_equal(
+                sph.stats_array["err"][spw], sph_ref.stats_array["err"][spw]
+            )
 
     def test_average_kbins_and_normalization(self, uvp_spherical: UVPSpec) -> None:
         """Check kbin values, WF normalization, data smell test, errorbar reduction, and array-shape bug checks."""

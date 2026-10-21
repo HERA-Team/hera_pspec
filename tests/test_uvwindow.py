@@ -242,8 +242,15 @@ class TestFTBeamFromBeam:
             npix=29,
         )
 
-    def test_attributes(self, small_ft_beam: uvwindow.FTBeam) -> None:
+    def test_attributes(
+        self, small_ft_beam: uvwindow.FTBeam, nf_dipole_beam_freqs: np.ndarray
+    ) -> None:
         assert small_ft_beam.pol == "xx"
+        assert small_ft_beam.mapsize == 1.0
+        np.testing.assert_array_equal(
+            small_ft_beam.freq_array,
+            np.linspace(nf_dipole_beam_freqs.min(), nf_dipole_beam_freqs.max(), 5),
+        )
         assert small_ft_beam.ft_beam.ndim == 3
         assert small_ft_beam.ft_beam.shape[0] == small_ft_beam.freq_array.size == 5
         assert small_ft_beam.ft_beam.shape[1] == small_ft_beam.ft_beam.shape[2]
@@ -294,6 +301,8 @@ class TestFTBeamFromBeam:
         assert np.allclose(test.freq_array, freqs_over)
         # clamped channel = beam evaluated at the edge frequency
         assert np.allclose(test.ft_beam[0], test.ft_beam[1])
+        # ...which is not trivially true: the beam changes with frequency
+        assert not np.allclose(test.ft_beam[1], test.ft_beam[2])
 
     def test_even_npix_adjusted_to_odd(self, small_ft_beam: uvwindow.FTBeam) -> None:
         # npix=30 is adjusted down to 29, reproducing small_ft_beam exactly
@@ -306,9 +315,9 @@ class TestFTBeamFromBeam:
         )
         assert test == small_ft_beam
 
-    @pytest.mark.parametrize("mapsize", [0.35, uvwindow._MAX_R])
+    @pytest.mark.parametrize(("mapsize", "ngrid"), [(0.35, 15), (uvwindow._MAX_R, 29)])
     def test_mapsize_within_beam_coverage(
-        self, small_ft_beam: uvwindow.FTBeam, mapsize: float
+        self, small_ft_beam: uvwindow.FTBeam, mapsize: float, ngrid: int
     ) -> None:
         # mapsize < _MAX_R crops the beam map; mapsize = _MAX_R uses it as is
         test = uvwindow.FTBeam.from_beam(
@@ -318,8 +327,9 @@ class TestFTBeamFromBeam:
             mapsize=mapsize,
             npix=29,
         )
-        assert test.ft_beam.shape[-1] <= 29
-        assert test.ft_beam.shape[-1] % 2 == 1
+        # the 29-pixel map spans +-_MAX_R, so the (odd) FT grid holds
+        # ~2 * mapsize / pixel width pixels
+        assert test.ft_beam.shape == (small_ft_beam.freq_array.size, ngrid, ngrid)
         assert np.all(np.isfinite(test.ft_beam))
 
     @pytest.mark.parametrize("pol", ["xx", "pI"])
@@ -373,6 +383,8 @@ class TestFTBeamFromFile:
             x_orientation="east",
         )
         assert test.pol == "xx"
+        assert test.x_orientation == "east"
+        np.testing.assert_array_equal(test.freq_array, ft_bandwidth[5:25])
 
     def test_invalid_ftfile_type(self) -> None:
         with pytest.raises(
@@ -403,11 +415,14 @@ class TestFTBeamFromFile:
         assert np.allclose(test.freq_array, ft_bandwidth)
 
     @pytest.mark.parametrize(
-        "bad_freqs",
-        [np.array([250e6, 251e6]), np.array([100e6])],  # out of coverage; single
+        ("bad_freqs", "match"),
+        [
+            (np.array([250e6, 251e6]), "beyond the bandwidth"),
+            (np.array([100e6]), "at least two frequencies"),
+        ],
     )
-    def test_invalid_freq_array(self, bad_freqs: np.ndarray) -> None:
-        with pytest.raises(ValueError):
+    def test_invalid_freq_array(self, bad_freqs: np.ndarray, match: str) -> None:
+        with pytest.raises(ValueError, match=match):
             uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
 
     @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
@@ -1496,15 +1511,16 @@ class TestFTBeamSelectFreqs:
     def test_mismatched_grid_interpolates_with_warning(
         self, ft_bandwidth: np.ndarray
     ) -> None:
-        # midpoints of a linear grid: linear interpolation is exactly the
-        # average of the neighbouring channels
+        # a quarter of the way between channels of a linear grid: linear
+        # interpolation weighs the lower channel by 3/4 and the upper by 1/4
+        # (unequal weights, so swapping them would be caught)
         full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
-        midpoints = 0.5 * (ft_bandwidth[3:10] + ft_bandwidth[4:11])
+        targets = 0.75 * ft_bandwidth[3:10] + 0.25 * ft_bandwidth[4:11]
         with pytest.warns(UserWarning, match="interpolating"):
-            interp = full.select_freqs(midpoints, inplace=False)
-        assert np.allclose(interp.freq_array, midpoints)
+            interp = full.select_freqs(targets, inplace=False)
+        assert np.allclose(interp.freq_array, targets)
         assert np.allclose(
-            interp.ft_beam, 0.5 * (full.ft_beam[3:10] + full.ft_beam[4:11])
+            interp.ft_beam, 0.75 * full.ft_beam[3:10] + 0.25 * full.ft_beam[4:11]
         )
 
     def test_out_of_coverage_raises(self, ft_bandwidth: np.ndarray) -> None:
@@ -1560,6 +1576,8 @@ class TestFTBeamWriteHdf5:
         ft_beam_spw.write_hdf5(fname, extra_attrs={"beam_file": "sim.fits"})
         back = uvwindow.FTBeam.from_file(ftfile=fname)
         assert back == ft_beam_spw
+        with h5py.File(fname, "r") as f:
+            assert f.attrs["beam_file"] == "sim.fits"
         assert back != 1  # non-FTBeam comparison falls through NotImplemented
 
     def test_no_overwrite_by_default(
@@ -1569,7 +1587,10 @@ class TestFTBeamWriteHdf5:
         ft_beam_spw.write_hdf5(fname)
         with pytest.raises(FileExistsError, match="overwrite"):
             ft_beam_spw.write_hdf5(fname)
-        ft_beam_spw.write_hdf5(fname, overwrite=True)
+        # with overwrite=True the file is replaced by the new content
+        other = ft_beam_spw.select_freqs(ft_beam_spw.freq_array[:5], inplace=False)
+        other.write_hdf5(fname, overwrite=True)
+        assert uvwindow.FTBeam.from_file(ftfile=fname) == other
 
 
 class TestFTBeamDataGridMismatch:
