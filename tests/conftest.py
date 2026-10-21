@@ -4,6 +4,7 @@ This adds several mock UVPSpec objects that can be used throughout the tests.
 """
 
 import copy
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import numpy as np
 import pytest
 from astropy.cosmology import FLRW
 from astropy.utils import iers
+from hypothesis import settings
 from pyuvdata import UVData
 
 from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, conversions, grouping, utils
@@ -21,6 +23,18 @@ DATA_PATH = Path(DATA_PATH)
 
 # Prevent astropy from trying to download IERS data during tests (CI often blocks outbound traffic)
 iers.conf.auto_download = False
+
+# Settings for the property-based tests (tests/test_properties.py). Run times
+# vary between machines, so hypothesis's per-example deadline is disabled. In CI
+# (GitHub Actions sets CI=true) the inputs are derandomized, so that every run
+# tests the same examples and a failure can be reproduced; locally each run
+# draws new examples, and failing ones are saved in .hypothesis/ and replayed.
+# Use e.g. --hypothesis-profile=ci or --hypothesis-seed=0 to override.
+settings.register_profile("default", max_examples=50, deadline=None)
+settings.register_profile(
+    "ci", settings.get_profile("default"), derandomize=True, print_blob=True
+)
+settings.load_profile("ci" if os.environ.get("CI") else "default")
 
 
 def pytest_configure(config):
