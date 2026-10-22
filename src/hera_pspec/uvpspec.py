@@ -668,6 +668,11 @@ class UVPSpec:
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            if self.exact_windows:
+                # only the delay axis is folded; (kperp, kpara) grid is untouched
+                return self.window_function_array[spw][
+                    blpairts, -(Ndlys - Ndlys // 2 - 1) :, ..., polpair
+                ]
             return self.window_function_array[spw][
                 blpairts,
                 -(Ndlys - Ndlys // 2 - 1) :,

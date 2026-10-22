@@ -945,6 +945,27 @@ class TestGetExactWindowFunctions:
         )
         assert np.allclose(wf_array[0], uvp_exact_wfs.window_function_array[0])
 
+    def test_get_window_function_folded(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        """Check that get_window_function only slices the delay axis of folded exact window functions."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        uvp.fold_spectra()
+        key = uvp.get_all_keys()[0]
+        spw, blpairts, polpair = uvp.key_to_indices(key)
+        Ndlys = np.count_nonzero(uvp.spw_dly_array == spw)
+        wf = uvp.get_window_function(key)
+        # delays fold to positive values; kperp and kpara grids are untouched
+        assert wf.shape == (
+            len(blpairts),
+            Ndlys - Ndlys // 2 - 1,
+            *uvp.window_function_array[spw].shape[2:-1],
+        )
+        np.testing.assert_array_equal(
+            wf,
+            uvp.window_function_array[spw][
+                blpairts, -(Ndlys - Ndlys // 2 - 1) :, :, :, polpair
+            ],
+        )
+
     def test_recompute_single_spw_warns(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
         """Check that recomputing for one spw on an object with exact_windows already set warns."""
         uvp = copy.deepcopy(uvp_exact_wfs)
