@@ -2,10 +2,13 @@ import copy
 import glob
 from pathlib import Path
 
+import astropy.cosmology.units as cu
+import astropy.units as u
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from astropy import constants as const
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -229,7 +232,7 @@ class TestDelaySpectrum:
         blps = [blp for blp in blpairs]
 
         # Set cosmology and plot in non-delay (i.e. cosmological) units
-        uvp.set_cosmology(conversions.Cosmo_Conversions())
+        uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY)
         f1 = plot.delay_spectrum(
             uvp,
             [blps],
@@ -493,7 +496,7 @@ class TestDelayWaterfall:
         Delta^2."""
         blpairs = np.unique(uvp.blpair_array).tolist()
         blps = [uvp.blpair_to_antnums(blp) for blp in blpairs]
-        uvp.set_cosmology(conversions.Cosmo_Conversions(), overwrite=True)
+        uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True)
 
         f1 = plot.delay_waterfall(
             uvp, [blps], spw=0, pol=("xx", "xx"), average_blpairs=True, delay=False
@@ -673,6 +676,30 @@ class TestDelayWedge:
         )
         plt.close()
 
+    @pytest.mark.parametrize("deltasq", [False, True])
+    def test_colorbar_units_label(
+        self, delay_wedge_uvp: UVPSpec, deltasq: bool
+    ) -> None:
+        """The colourbar label is the astropy LaTeX form of uvp.units."""
+        fig = plot.delay_wedge(
+            delay_wedge_uvp,
+            0,
+            ("xx", "xx"),
+            delay=False,
+            deltasq=deltasq,
+            colorbar=True,
+        )
+        label = fig.axes[-1].get_ylabel()
+        if deltasq:
+            # the littleh and Mpc of P(k) cancel against those of k^3
+            assert "Mpc" not in label
+            assert r"\Delta^2" in label
+        else:
+            assert r"\mathrm{Mpc^{3}" in label
+            assert "h_{100}^{-3}" in label
+        fig.canvas.draw()
+        plt.close(fig)
+
     def test_fold_deltasq_cosmo_log(self, delay_wedge_uvp: UVPSpec) -> None:
         uvp = delay_wedge_uvp
         _ = plot.delay_wedge(
@@ -791,3 +818,134 @@ class TestDelayWedge:
         with pytest.raises(ValueError, match="Did not understand component foo"):
             plot.delay_wedge(delay_wedge_uvp, 0, ("xx", "xx"), component="foo")
         plt.close()
+
+
+@pytest.fixture(scope="module")
+def k_axis_uvps(
+    uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> dict[str, UVPSpec]:
+    """The same redundant-group spectra normalised in Mpc^3 / littleh^3 and in Mpc^3."""
+    uvd1 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[:-1:2], inplace=False
+    )
+    uvd2 = uvd_zen_all_xx.select(
+        times=np.unique(uvd_zen_all_xx.time_array)[1::2], inplace=False
+    )
+    ds = pspecdata.PSpecData(
+        dsets=[uvd1, uvd2], wgts=[None, None], beam=copy.deepcopy(beam_nf_dipole)
+    )
+    ds.rephase_to_dset(0)
+    bls1, bls2, _, _, _ = utils.calc_blpair_reds(
+        ds.dsets[0], ds.dsets[1], exclude_auto_bls=False, exclude_permutations=True
+    )
+    return {
+        name: ds.pspec(
+            bls1,
+            bls2,
+            (0, 1),
+            ("xx", "xx"),
+            spw_ranges=[(300, 350)],
+            input_data_weight="identity",
+            norm="I",
+            taper="blackman-harris",
+            length_unit=length_unit,
+            verbose=False,
+        )
+        for name, length_unit in (("littleh", u.Mpc / cu.littleh), ("mpc", u.Mpc))
+    }
+
+
+class TestKAxisUnits:
+    """k axes use the object's own length unit, as get_kparas / get_kperps do."""
+
+    K_UNIT_LATEX = {
+        "littleh": r"\mathrm{h_{100}\,Mpc^{-1}}",
+        "mpc": r"\mathrm{Mpc^{-1}}",
+    }
+    LENGTH_UNIT = {"littleh": u.Mpc / cu.littleh, "mpc": u.Mpc}
+
+    @pytest.mark.parametrize("name", ["littleh", "mpc"])
+    def test_delay_spectrum(self, k_axis_uvps: dict[str, UVPSpec], name: str) -> None:
+        uvp = k_axis_uvps[name]
+        blp = uvp.get_blpairs()[0]
+        fig = plot.delay_spectrum(
+            uvp, [[blp]], spw=0, pol=("xx", "xx"), average_times=True, delay=False
+        )
+        ax = fig.axes[0]
+        assert ax.get_xlabel() == rf"$k_{{\parallel}}\ [{self.K_UNIT_LATEX[name]}]$"
+        k_para = uvp.get_kparas(0)
+        assert k_para.unit == self.LENGTH_UNIT[name] ** -1
+        np.testing.assert_array_equal(ax.lines[0].get_xdata(), k_para.value)
+        fig.canvas.draw()
+        plt.close(fig)
+
+    @pytest.mark.parametrize("name", ["littleh", "mpc"])
+    def test_delay_waterfall(self, k_axis_uvps: dict[str, UVPSpec], name: str) -> None:
+        uvp = k_axis_uvps[name]
+        blp = uvp.get_blpairs()[0]
+        fig = plot.delay_waterfall(uvp, [[blp]], spw=0, pol=("xx", "xx"), delay=False)
+        xlabels = [ax.get_xlabel() for ax in fig.axes if ax.get_xlabel()]
+        assert rf"$k_{{\parallel}}\ [{self.K_UNIT_LATEX[name]}]$" in xlabels
+        plt.close(fig)
+
+    @pytest.mark.parametrize("name", ["littleh", "mpc"])
+    def test_delay_wedge_labels_and_horizons(
+        self, k_axis_uvps: dict[str, UVPSpec], name: str
+    ) -> None:
+        """Labels show 1 / L and the horizon lines are computed in the axis unit."""
+        uvp = k_axis_uvps[name]
+        length_unit = self.LENGTH_UNIT[name]
+        fig = plot.delay_wedge(
+            uvp,
+            0,
+            ("xx", "xx"),
+            delay=False,
+            rotate=False,
+            horizon_lines=True,
+            colorbar=False,
+        )
+        ax = fig.axes[0]
+        unit = self.K_UNIT_LATEX[name]
+        assert ax.get_xlabel() == rf"$k_{{\parallel}}\ [{unit}]$"
+        assert ax.get_ylabel() == rf"$k_{{\perp}}\ [{unit}]$"
+        # pcolormesh x range covers the k_parallel values in 1 / L
+        k_para = uvp.get_kparas(0, length_unit=length_unit).value
+        x_min, x_max = ax.collections[0].get_coordinates()[0, [0, -1], 0]
+        assert x_min < k_para.min() < k_para.max() < x_max
+        # horizon lines: |b| / c times d k_parallel / d tau, in the same 1 / L
+        horizon_x = sorted(
+            {
+                line.get_xdata()[0]
+                for line in ax.lines
+                if line.get_color() == "#ffffff" and line.get_xdata()[0] > 0
+            }
+        )
+        seps = np.unique(np.round(uvp.get_blpair_seps().to_value(u.m), 6))
+        avg_z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(0)]))
+        expected = (
+            seps
+            * u.m
+            / const.c
+            * conversions.tau_to_kpara(avg_z, uvp.cosmo, length_unit)
+        ).to_value(length_unit**-1)
+        # delay_wedge averages redundant groups, so each line uses one member's
+        # length: match each line to the separations within 1e-3
+        assert len(horizon_x) > 1
+        for hor in horizon_x:
+            assert np.isclose(expected, hor, rtol=1e-3, atol=0).any()
+        plt.close(fig)
+
+    def test_mpc_axes_are_littleh_axes_times_h(
+        self, k_axis_uvps: dict[str, UVPSpec]
+    ) -> None:
+        """The Mpc^-1 wedge axes and horizons equal the h Mpc^-1 ones times h."""
+        lines = {}
+        for name, uvp in k_axis_uvps.items():
+            fig = plot.delay_wedge(
+                uvp, 0, ("xx", "xx"), delay=False, horizon_lines=True, colorbar=False
+            )
+            ax = fig.axes[0]
+            lines[name] = np.array([line.get_xdata() for line in ax.lines])
+            plt.close(fig)
+        h = k_axis_uvps["mpc"].cosmo.h
+        np.testing.assert_allclose(lines["mpc"], lines["littleh"] * h, rtol=1e-10)

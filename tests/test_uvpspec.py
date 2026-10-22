@@ -1,9 +1,13 @@
 import copy
+import re
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 import pytest
+from astropy import units
+from astropy.cosmology import FLRW, LambdaCDM
 from hera_cal import redcal
 from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
@@ -63,7 +67,9 @@ def uvp_with_covariance(
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA with covariance computed (store_cov=True)."""
     uvd = copy.deepcopy(uvd_zen_even_xx)
 
-    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(
+        np.unique(uvd.freq_array) * units.Hz, pol="XX"
+    )
     uvd.data_array *= Jy_to_mK[None, :, None]
 
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[: uvd.Ntimes // 2], inplace=False)
@@ -75,7 +81,7 @@ def uvp_with_covariance(
     ds.rephase_to_dset(0)
 
     spws = utils.spw_range_from_freqs(
-        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)] * units.Hz, bounds_error=True
     )
     antpos, ants = uvd.get_enu_data_ants()
     red_bls = redcal.get_pos_reds(dict(zip(ants, antpos)), bl_error_tol=1.0)
@@ -185,8 +191,9 @@ class TestGetFuncs:
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_get_blpair_seps(self, uvp: uvpspec.UVPSpec) -> None:
         blp = uvp.get_blpair_seps()
+        assert blp.unit == units.m
         assert len(blp) == 30
-        assert np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all()
+        assert np.isclose(blp.to_value(units.m), 14.60, rtol=1e-1, atol=1e-1).all()
 
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_get_kperps_and_kparas(self, uvp: uvpspec.UVPSpec) -> None:
@@ -340,11 +347,74 @@ class TestStatsArray:
         uvp.set_stats_slice("err", 50, 0, above=True, val=10)
         # ensure all dlys above 50 * 15 ns are set to 10 and all others set to 1
         assert np.isclose(
-            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) > 15 * 50], 10
+            uvp.get_stats("err", key)[
+                :, np.abs(uvp.get_dlys(0).to_value(units.ns)) > 15 * 50
+            ],
+            10,
         ).all()
         assert np.isclose(
-            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) < 15 * 50], 1
+            uvp.get_stats("err", key)[
+                :, np.abs(uvp.get_dlys(0).to_value(units.ns)) < 15 * 50
+            ],
+            1,
         ).all()
+
+    @staticmethod
+    def _mk_littleh_uvp(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
+        uvp = copy.deepcopy(uvp)
+        uvp.vis_units = "mK"
+        uvp.norm_units = "Mpc3 / littleh3"
+        assert uvp.units == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        return uvp
+
+    def test_set_stats_quantity_in_pspec_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        """A Quantity in uvp.units is stored as its values; a plain array as given."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.arange(uvp.Ntimes * uvp.Ndlys, dtype=float).reshape(
+            uvp.Ntimes, uvp.Ndlys
+        )
+        uvp.set_stats("err", key, values * uvp.units)
+        stored = uvp.get_stats("err", key)
+        assert not isinstance(stored, units.Quantity)
+        np.testing.assert_array_equal(stored, values)
+        uvp.set_stats("plain", key, values)
+        np.testing.assert_array_equal(uvp.get_stats("plain", key), values)
+        # the uncalibrated, not cosmologically normalised vanilla object
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.set_stats("err", key, values * uvp.units)
+        np.testing.assert_array_equal(uvp.get_stats("err", key), values)
+
+    def test_set_stats_quantity_converted(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """A Quantity in an equivalent unit is converted to uvp.units."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.full((uvp.Ntimes, uvp.Ndlys), 2.5)
+        uvp.set_stats("err", key, values * units.K**2 * units.Mpc**3 / cu.littleh**3)
+        np.testing.assert_allclose(uvp.get_stats("err", key), values * 1e6, rtol=1e-15)
+
+    @pytest.mark.parametrize(
+        "bad_unit",
+        [
+            units.mK**2 * units.Mpc**3,  # no littleh: needs a cosmology, not converted
+            units.mK**2,
+            units.dimensionless_unscaled,
+        ],
+    )
+    def test_set_stats_quantity_wrong_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec, bad_unit: units.UnitBase
+    ) -> None:
+        """A Quantity whose unit cannot be converted to uvp.units raises ValueError."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.ones((uvp.Ntimes, uvp.Ndlys))
+        with pytest.raises(
+            ValueError, match="cannot be converted to the power spectrum"
+        ):
+            uvp.set_stats("err", key, values * bad_unit)
+        assert not hasattr(uvp, "stats_array") or "err" not in uvp.stats_array
 
 
 def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> None:
@@ -365,7 +435,9 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
     # testing
     dsq = uvp.convert_to_deltasq(inplace=False)
     for spw in uvp.spw_array:
-        k_perp, k_para = uvp.get_kperps(spw), uvp.get_kparas(spw)
+        k_unit = cu.littleh / units.Mpc
+        k_perp = uvp.get_kperps(spw).to_value(k_unit)
+        k_para = uvp.get_kparas(spw).to_value(k_unit)
         k_mag = np.sqrt(k_perp[:, None, None] ** 2 + k_para[None, :, None] ** 2)
         coeff = k_mag**3 / (2 * np.pi**2)
         # check data
@@ -382,7 +454,197 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
             dsq.cov_array_real[spw][0, :, :, 0].diagonal(),
             uvp.cov_array_real[spw][0, :, :, 0].diagonal() * coeff[0, :, 0] ** 2,
         ).all()
-    assert dsq.norm_units == uvp.norm_units + " k^3 / (2pi^2)"
+    # P(k) in mK^2 Mpc^3 / littleh^3 becomes Delta^2 in mK^2
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
+    assert dsq.norm_units == uvp.norm_units
+    assert dsq.norm_unit == units.dimensionless_unscaled
+    assert dsq.units == uvp.vis_unit**2
+    assert dsq.deltasq is True
+    assert uvp.deltasq is False
+
+
+LITTLEH_LENGTH = units.Mpc / cu.littleh
+
+
+def _with_norm_units(uvp: UVPSpec, norm_units: str) -> UVPSpec:
+    """Return a copy of uvp with its norm_units string replaced."""
+    uvp = copy.deepcopy(uvp)
+    uvp.norm_units = norm_units
+    return uvp
+
+
+def _expected_ks(uvp: UVPSpec, spw: int, length_unit) -> tuple[np.ndarray, np.ndarray]:
+    """k_perp and k_para in 1 / length_unit, from the conversion helpers."""
+    avg_z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
+    k_unit = 1 / length_unit
+    k_perp = uvp._blpair_seps_m() * conversions.bl_to_kperp(
+        avg_z, uvp.cosmo, length_unit
+    ).to_value(k_unit / units.m)
+    k_para = uvp.dly_array[uvp.spw_to_dly_indices(spw)] * conversions.tau_to_kpara(
+        avg_z, uvp.cosmo, length_unit
+    ).to_value(k_unit / units.s)
+    return k_perp, k_para
+
+
+class TestUnitGetters:
+    def test_get_dlys_seconds(self, vanilla_uvp: UVPSpec) -> None:
+        dlys = vanilla_uvp.get_dlys(0)
+        assert isinstance(dlys, units.Quantity)
+        assert dlys.unit == units.s
+        np.testing.assert_array_equal(
+            dlys.value, vanilla_uvp.dly_array[vanilla_uvp.spw_to_dly_indices(0)]
+        )
+
+    def test_get_blpair_seps_meters(self, vanilla_uvp: UVPSpec) -> None:
+        seps = vanilla_uvp.get_blpair_seps()
+        assert isinstance(seps, units.Quantity)
+        assert seps.unit == units.m
+        np.testing.assert_array_equal(seps.value, vanilla_uvp._blpair_seps_m())
+
+    def test_get_spw_ranges_hz(self, vanilla_uvp: UVPSpec) -> None:
+        spw_ranges = vanilla_uvp.get_spw_ranges()
+        assert spw_ranges == [
+            (start * units.Hz, stop * units.Hz, nfreqs, ndlys)
+            for start, stop, nfreqs, ndlys in vanilla_uvp._spw_ranges_hz()
+        ]
+        start, stop, nfreqs, ndlys = spw_ranges[0]
+        assert start.unit == units.Hz and stop.unit == units.Hz
+        assert isinstance(nfreqs, int) and isinstance(ndlys, int)
+        # the documented recipe gives the spw frequencies
+        freqs = np.linspace(*spw_ranges[0][:3], endpoint=False)
+        np.testing.assert_allclose(
+            freqs.to_value(units.Hz),
+            vanilla_uvp.freq_array[vanilla_uvp.spw_to_freq_indices(0)],
+            rtol=1e-15,
+        )
+        assert vanilla_uvp.get_spw_ranges(0) == spw_ranges[:1]
+
+    def test_spw_tuple_lookup(self, vanilla_uvp: UVPSpec) -> None:
+        """Quantity tuples and the old float tuples select the same spw."""
+        quantity_tuple = vanilla_uvp.get_spw_ranges()[0]
+        float_tuple = vanilla_uvp._spw_ranges_hz()[0]
+        mhz_tuple = (
+            quantity_tuple[0].to(units.MHz),
+            quantity_tuple[1].to(units.MHz),
+            *quantity_tuple[2:],
+        )
+        for method in ("spw_to_freq_indices", "spw_to_dly_indices", "spw_indices"):
+            expected = getattr(vanilla_uvp, method)(0)
+            for spw_tuple in (quantity_tuple, float_tuple, mhz_tuple):
+                np.testing.assert_array_equal(
+                    getattr(vanilla_uvp, method)(spw_tuple), expected
+                )
+
+    @pytest.mark.parametrize(
+        "norm_units, expected",
+        [
+            ("Hz sr", LITTLEH_LENGTH),
+            ("Mpc3 / littleh3", LITTLEH_LENGTH),
+            ("h^-3 Mpc^3", LITTLEH_LENGTH),
+            ("Mpc3", units.Mpc),
+            ("Mpc^3", units.Mpc),
+        ],
+    )
+    def test_default_length_unit(
+        self, vanilla_uvp: UVPSpec, norm_units: str, expected
+    ) -> None:
+        uvp = _with_norm_units(vanilla_uvp, norm_units)
+        assert uvp._default_length_unit() == expected
+        assert uvp.get_kperps(0).unit == 1 / expected
+        assert uvp.get_kparas(0).unit == 1 / expected
+
+    @pytest.mark.parametrize("norm_units", ["Hz sr", "Mpc3 / littleh3", "Mpc3"])
+    @pytest.mark.parametrize(
+        "length_unit", [LITTLEH_LENGTH, units.Mpc, "Mpc / littleh", "Mpc"]
+    )
+    def test_k_values(self, vanilla_uvp: UVPSpec, norm_units: str, length_unit) -> None:
+        """An explicit length_unit always wins over the object's own unit."""
+        uvp = _with_norm_units(vanilla_uvp, norm_units)
+        unit = uvputils.parse_unit_string(length_unit)
+        k_perp_expected, k_para_expected = _expected_ks(uvp, 0, unit)
+        k_perp = uvp.get_kperps(0, length_unit=length_unit)
+        k_para = uvp.get_kparas(0, length_unit=length_unit)
+        assert k_perp.unit == 1 / unit and k_para.unit == 1 / unit
+        np.testing.assert_array_equal(k_perp.value, k_perp_expected)
+        np.testing.assert_array_equal(k_para.value, k_para_expected)
+
+    def test_k_mpc_object_default(self, vanilla_uvp: UVPSpec) -> None:
+        """An Mpc3 object gives 1 / Mpc by default: littleh k times h."""
+        littleh_uvp = _with_norm_units(vanilla_uvp, "Mpc3 / littleh3")
+        mpc_uvp = _with_norm_units(vanilla_uvp, "Mpc3")
+        h = vanilla_uvp.cosmo.h
+        np.testing.assert_allclose(
+            mpc_uvp.get_kparas(0).to_value(1 / units.Mpc),
+            littleh_uvp.get_kparas(0).to_value(cu.littleh / units.Mpc) * h,
+            rtol=1e-14,
+        )
+        np.testing.assert_allclose(
+            mpc_uvp.get_kperps(0).to_value(1 / units.Mpc),
+            littleh_uvp.get_kperps(0).to_value(cu.littleh / units.Mpc) * h,
+            rtol=1e-14,
+        )
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_k_little_h_deprecated(self, vanilla_uvp: UVPSpec, little_h: bool) -> None:
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
+            expected = getter(0, length_unit=length_unit)
+            with pytest.warns(DeprecationWarning, match="little_h") as record:
+                old = getter(0, little_h=little_h)
+            # the warning points at the caller
+            assert record[0].filename == __file__
+            assert old.unit == expected.unit
+            np.testing.assert_array_equal(old.value, expected.value)
+            # agreeing values are accepted
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                both = getter(0, length_unit=length_unit, little_h=little_h)
+            np.testing.assert_array_equal(both.value, expected.value)
+            # a flag passed positionally in its old slot still works
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                positional = getter(0, little_h)
+            np.testing.assert_array_equal(positional.value, expected.value)
+
+    def test_k_bad_length_unit(self, vanilla_uvp: UVPSpec) -> None:
+        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                with pytest.raises(ValueError, match="disagrees"):
+                    getter(0, length_unit=units.Mpc, little_h=True)
+            with pytest.raises(ValueError, match="length_unit must be a length"):
+                getter(0, length_unit=units.Hz)
+
+    def test_get_kparas_dlys(self, vanilla_uvp: UVPSpec) -> None:
+        dlys = np.linspace(-1e-6, 1e-6, 11)
+        floats = vanilla_uvp.get_kparas(0, dlys=dlys)
+        np.testing.assert_array_equal(
+            vanilla_uvp.get_kparas(0, dlys=dlys * units.s).value, floats.value
+        )
+        np.testing.assert_allclose(
+            vanilla_uvp.get_kparas(0, dlys=(dlys * units.s).to(units.ns)).value,
+            floats.value,
+            rtol=1e-14,
+        )
+        with pytest.raises(units.UnitConversionError):
+            vanilla_uvp.get_kparas(0, dlys=dlys * units.m)
+
+    def test_convert_to_deltasq_mpc_object(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+    ) -> None:
+        """An Mpc3 object is converted with k in 1 / Mpc."""
+        uvp = testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39), (52, 53)],
+            spw_ranges=[(20, 30)],
+            beam=beam_nf_dipole,
+        )
+        uvp = _with_norm_units(uvp, "Mpc3")
+        dsq = uvp.convert_to_deltasq(inplace=False)
+        k_perp = uvp.get_kperps(0).to_value(1 / units.Mpc)
+        k_para = uvp.get_kparas(0).to_value(1 / units.Mpc)
+        coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)
+        np.testing.assert_allclose(
+            dsq.data_array[0][..., 0], uvp.data_array[0][..., 0] * coeff, rtol=1e-12
+        )
+        assert dsq.norm_unit == units.dimensionless_unscaled
 
 
 def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
@@ -765,8 +1027,192 @@ class TestSymmetricTaper:
             uvpspec.combine_uvpspec([uvp1_no_optionals, uvp2], verbose=False)
 
 
+EXPECTED_PARAM_UNITS = {
+    "freq_array": units.Hz,
+    "dly_array": units.s,
+    "lst_1_array": units.rad,
+    "lst_2_array": units.rad,
+    "lst_avg_array": units.rad,
+    "time_1_array": units.day,
+    "time_2_array": units.day,
+    "time_avg_array": units.day,
+    "integration_array": units.s,
+    "channel_width": units.Hz,
+    "telescope_location": units.m,
+    "bl_vecs": units.m,
+    "beam_freqs": units.Hz,
+    "OmegaP": units.sr,
+    "OmegaPP": units.sr,
+}
+
+# Parameters whose description contains a bracketed phrase that is not the
+# unit of the stored value.
+BRACKETS_NOT_UNITS = {"cov_model", "norm_units", "wgt_array"}
+
+
+class TestParamUnits:
+    def test_declared_units(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            assert uvp.get_param_unit(name) == EXPECTED_PARAM_UNITS.get(name), name
+
+    def test_unknown_param_raises(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        with pytest.raises(KeyError, match="not_a_param"):
+            uvp.get_param_unit("not_a_param")
+
+    def test_descriptions_match_declared_units(self) -> None:
+        # Every description with a bracketed unit declares that unit, and
+        # every declared unit is written in its description.
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            if name in BRACKETS_NOT_UNITS:
+                continue
+            description = getattr(uvp, f"_{name}").description
+            has_bracket = re.search(r"\[[^\]]+\]", description) is not None
+            has_unit = uvp.get_param_unit(name) is not None
+            assert has_bracket == has_unit, name
+
+    def test_check_passes(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        vanilla_uvp.check()
+
+    def test_check_accepts_matching_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        freqs = mutable_uvp.freq_array * units.Hz
+        mutable_uvp.freq_array = freqs
+        mutable_uvp.check()
+        assert isinstance(mutable_uvp.freq_array, units.Quantity)
+        assert mutable_uvp.freq_array.unit == units.Hz
+        assert np.array_equal(mutable_uvp.freq_array, freqs)
+
+    def test_check_accepts_equivalent_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.dly_array = mutable_uvp.dly_array * units.ns
+        mutable_uvp.check()
+        assert mutable_uvp.dly_array.unit == units.ns
+
+    def test_check_rejects_wrong_unit(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.freq_array = mutable_uvp.freq_array * units.m
+        with pytest.raises(
+            ValueError, match="freq_array has unit 'm'.*declared unit 'Hz'"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_quantity_without_declared_unit(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.scalar_array = mutable_uvp.scalar_array * units.mK**2
+        with pytest.raises(
+            ValueError, match="scalar_array is a Quantity.*does not declare a unit"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_wrong_unit_in_dict(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.integration_array = {
+            spw: ints * units.Hz for spw, ints in mutable_uvp.integration_array.items()
+        }
+        with pytest.raises(ValueError, match="integration_array has unit 'Hz'"):
+            mutable_uvp.check()
+
+    def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        # the window k grids of an "Hz sr" object are in 1 / Mpc
+        assert mutable_uvp.window_k_unit() == units.Mpc ** (-1)
+        mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
+        mutable_uvp.check()
+        mutable_uvp.window_function_kperp = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        with pytest.raises(ValueError, match="window_function_kperp has unit"):
+            mutable_uvp.check()
+
+    def test_check_window_k_follows_norm_units(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.norm_units = "Mpc3 / littleh3"
+        mutable_uvp.window_function_kpara = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        mutable_uvp.check()
+        mutable_uvp.window_function_kpara = {0: np.ones((2, 2)) / units.Mpc}
+        with pytest.raises(ValueError, match="window_function_kpara has unit"):
+            mutable_uvp.check()
+
+
+class TestWindowKUnit:
+    @pytest.mark.parametrize(
+        ("norm_units", "k_unit", "default_length"),
+        [
+            ("Mpc3 / littleh3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("h^-3 Mpc^3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("Mpc3", units.Mpc ** (-1), units.Mpc),
+            ("Mpc^3", units.Mpc ** (-1), units.Mpc),
+            # documented difference for unnormalised spectra
+            ("Hz sr", units.Mpc ** (-1), units.Mpc / cu.littleh),
+        ],
+    )
+    def test_window_k_unit(
+        self, mutable_uvp: uvpspec.UVPSpec, norm_units: str, k_unit, default_length
+    ) -> None:
+        mutable_uvp.norm_units = norm_units
+        assert mutable_uvp.window_k_unit() == k_unit
+        assert mutable_uvp._default_length_unit() == default_length
+
+    def test_kgrid_without_exact_windows_raises(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(ValueError, match="no exact window functions"):
+            vanilla_uvp.get_window_function_kgrid(0)
+
+    def test_kgrid(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        uvp = uvp_exact_wfs
+        # an "Hz sr" object: its window functions are on a 1 / Mpc grid
+        assert uvp.window_k_unit() == units.Mpc ** (-1)
+        for spw in uvp.spw_array:
+            kperp, kpara = uvp.get_window_function_kgrid(spw)
+            assert kperp.unit == uvp.window_k_unit()
+            assert kpara.unit == uvp.window_k_unit()
+            np.testing.assert_array_equal(kperp.value, uvp.window_function_kperp[spw])
+            np.testing.assert_array_equal(kpara.value, uvp.window_function_kpara[spw])
+
+
+class TestTimeArrays:
+    @pytest.mark.parametrize("name", ["time_1_array", "time_2_array"])
+    def test_declared_as_param(self, name: str) -> None:
+        uvp = uvpspec.UVPSpec()
+        param = getattr(uvp, f"_{name}")
+        assert isinstance(param, parameter.PSpecParam)
+        assert param.name == name
+        assert name in uvp._all_params
+        assert name in uvp._req_params
+        assert name in uvp._ndarrays
+        assert name in uvp._meta_dsets
+        assert name not in uvp._meta_attrs
+
+    def test_check_requires_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        del mutable_uvp.time_2_array
+        with pytest.raises(
+            AssertionError, match="required parameter time_2_array doesn't exist"
+        ):
+            mutable_uvp.check()
+
+    def test_eq_detects_time_2_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(mutable_uvp)
+        # __eq__ uses np.isclose with its default rtol, which on Julian Dates
+        # (~2.46e6) tolerates ~25 days, so the offset has to be large.
+        uvp2.time_2_array = uvp2.time_2_array + 100.0
+        assert mutable_uvp != uvp2
+
+    def test_clear_removes_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp._clear()
+        assert not hasattr(mutable_uvp, "time_2_array")
+
+
 class TestSense:
-    BASE_TSYS = 500
+    BASE_TSYS = 500 * units.K
     POLPAIR = ("xx", "xx")
 
     def test_basic_execution(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
@@ -785,7 +1231,7 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
         )
         P_N2 = mutable_uvp_with_beam.generate_noise_spectra(
-            0, self.POLPAIR, self.BASE_TSYS - 100, form="Pk", component="real"
+            0, self.POLPAIR, self.BASE_TSYS - 100 * units.K, form="Pk", component="real"
         )
         assert (P_N[101102101102] > P_N2[101102101102]).all()
 
@@ -811,7 +1257,9 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="DelSq", component="real"
         )
         assert Dsq[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
-        assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
+        assert Dsq[101102101102].unit == units.mK**2
+        assert P_N[101102101102].unit == units.mK**2 * LITTLEH_LENGTH**3
+        assert Dsq[101102101102][0, 1].value < P_N[101102101102][0, 1].value
 
     def test_blpair_selection_and_int_polpair(
         self, mutable_uvp_with_beam: uvpspec.UVPSpec
@@ -1044,7 +1492,7 @@ class TestGetExactWindowFunctions:
         uvp = copy.deepcopy(uvp_exact_wfs)
         widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvp.freq_array, widths=widths, pol="xx"
+            freq_array=uvp.freq_array * units.Hz, widths=widths * units.deg, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="Exact window functions already computed, overwriting"
@@ -1121,13 +1569,125 @@ def test_str(vanilla_uvp: uvpspec.UVPSpec) -> None:
     assert str(vanilla_uvp) != ""
 
 
+class TestScalarAndNoiseUnits:
+    POLPAIR = ("xx", "xx")
+    BLP = 101102101102
+
+    def test_compute_scalar_length_unit(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        default = uvp.compute_scalar(0, self.POLPAIR)
+        littleh = uvp.compute_scalar(0, self.POLPAIR, length_unit=LITTLEH_LENGTH)
+        mpc = uvp.compute_scalar(0, self.POLPAIR, length_unit="Mpc")
+        assert default.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        assert mpc.unit == units.Mpc**3 / (units.Hz * units.sr)
+        assert littleh == default
+        np.testing.assert_allclose(mpc.value, default.value / h**3, rtol=1e-12)
+        # the same physical quantity
+        np.testing.assert_allclose(
+            mpc.to_value(default.unit, equivalencies=cu.with_H0(uvp.cosmo.H0)),
+            default.value,
+            rtol=1e-12,
+        )
+        # an Mpc3 object gives an Mpc scalar by default
+        mpc_uvp = _with_norm_units(uvp, "Mpc3")
+        assert mpc_uvp.compute_scalar(0, self.POLPAIR) == mpc
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_compute_scalar_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec, little_h: bool
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        expected = uvp.compute_scalar(0, self.POLPAIR, length_unit=length_unit)
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.compute_scalar(0, self.POLPAIR, little_h=little_h)
+        assert record[0].filename == __file__
+        assert old == expected
+        with pytest.warns(DeprecationWarning, match="little_h"):
+            with pytest.raises(ValueError, match="disagrees"):
+                uvp.compute_scalar(
+                    0,
+                    self.POLPAIR,
+                    little_h=little_h,
+                    length_unit=conversions.length_unit_from_little_h(not little_h),
+                )
+
+    def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
+        pk_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
+        )[self.BLP]
+        assert pk.unit == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        assert pk_mpc.unit == units.mK**2 * units.Mpc**3
+        np.testing.assert_allclose(pk_mpc.value, pk.value / h**3, rtol=1e-12)
+        dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K, form="DelSq")[
+            self.BLP
+        ]
+        dsq_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, form="DelSq", length_unit=units.Mpc
+        )[self.BLP]
+        assert dsq.unit == units.mK**2 and dsq_mpc.unit == units.mK**2
+        # Delta^2 does not depend on the length unit
+        np.testing.assert_allclose(dsq_mpc.value, dsq.value, rtol=1e-12)
+
+    def test_noise_spectra_scalar_argument(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        scalar = uvp.compute_scalar(0, self.POLPAIR, num_steps=2000, noise_scalar=True)
+        computed = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
+        from_quantity = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=scalar
+        )[self.BLP]
+        from_float = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=scalar.value
+        )[self.BLP]
+        np.testing.assert_array_equal(from_quantity.value, computed.value)
+        np.testing.assert_array_equal(from_float.value, computed.value)
+        # a Quantity scalar is converted to the requested length unit's scalar unit
+        mpc_scalar = scalar.to(
+            units.Mpc**3 / (units.Hz * units.sr), equivalencies=cu.with_H0(uvp.cosmo.H0)
+        )
+        from_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=mpc_scalar, length_unit=units.Mpc
+        )[self.BLP]
+        np.testing.assert_allclose(
+            from_mpc.value * uvp.cosmo.h**3, computed.value, rtol=1e-12
+        )
+        with pytest.raises(units.UnitConversionError):
+            uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, scalar=scalar * units.s
+            )
+
+    def test_noise_spectra_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        expected = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
+        )
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, little_h=False
+            )
+        # one warning, pointing at the caller
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert old[self.BLP].unit == expected[self.BLP].unit
+        np.testing.assert_array_equal(old[self.BLP].value, expected[self.BLP].value)
+
+
 def test_compute_scalar(
     vanilla_uvp: uvpspec.UVPSpec, vanilla_uvp_with_beam: uvpspec.UVPSpec
 ) -> None:
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     # test basic execution
     s = uvp.compute_scalar(0, ("xx", "xx"), num_steps=1000, noise_scalar=False)
-    np.testing.assert_almost_equal(s / 553995277.90425551, 1.0, decimal=5)
+    assert s.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+    np.testing.assert_almost_equal(s.value / 553995277.90425551, 1.0, decimal=5)
 
     # test no cosmo
     uvp_no_cosmo = copy.deepcopy(vanilla_uvp_with_beam)
@@ -1146,7 +1706,7 @@ def test_set_cosmology(
     mutable_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole: PSpecBeamUV
 ) -> None:
     uvp = mutable_uvp_with_beam
-    new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+    new_cosmo = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.0, Ob0=0.04911)
 
     # test no overwrite
     uvp.set_cosmology(new_cosmo, overwrite=False)
@@ -1155,12 +1715,20 @@ def test_set_cosmology(
     # test setting cosmology
     uvp.set_cosmology(new_cosmo, overwrite=True)
     assert uvp.cosmo == new_cosmo
-    assert uvp.norm_units == "h^-3 Mpc^3"
+    assert uvp.norm_units == "Mpc3 / littleh3"
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert (uvp.scalar_array > 1.0).all()
+    # an unnormalised object gets a littleh scalar
+    np.testing.assert_array_equal(
+        uvp.scalar_array[0, 0],
+        uvp.compute_scalar(0, uvp.polpair_array[0]).to_value(
+            LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        ),
+    )
     assert (uvp.data_array[0] > 1e5).all()
 
     # test exception
-    new_cosmo2 = conversions.Cosmo_Conversions(Om_L=1.0)
+    new_cosmo2 = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=1.0, Ob0=0.04911)
     del uvp.OmegaP
     uvp.set_cosmology(new_cosmo2, overwrite=True)
     assert uvp.cosmo != new_cosmo2
@@ -1169,6 +1737,129 @@ def test_set_cosmology(
     uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=beam_nf_dipole)
     assert uvp.cosmo == new_cosmo2
     assert hasattr(uvp, "OmegaP")
+
+
+@pytest.fixture(scope="module")
+def set_cosmology_uvps(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> dict[str, uvpspec.UVPSpec]:
+    """pspec outputs normalised in Mpc3 / littleh3 and in Mpc3."""
+    return {
+        name: testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39), (52, 53)],
+            spw_ranges=[(20, 30), (60, 90)],
+            beam=beam_nf_dipole,
+            length_unit=length_unit,
+        )
+        for name, length_unit in (("littleh", LITTLEH_LENGTH), ("mpc", units.Mpc))
+    }
+
+
+@pytest.mark.parametrize(
+    "name, norm_units", [("littleh", "Mpc3 / littleh3"), ("mpc", "Mpc3")]
+)
+def test_set_cosmology_same_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec], name: str, norm_units: str
+) -> None:
+    """Re-setting the same cosmology keeps the data and the normalisation."""
+    uvp = copy.deepcopy(set_cosmology_uvps[name])
+    assert uvp.norm_units == norm_units
+    old = copy.deepcopy(uvp)
+    uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True, verbose=False)
+    assert uvp.norm_units == norm_units
+    # only the scalar's integration grid differs from pspec's (num_steps)
+    np.testing.assert_allclose(uvp.scalar_array, old.scalar_array, rtol=1e-4)
+    for spw in uvp.spw_array:
+        np.testing.assert_allclose(
+            uvp.data_array[spw], old.data_array[spw], rtol=1e-4, atol=0
+        )
+    # the scalar is in the object's own length unit
+    length_unit = LITTLEH_LENGTH if name == "littleh" else units.Mpc
+    for spw in uvp.spw_array:
+        np.testing.assert_array_equal(
+            uvp.scalar_array[spw, 0],
+            uvp.compute_scalar(
+                spw, uvp.polpair_array[0], length_unit=length_unit
+            ).to_value(length_unit**3 / (units.Hz * units.sr)),
+        )
+
+
+def test_set_cosmology_new_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec],
+) -> None:
+    """A new cosmology rescales the data by the scalar ratio, consistently
+    for littleh and Mpc objects."""
+    new_cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+    h_ratio = new_cosmo.h / conversions.DEFAULT_COSMOLOGY.h
+    ratios = {}
+    for name, original in set_cosmology_uvps.items():
+        uvp = copy.deepcopy(original)
+        uvp.set_cosmology(new_cosmo, overwrite=True, verbose=False)
+        assert uvp.norm_units == original.norm_units
+        ratios[name] = uvp.scalar_array / original.scalar_array
+        for spw in uvp.spw_array:
+            np.testing.assert_allclose(
+                uvp.data_array[spw],
+                original.data_array[spw] * ratios[name][spw],
+                rtol=1e-12,
+            )
+    # P in Mpc3 / littleh3 is P in Mpc3 times h^3
+    np.testing.assert_allclose(ratios["littleh"], ratios["mpc"] * h_ratio**3, rtol=1e-4)
+
+
+@pytest.mark.parametrize("form", ["astropy", "dict", "cosmo_conversions"])
+def test_set_cosmology_forms(mutable_uvp_with_beam: uvpspec.UVPSpec, form: str) -> None:
+    """set_cosmology takes an astropy object, a params dict or (deprecated) a
+    Cosmo_Conversions, and always stores an astropy object."""
+    uvp = mutable_uvp_with_beam
+    target = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+    expected = copy.deepcopy(uvp)
+    expected.set_cosmology(target, overwrite=True, verbose=False)
+    if form == "astropy":
+        uvp.set_cosmology(target, overwrite=True, verbose=False)
+    elif form == "dict":
+        uvp.set_cosmology(
+            conversions.params_from_cosmology(target), overwrite=True, verbose=False
+        )
+    else:
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            uvp.set_cosmology(old, overwrite=True, verbose=False)
+    assert isinstance(uvp.cosmo, FLRW)
+    assert uvp.cosmo.is_equivalent(target)
+    np.testing.assert_allclose(uvp.scalar_array, expected.scalar_array, rtol=1e-14)
+
+
+def test_cosmo_conversions_attribute_deprecated(vanilla_uvp: uvpspec.UVPSpec) -> None:
+    """A Cosmo_Conversions assigned to uvp.cosmo still works, with a warning,
+    and check() converts it to astropy."""
+    uvp = copy.deepcopy(vanilla_uvp)
+    with pytest.warns(DeprecationWarning):
+        uvp.cosmo = conversions.Cosmo_Conversions()
+    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+        kperps = uvp.get_kperps(0)
+    np.testing.assert_allclose(kperps, vanilla_uvp.get_kperps(0), rtol=1e-15)
+    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+        uvp.check()
+    assert isinstance(uvp.cosmo, FLRW)
+    assert uvp == vanilla_uvp
+    uvp.cosmo = [1.0]
+    with pytest.raises(AssertionError, match="cosmo"):
+        uvp.check()
+
+
+def test_eq_compares_cosmology_parameters(vanilla_uvp: uvpspec.UVPSpec) -> None:
+    """UVPSpec equality compares the cosmological parameters, not the name."""
+    uvp = copy.deepcopy(vanilla_uvp)
+    uvp.cosmo = conversions.cosmology_from_params(
+        conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+    )
+    assert uvp.cosmo.name != conversions.DEFAULT_COSMOLOGY.name
+    assert uvp == vanilla_uvp
+    uvp.cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7)
+    assert uvp != vanilla_uvp
 
 
 @pytest.fixture
@@ -1742,6 +2433,22 @@ def test_backwards_compatibility_read() -> None:
         assert "'UVPSpec' object has no attribute" in str(excinfo.value)
     # assert check does not fail
     uvp.check()
+
+
+def test_read_keeps_channel_width_param(tmp_path: Path) -> None:
+    """Reading must not replace the channel_width PSpecParam with an array."""
+    uvp = uvpspec.UVPSpec()
+    uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
+    assert isinstance(uvp._channel_width, parameter.PSpecParam)
+    assert uvp.get_param_unit("channel_width") == units.Hz
+    # the 2019 file stores a scalar channel_width
+    np.testing.assert_array_equal(uvp.channel_width, [1562500.0])
+    # a read object can be written and read back
+    out = tmp_path / "rewritten.h5"
+    uvp.write_hdf5(out)
+    uvp2 = uvpspec.UVPSpec()
+    uvp2.read_hdf5(out)
+    assert uvp == uvp2
 
 
 def test_add_approximate_cov() -> None:

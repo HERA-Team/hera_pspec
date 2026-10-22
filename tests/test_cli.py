@@ -8,8 +8,11 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pytest
+from astropy import cosmology as astropy_cosmology
+from astropy import units
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM
 
-from hera_pspec import cli, container, testing
+from hera_pspec import cli, container, conversions, testing
 from hera_pspec.container import PSpecContainer
 from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
@@ -295,6 +298,336 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
+
+
+def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
+    """--cosmo values must reach pspec_run as an astropy cosmology, not a list."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    beamfile = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+    with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
+        result = invoke(
+            [
+                "run",
+                "a.uvh5",
+                "--output",
+                str(tmp_path / "o.h5"),
+                "--cosmo",
+                "0.7",
+                "0.05",
+                "0.25",
+                "70",
+                "--beam",
+                str(beamfile),
+            ]
+        )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert isinstance(cosmo, LambdaCDM)
+    assert cosmo.Ode0 == pytest.approx(0.7)
+    assert cosmo.Ob0 == pytest.approx(0.05)
+    assert cosmo.Om0 == pytest.approx(0.3)
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == pytest.approx(70.0)
+    assert cosmo.Tcmb0.value == 0
+    assert captured["beam"] == str(beamfile)
+
+
+def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
+    """Omitted trailing --cosmo values give the default cosmology's parameters."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
+        result = invoke(
+            ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo", "0.6844"]
+        )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+    assert conversions.params_from_cosmology(cosmo) == (
+        conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+    )
+
+
+def test_run_cosmo_default_is_none(monkeypatch, tmp_path):
+    """Without --cosmo, pspec_run gets cosmo=None so the beam's cosmology is kept."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is None
+
+
+def test_run_cosmo_too_many_values(monkeypatch, tmp_path):
+    """More than 6 --cosmo values must fail before pspec_run is called."""
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo"]
+        + ["1", "2", "3", "4", "5", "6", "7"]
+    )
+    assert result.exit_code != 0
+    assert not called
+    message = str(result.exception)
+    assert "1 to 6 values" in message
+    assert cli.COSMO_PARAM_ORDER in message
+
+
+def test_run_help_shows_cosmo_order(monkeypatch):
+    # wide terminal so rich does not wrap the parameter order across lines
+    monkeypatch.setenv("COLUMNS", "300")
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]" in result.output
+
+
+def _capture_pspec_run(monkeypatch) -> dict:
+    """Replace pspec_run by a stub recording the keyword arguments it gets."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    return captured
+
+
+@pytest.mark.parametrize("name", ["Planck18", "Planck15", "WMAP9"])
+def test_run_cosmology_name_is_the_astropy_realization(monkeypatch, tmp_path, name):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", name]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is getattr(astropy_cosmology, name)
+
+
+def test_run_cosmology_hera_pspec_default(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        [
+            "run",
+            "a.uvh5",
+            "--output",
+            str(tmp_path / "o.h5"),
+            "--cosmology",
+            "hera_pspec_default",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is conversions.DEFAULT_COSMOLOGY
+
+
+def test_run_cosmology_unknown_name_lists_available(monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", "Nope"]
+    )
+    assert result.exit_code != 0
+    assert not called
+    message = str(result.exception)
+    assert "unknown cosmology 'Nope'" in message
+    for name in ("hera_pspec_default", "Planck18", "WMAP9"):
+        assert name in message
+
+
+def test_run_cosmology_parameters_build_lambdacdm(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", "70", "--om0", "0.3", "--ode0", "0.69", "--ob0", "0.05"]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert type(cosmo) is LambdaCDM
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == 70.0
+    assert cosmo.Om0 == 0.3
+    assert cosmo.Ode0 == 0.69
+    assert cosmo.Ob0 == 0.05
+    assert cosmo.Tcmb0.to_value(units.K) == 0
+
+
+def test_run_cosmology_parameters_without_ode0_are_flat(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", "67.7", "--om0", "0.31", "--tcmb0", "2.7255"]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert type(cosmo) is FlatLambdaCDM
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == 67.7
+    assert cosmo.Om0 == 0.31
+    assert cosmo.Ob0 == 0
+    assert cosmo.Tcmb0.to_value(units.K) == 2.7255
+
+
+def test_run_cosmology_parameters_match_default(monkeypatch, tmp_path):
+    """The default cosmology's parameters rebuild the default cosmology."""
+    captured = _capture_pspec_run(monkeypatch)
+    default = conversions.DEFAULT_COSMOLOGY
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", str(default.H0.to_value(units.km / units.s / units.Mpc))]
+        + ["--om0", str(default.Om0), "--ode0", str(default.Ode0)]
+        + ["--ob0", str(default.Ob0)]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"].is_equivalent(default)
+
+
+@pytest.mark.parametrize(
+    "options, missing",
+    [
+        (["--h0", "70"], "--om0 must be given"),
+        (["--om0", "0.3"], "--h0 must be given"),
+        (["--ode0", "0.7", "--ob0", "0.05"], "--h0 and --om0 must be given"),
+    ],
+)
+def test_run_cosmology_parameters_need_h0_and_om0(
+    monkeypatch, tmp_path, options, missing
+):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
+    assert result.exit_code != 0
+    assert not called
+    assert missing in str(result.exception)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--cosmology", "Planck18", "--h0", "70", "--om0", "0.3"],
+        ["--cosmology", "Planck18", "--cosmo", "0.7"],
+        ["--h0", "70", "--om0", "0.3", "--cosmo", "0.7"],
+        ["--cosmology", "Planck18", "--tcmb0", "2.7"],
+    ],
+)
+def test_run_cosmology_options_are_exclusive(monkeypatch, tmp_path, options):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
+    assert result.exit_code != 0
+    assert not called
+    assert "give the cosmology one way only" in str(result.exception)
+
+
+def test_run_cosmo_deprecation_is_shown_to_users(tmp_path):
+    """--cosmo warns with a FutureWarning, shown by Python's default filters."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; from hera_pspec import cli; "
+        "cli.pspecdata.pspec_run = lambda *a, **k: None; "
+        "cli.app(sys.argv[1:], exit_on_error=False)"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code, "run", "a.uvh5", "-o", str(tmp_path / "o.h5")]
+        + ["--cosmo", "0.6844"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={k: v for k, v in os.environ.items() if k != "PYTHONWARNINGS"},
+    )
+    assert "--cosmo is deprecated" in proc.stderr
+    assert "--cosmology" in proc.stderr
+
+
+def test_run_length_unit_and_normalization_reach_pspec_run(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--length-unit", "Mpc", "--normalization", "one-step"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["length_unit"] == "Mpc"
+    assert captured["normalization"] == "one-step"
+
+
+def test_run_length_unit_and_normalization_defaults(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
+    assert result.exit_code == 0, result.output
+    assert captured["length_unit"] == "Mpc / littleh"
+    assert captured["normalization"] == "two-step"
+
+
+def test_run_rejects_unknown_normalization(monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--normalization", "three-step"]
+    )
+    assert result.exit_code != 0
+    assert not called
+
+
+def test_run_help_lists_cosmology_and_unit_options(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "300")
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    for option in (
+        "--cosmology",
+        "--h0",
+        "--om0",
+        "--ode0",
+        "--ob0",
+        "--tcmb0",
+        "--length-unit",
+        "--normalization",
+    ):
+        assert option in result.output
+    assert "Planck18" in result.output
+    assert "km/s/Mpc" in result.output
+    assert "CMB temperature today in K" in result.output
+    assert "baseline length, in metres" in result.output
+    assert "angle (ENU frame in degrees)" in result.output
+    assert "tolerance, in metres" in result.output
+    assert "Deprecated: use --cosmology" in result.output
+
+
+def test_run_end_to_end_cosmology_and_length_unit(tmp_path):
+    f0 = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    f1 = os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA")
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    out = tmp_path / "out.h5"
+    result = invoke(
+        ["run", f0, f1, "--output", str(out), "--overwrite"]
+        + ["--dset-pairs", "0", "1", "--bl-len-range", "14", "15"]
+        + ["--bl-deg-range", "50", "70", "--spw-ranges", "0", "25"]
+        + ["--file-type", "miriad", "--beam", beamfile]
+        + ["--cosmology", "Planck18", "--length-unit", "Mpc"]
+    )
+    assert result.exit_code == 0, f"{result.output}\n{result.exception}"
+    psc = container.PSpecContainer(str(out), mode="r")
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
+    assert uvp.cosmo.is_equivalent(astropy_cosmology.Planck18)
+    assert uvp.get_kparas(0).unit == 1 / units.Mpc
 
 
 def test_bootstrap_help():

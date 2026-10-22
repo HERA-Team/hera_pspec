@@ -83,13 +83,6 @@ dev = [
 [project.scripts]
 pspec = "hera_pspec.cli:app"
 
-[tool.setuptools]
-# Doing this is discouraged, and we should package these CLI commands into the above
-# `scripts` section.
-script-files = [
-    "scripts/pspec_red.py",
-]
-
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["hera_pspec*"]
