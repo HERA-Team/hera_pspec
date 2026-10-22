@@ -439,6 +439,30 @@ class TestAverageSpectra:
             add_to_history="",
         )
 
+    @pytest.mark.parametrize("time_avg", [False, True])
+    @pytest.mark.parametrize("error_weights", [None, "noise"])
+    def test_exact_wf_blpair_average_preserves_normalisation(
+        self, uvp_exact_wfs_wbeam: UVPSpec, time_avg: bool, error_weights
+    ) -> None:
+        """Check that blpair-group averaging keeps exact window function rows summing to one."""
+        uvp = copy.deepcopy(uvp_exact_wfs_wbeam)
+        if error_weights is not None:
+            # delay-dependent errors, so that the weights vary along the delay axis
+            rng = np.random.default_rng(42)
+            for key in uvp.get_all_keys():
+                shape = uvp.get_data(key).shape
+                uvp.set_stats(error_weights, key, rng.uniform(1, 10, size=shape) + 0j)
+        assert np.allclose(uvp.window_function_array[0].sum(axis=(2, 3)), 1.0)
+
+        uvp_avg = uvp.average_spectra(
+            blpair_groups=[list(uvp.get_blpairs())],
+            time_avg=time_avg,
+            error_weights=error_weights,
+            inplace=False,
+        )
+        assert uvp_avg.Nblpairs == 1
+        assert np.allclose(uvp_avg.window_function_array[0].sum(axis=(2, 3)), 1.0)
+
 
 class TestSampleBaselines:
     @pytest.mark.parametrize("n", [1, 2, 4, 5, 13, 521])
