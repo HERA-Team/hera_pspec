@@ -30,11 +30,9 @@ def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
 class TestPSpecBeamUV:
     def test_init(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
-        # session fixture: PSpecBeamUV(<HERA_NF_dipole_power.beamfits>)
-        bm = beam_nf_dipole
-        assert isinstance(bm.primary_beam, UVBeam)
-        assert bm.beam_freqs.size > 0
-        assert isinstance(bm.cosmo, conversions.Cosmo_Conversions)
+        assert isinstance(beam_nf_dipole.primary_beam, UVBeam)
+        assert beam_nf_dipole.beam_freqs.size > 0
+        assert isinstance(beam_nf_dipole.cosmo, conversions.Cosmo_Conversions)
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
@@ -75,9 +73,7 @@ class TestPSpecBeamUV:
         self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        # session fixture: PSpecBeamUV(<beamfits>, cosmo=Cosmo_Conversions())
-        beam = beam_nf_dipole_wcosmo
-        assert isinstance(beam.cosmo, conversions.Cosmo_Conversions)
+        assert isinstance(beam_nf_dipole_wcosmo.cosmo, conversions.Cosmo_Conversions)
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
@@ -174,12 +170,13 @@ class TestPSpecBeamUV:
 
     def test_efield_beam(self, beam_nf_efield: pspecbeam.PSpecBeamUV) -> None:
         """Check that efield beams compute a scalar for XX but raise for pI."""
-        beam = beam_nf_efield
-        beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        beam_nf_efield.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):
-            beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
+            beam_nf_efield.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
+            )
 
     def test_get_omegas_single_polpair(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV

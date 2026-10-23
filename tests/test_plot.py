@@ -232,10 +232,10 @@ class TestDelaySpectrum:
         blps = [blp for blp in blpairs]
 
         # Set cosmology and plot in non-delay (i.e. cosmological) units
-        uvp = copy.deepcopy(uvp)
-        uvp.set_cosmology(conversions.Cosmo_Conversions())
+        uvp_cosmo = copy.deepcopy(uvp)
+        uvp_cosmo.set_cosmology(conversions.Cosmo_Conversions())
         f1 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -249,7 +249,7 @@ class TestDelaySpectrum:
 
         # Plot in Delta^2 units
         f2 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -267,7 +267,7 @@ class TestDelaySpectrum:
 
         # Regression test for folded Delta^2 plotting in cosmological units.
         f3 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
