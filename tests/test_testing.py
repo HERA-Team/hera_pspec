@@ -338,6 +338,29 @@ class TestNoiseSim:
             decimal=2,
         )
 
+    @pytest.mark.parametrize("with_beam", [False, True])
+    def test_pseudo_stokes_amplitude(self, synthetic_uvd, with_beam: bool) -> None:
+        """Pseudo-Stokes noise is 1/sqrt(2) of the linear-pol noise, with or without a beam.
+
+        The expected rms (in K) of the complex noise is
+        Tsys / sqrt(channel_width * integration_time), divided by sqrt(2) for
+        pseudo-Stokes polarizations; with a beam, the output is in Jy and is
+        converted back to K with the beam's (polarization-specific) Jy_to_mK.
+        16000 samples per polarization give a ~0.5% precision on the rms.
+        """
+        uvd = synthetic_uvd(
+            nfreq=16, ntimes=1000, antpairs=[(0, 1)], pols=("xx", "pI"), seed=0
+        )
+        beam = PSpecBeamGauss(0.2, np.linspace(140e6, 170e6, 50)) if with_beam else None
+        Tsys = 300.0
+        uvn = testing.noise_sim(uvd, Tsys, beam=beam, seed=1, whiten=True)
+        trms = Tsys / np.sqrt(uvd.channel_width[0] * uvd.integration_time[0])
+        for ipol, pol, expected in [(0, "xx", trms), (1, "pI", trms / np.sqrt(2))]:
+            data = uvn.data_array[..., ipol]
+            if with_beam:
+                data = data * beam.Jy_to_mK(uvd.freq_array, pol=pol)[None] / 1e3
+            np.testing.assert_allclose(np.std(data), expected, rtol=0.02)
+
     def test_seed_and_inplace(self, uvd_dual_pol: UVData) -> None:
         """Check that seed=0 matches np.random.seed(0) global state used with seed=None and inplace=True."""
         uvn = testing.noise_sim(uvd_dual_pol, 300.0, seed=0, whiten=True, inplace=False)
@@ -449,6 +472,19 @@ class TestSkyNoiseSim:
         for bl in sim2.get_antpairpols():
             if bl[0] != bl[1]:
                 assert np.all(~np.isclose(sim2.get_data(bl), uvd2.get_data(bl)))
+
+    def test_respects_global_seed(self, synthetic_uvd, beam_nf_dipole) -> None:
+        """Without bl_loop_seed, sky_noise_sim must not reseed the global RNG.
+
+        A caller who seeds numpy's global random state must get reproducible
+        simulations.
+        """
+        uvd = synthetic_uvd(nfreq=16, ntimes=4, antpairs=[(0, 0), (1, 1), (0, 1)])
+        sims = []
+        for _ in range(2):
+            np.random.seed(5)
+            sims.append(testing.sky_noise_sim(uvd, beam_nf_dipole, bl_loop_seed=None))
+        np.testing.assert_array_equal(sims[0].data_array, sims[1].data_array)
 
     def test_divide_by_nsamp(self, uvd_zen_even_xx: UVData) -> None:
         """Check that divide_by_nsamp zeroes the simulated noise where nsample is zero."""

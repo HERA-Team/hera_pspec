@@ -407,6 +407,48 @@ class TestFTBeamFromBeam:
             atol=0.02 * np.abs(ft_direct.ft_beam).max(),
         )
 
+    def test_gaussian_beam_has_analytic_transform(self, tmp_path: Path) -> None:
+        """The flat-sky Fourier transform of a Gaussian power beam
+        exp(-theta^2 / w^2) is pi w^2 exp(-pi^2 w^2 |u|^2), a Gaussian of width
+        1 / (pi w) in u (the Fourier dual of the sky angle in radians), on a grid
+        of spacing 1 / (2 mapsize). FTBeam stores it divided by 2 mapsize, the
+        normalisation FTBeam.gaussian uses for the same beam. This pins the
+        projection of the beam onto the flat sky, the Fourier grid and the
+        normalisation of from_beam.
+
+        pyuvdata's GaussianBeam(sigma) is an efield beam whose power beam is
+        exp(-theta^2 / sigma^2), so w = sigma. On an NSIDE=64 HEALPix map the
+        transform agrees with the analytic one to ~0.5% of its peak."""
+        sigma, mapsize, freqs = 0.15, 1.0, np.linspace(120e6, 180e6, 3)
+        beamfile = tmp_path / "gaussian.beamfits"
+        GaussianBeam(sigma=sigma).to_uvbeam(
+            freq_array=freqs,
+            beam_type="efield",
+            pixel_coordinate_system="healpix",
+            nside=64,
+        ).write_beamfits(beamfile)
+        ftbeam = uvwindow.FTBeam.from_beam(
+            beamfile=beamfile, pol="xx", freq_array=freqs, mapsize=mapsize, npix=141
+        )
+        ngrid = ftbeam.ft_beam.shape[-1]
+        u = np.fft.fftshift(np.fft.fftfreq(ngrid)) * ngrid / (2 * mapsize)
+        usq = u[:, None] ** 2 + u[None, :] ** 2
+        expected = (
+            np.pi * sigma**2 * np.exp(-(np.pi**2) * sigma**2 * usq) / (2 * mapsize)
+        )
+        for ft in ftbeam.ft_beam:
+            np.testing.assert_allclose(ft, expected, rtol=0, atol=1e-2 * expected.max())
+        # the analytic beam of FTBeam.gaussian is the same transform
+        analytic = uvwindow.FTBeam.gaussian(
+            freq_array=freqs,
+            widths=np.degrees(sigma),
+            pol="xx",
+            mapsize=mapsize,
+            npix=ngrid,
+        )
+        for ft in analytic.ft_beam:
+            np.testing.assert_allclose(ft, expected, rtol=1e-10, atol=1e-300)
+
 
 class TestFTBeamFromFile:
     def test_happy_path(self, ft_bandwidth: np.ndarray) -> None:
@@ -1202,6 +1244,26 @@ class TestUVWindowCylindricalToSpherical:
                 cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
             )
 
+    def test_fractional_weights_do_not_empty_bins(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        kbins: units.Quantity,
+        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+    ) -> None:
+        """Bins populated by baselines with fractional weights are not reported empty."""
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
+        kbins = kbins[:6]  # all populated by this baseline
+        uvw = copy.deepcopy(uvwindow_obj)
+        uvw.verbose = True
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            wf, weighted_k = uvw.cylindrical_to_spherical(
+                cyl_wf=cyl_wf, kbins=kbins, ktot=ktot, bl_lens=bl_len, bl_weights=[0.1]
+            )
+        assert np.all(weighted_k > 0)
+        np.testing.assert_allclose(wf.sum(axis=1), 1.0)
+
     def test_nonlinear_kbins_error(
         self,
         uvwindow_obj: uvwindow.UVWindow,
@@ -1760,3 +1822,110 @@ class TestGetWfForTauKnownExamples:
         kpara_out, cyl = uvw._get_wf_for_tau(tau, wf1, kperp_bins, kpara_bins)
         assert np.allclose(cyl, wf1)
         assert np.allclose(kpara_out, kpar)
+
+
+class TestUVWindowPhysics:
+    """The exact window function of the delay spectrum of a baseline b at delay
+    tau must be centred on the (k_perp, k_para) that the baseline and delay
+    probe, k_perp = bl_to_kperp(z) |b| and k_para = tau_to_kpara(z) |tau|, with
+    a k_perp spread set by the beam: the beam's Fourier transform has a width
+    inversely proportional to the width of the beam on the sky."""
+
+    BL_LEN = 29.2  # m
+
+    @staticmethod
+    def window(width: float) -> tuple[uvwindow.UVWindow, tuple]:
+        # A map half-width of 1.5 rad gives a fine enough k_perp grid to
+        # resolve the window function of beams a few degrees wide.
+        ftbeam = uvwindow.FTBeam.gaussian(
+            freq_array=FT_FREQS, widths=width, pol="xx", mapsize=1.5, npix=301
+        )
+        uvw = uvwindow.UVWindow(
+            ftbeam_obj=ftbeam, taper="blackman-harris", little_h=True, verbose=False
+        )
+        return uvw, uvw.get_cylindrical_wf(
+            TestUVWindowPhysics.BL_LEN, return_bins="unweighted"
+        )
+
+    @pytest.fixture(scope="class")
+    def window_7deg(self):
+        return self.window(7.0)
+
+    def test_kpara_peak(self, window_7deg) -> None:
+        """For every delay the window function peaks at k_para = tau_to_kpara |tau|
+        (to within one k_para bin)."""
+        uvw, (_, kpara, cyl_wf) = window_7deg
+        expected = uvw.cosmo.tau_to_kpara(uvw.avg_z) * np.abs(uvw.dly_array)
+        peak = kpara[np.argmax(cyl_wf.sum(axis=1), axis=1)]
+        assert np.all(np.abs(peak - expected) <= np.diff(kpara).mean() * (1 + 1e-6))
+
+    def test_kpara_peak_with_ftbeam_on_another_grid(self, vanilla_uvp) -> None:
+        """The k_para of a delay is set by the data's frequency channels, not by
+        those the FT beam was computed on. With an FT beam on 80 kHz channels
+        and data on 100 kHz channels, UVWindow.from_uvpspec must interpolate the
+        beam onto the data channels, so that the window function of every
+        nonzero data delay tau peaks in the k_para bin containing
+        tau_to_kpara |tau| (the bins are centred on multiples of that value).
+        Taking the FT beam's channels as they are would stretch the k_para
+        axis by the ratio of the channel widths."""
+        ftbeam = uvwindow.FTBeam.gaussian(
+            freq_array=np.arange(99e6, 106e6, 80e3), widths=10.0, pol="xx", npix=151
+        )
+        with pytest.warns(UserWarning, match="interpolating"):
+            uvw = uvwindow.UVWindow.from_uvpspec(vanilla_uvp, 0, 0, ftbeam=ftbeam)
+        _, kpara, cyl_wf = uvw.get_cylindrical_wf(14.6, return_bins="unweighted")
+        dlys = vanilla_uvp.get_dlys(0)
+        expected = uvw.cosmo.tau_to_kpara(uvw.avg_z, little_h=uvw.little_h) * np.abs(
+            dlys
+        )
+        peak = kpara[np.argmax(cyl_wf.sum(axis=1), axis=1)]
+        nonzero = dlys != 0
+        assert nonzero.sum() == dlys.size - 1
+        assert np.all(np.abs(peak - expected)[nonzero] < 0.5 * np.diff(kpara).mean())
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason=(
+            "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
+            "diagonal of the k_perp grid, so the window function peaks at "
+            "~0.77 of the baseline's k_perp, see #571"
+        ),
+    )
+    def test_kperp_peak(self, window_7deg) -> None:
+        """The window function peaks at the k_perp of the baseline, within one
+        k_perp bin."""
+        uvw, (kperp, _, cyl_wf) = window_7deg
+        expected = uvw.cosmo.bl_to_kperp(uvw.avg_z) * self.BL_LEN
+        peak = kperp[np.argmax(cyl_wf.sum(axis=2), axis=1)]
+        assert np.all(np.abs(peak - expected) <= np.diff(kperp).mean())
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason=(
+            "UVWindow._interpolate_ft_beam evaluates the FT beam only along the "
+            "diagonal of the k_perp grid, so the k_perp spread does not depend "
+            "on the beam width, see #571"
+        ),
+    )
+    def test_kperp_spread_scales_with_inverse_beam_width(self, window_7deg) -> None:
+        """The k_perp spread of the window function is inversely proportional
+        to the width of the beam on the sky: doubling the width halves it.
+
+        FTBeam.gaussian(widths=w) is the beam exp(-theta^2 / w^2), whose Fourier
+        transform has a width 1 / (pi w) in u. The window function goes as the
+        square of the transform, so its spread in u is 1 / (2 pi w), i.e.
+        1 / (w DM) in k_perp = 2 pi u / DM, with DM the transverse comoving
+        distance. The tolerance allows for the binning in k_perp and the
+        evolution of DM across the band."""
+        for width, (uvw, (kperp, _, cyl_wf)) in [
+            (7.0, window_7deg),
+            (14.0, self.window(14.0)),
+        ]:
+            profile = cyl_wf.sum(axis=2)
+            profile /= profile.sum(axis=1, keepdims=True)
+            mean = (profile * kperp).sum(axis=1)
+            spread = np.sqrt((profile * kperp**2).sum(axis=1) - mean**2)
+            expected = 1 / (np.radians(width) * uvw.cosmo.DM(uvw.avg_z, little_h=True))
+            np.testing.assert_allclose(spread, expected, rtol=0.1)

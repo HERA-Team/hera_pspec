@@ -203,10 +203,14 @@ def average_spectra(
         If True, average power spectra across the time axis. Default: False.
 
     blpair_weights : list of weights (float or int), optional
-        Relative weight of each baseline-pair when performing the average. This
-        is useful for bootstrapping. This should have the same shape as
-        blpair_groups if specified. The weights are automatically normalized
-        within each baseline-pair group. Default: None (all baseline pairs have
+        Relative non-negative weight of each baseline-pair when performing the
+        average. This is useful for bootstrapping. This should have the same
+        shape as blpair_groups if specified. The weights are automatically
+        normalized within each baseline-pair group (see normalize_weights).
+        A baseline-pair with weight m is treated as m copies of itself: its
+        data, stats, covariance and window functions enter the weighted sums
+        (multiplied by any integration/error weights) m times, and its
+        nsamples are multiplied by m. Default: None (all baseline pairs have
         unity weights).
 
     error_field: string or list, optional
@@ -403,6 +407,11 @@ def average_spectra(
                         raise ValueError(
                             "Sum of baseline-pair weights in group %d is <= 0." % j
                         )
+                    if np.any(blpg_wgts < 0):
+                        raise ValueError(
+                            "Baseline-pair weights in group %d must not be negative."
+                            % j
+                        )
                     blpg_wgts = (
                         blpg_wgts * float(blpg_wgts.size) / norm
                     )  # Apply normalization
@@ -513,34 +522,37 @@ def average_spectra(
                         # Above we use the clip method for zero weights. A tolerance
                         # as low as 1e-40 works when using inverse square of noise power
                         # as weights.
-                    # Add multiple copies of data for each baseline according
-                    # to the weighting/multiplicity;
-                    # while multiple copies are only added when bootstrap resampling
-                    for m in range(int(blpg_wgts[k])):
-                        bpg_data.append(data * w)
-                        bpg_wgts.append(wgts * w[:, :1, None])
-                        bpg_ints.append(ints * w)
-                        bpg_nsmp.append(nsmp)
-                        for stat in stat_l:
-                            # clip errws for same reason above
-                            bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2)
-                        if store_window:
-                            if uvp.exact_windows:
-                                bpg_window_function.append(
-                                    window_function * w[:, :, None, None]
-                                )
-                            else:
-                                bpg_window_function.append(
-                                    window_function * w[:, :, None]
-                                )
-                        if store_cov:
-                            bpg_cov_real.append(
-                                cov_real * w[:, :, None] * w[:, None, :]
+                    # Each baseline-pair counts as blpg_wgts[k] copies of
+                    # itself (e.g. the number of times it was drawn when
+                    # bootstrap resampling), so scale all of its weighted
+                    # contributions, including nsamples, by that multiplicity.
+                    mult = blpg_wgts[k]
+                    if mult == 0:
+                        continue
+                    bpg_data.append(data * w * mult)
+                    bpg_wgts.append(wgts * w[:, :1, None] * mult)
+                    bpg_ints.append(ints * w * mult)
+                    bpg_nsmp.append(nsmp * mult)
+                    for stat in stat_l:
+                        # clip errws for same reason above
+                        bpg_stats[stat].append(errws[stat].clip(0, 1e40) * w**2 * mult)
+                    if store_window:
+                        if uvp.exact_windows:
+                            bpg_window_function.append(
+                                window_function * w[:, :, None, None] * mult
                             )
-                            bpg_cov_imag.append(
-                                cov_imag * w[:, :, None] * w[:, None, :]
+                        else:
+                            bpg_window_function.append(
+                                window_function * w[:, :, None] * mult
                             )
-                        w_list.append(w)
+                    if store_cov:
+                        bpg_cov_real.append(
+                            cov_real * w[:, :, None] * w[:, None, :] * mult
+                        )
+                        bpg_cov_imag.append(
+                            cov_imag * w[:, :, None] * w[:, None, :] * mult
+                        )
+                    w_list.append(w * mult)
 
                 # normalize sum: clip to deal with w_list_sum == 0
                 w_list_sum = np.sum(w_list, axis=0).clip(1e-40, np.inf)
@@ -567,7 +579,10 @@ def average_spectra(
                     bpg_stats[stat] = np.sqrt(stat_avg)
                 if store_window:
                     if uvp.exact_windows:
-                        bpg_window_function = np.sum(bpg_window_function, axis=0)
+                        bpg_window_function = (
+                            np.sum(bpg_window_function, axis=0)
+                            / w_list_sum[:, :, None, None]
+                        )
                     else:
                         bpg_window_function = (
                             np.sum(bpg_window_function, axis=0) / w_list_sum[:, :, None]
@@ -1423,7 +1438,9 @@ def fold_spectra(uvp):
     """
     Average bandpowers from matching positive and negative delay bins onto a
     purely positive delay axis. Negative delay bins are still populated, but
-    are filled with zero power. This is an in-place operation.
+    are filled with zero power (and zero window functions and covariance),
+    while any stats_array entries there are set to infinity, i.e. zero weight.
+    This is an in-place operation.
 
     Will only work if uvp.folded == False, i.e. data is currently unfolded
     across negative and positive delay. Because this averages the data, the
@@ -1481,7 +1498,7 @@ def fold_spectra(uvp):
                     ]
                     uvp.window_function_array[spw][
                         :, Ndlys // 2 + 1 :, Nkpar // 2 + 1 :, :
-                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    ] = 0.5 * (leftleft + leftright + rightleft + rightright)
                     uvp.window_function_array[spw][:, :, : Nkpar // 2, :] = 0.0
                 uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
             # fold covariance array if it exists.
@@ -1530,7 +1547,8 @@ def fold_spectra(uvp):
                     uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
                         np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
                     ) ** (-0.5)
-                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
+                    # negative delays carry no information after folding
+                    uvp.stats_array[stat][spw][:, : Ndlys // 2, :] = np.inf
 
         else:
             # odd number of dlys
@@ -1565,7 +1583,7 @@ def fold_spectra(uvp):
                     ]
                     uvp.window_function_array[spw][
                         :, Ndlys // 2 + 1 :, Nkpar // 2 + 1 :, :
-                    ] = 0.25 * (leftleft + leftright + rightleft + rightright)
+                    ] = 0.5 * (leftleft + leftright + rightleft + rightright)
                     uvp.window_function_array[spw][:, :, : Nkpar // 2, :] = 0.0
                 uvp.window_function_array[spw][:, : Ndlys // 2, ...] = 0.0
 
@@ -1615,7 +1633,8 @@ def fold_spectra(uvp):
                     uvp.stats_array[stat][spw][:, Ndlys // 2 + 1 :, :] = (
                         np.sum([1.0 / left**2.0, 1.0 / right**2.0], axis=0)
                     ) ** (-0.5)
-                    uvp.data_array[spw][:, : Ndlys // 2, :] = np.nan
+                    # negative delays carry no information after folding
+                    uvp.stats_array[stat][spw][:, : Ndlys // 2, :] = np.inf
 
     uvp.folded = True
 
@@ -1714,7 +1733,14 @@ def bootstrap_average_blpairs(uvp_list, blpair_groups, time_avg=False, seed=None
     # Homogenise input UVPSpec objects in terms of available polarizations
     # and spectral windows
     if len(uvp_list) > 1:
-        uvp_list = uvputils.select_common(uvp_list, spws=True, pols=True, inplace=False)
+        uvp_list = uvputils.select_common(
+            uvp_list,
+            spws=True,
+            polpairs=True,
+            blpairs=False,
+            times=False,
+            inplace=False,
+        )
 
     # Loop over UVPSpec objects, looking for available blpairs in each
     avail_blpairs = [_ordered_unique(uvp.blpair_array) for uvp in uvp_list]

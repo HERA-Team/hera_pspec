@@ -1108,9 +1108,10 @@ class PSpecData:
             if self.taper == "none":
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(
-                    1, -1
-                )
+                # some tapers (e.g. blackman) evaluate to tiny negative values
+                # at their ends; clip them to zero before taking the sqrt
+                window = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                sqrtT = np.sqrt(np.clip(window, 0, None)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -3089,7 +3090,7 @@ class PSpecData:
                 end,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 little_h=little_h,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3100,7 +3101,7 @@ class PSpecData:
                 end,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 little_h=little_h,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3763,9 +3764,9 @@ class PSpecData:
 
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
-                    if norm == "H^-1":
-                        # If using decorrelation, the H^-1 normalization
-                        # already deals with the taper, so we need to override
+                    if norm in ("H^-1", "V^-1/2"):
+                        # The H^-1 and V^-1/2 normalizations already deal with
+                        # the taper (H contains it), so we need to override
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
