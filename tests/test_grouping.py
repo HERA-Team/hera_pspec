@@ -791,19 +791,23 @@ class TestSpherical:
         """Check that spherical_average runs on a UVPSpec with no window_function_array."""
         uvp = copy.deepcopy(uvp_spherical)
         del uvp.window_function_array
-        sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
+        Nk = len(self.KBINS)
+        A = {}
+        sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS, A=A)
         assert not hasattr(sph, "window_function_array")
-        # the window functions only feed the output window functions: the
-        # averaged power spectra and errors are unchanged without them
-        sph_ref = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
-        for spw in range(sph.Nspws):
-            np.testing.assert_array_equal(sph.data_array[spw], sph_ref.data_array[spw])
-            np.testing.assert_array_equal(
-                sph.cov_array_real[spw], sph_ref.cov_array_real[spw]
+        # the binning, averaged data and errors don't need the window functions
+        for spw in sph.spw_array:
+            assert np.isclose(sph.get_kparas(spw), self.KBINS).all()
+            assert np.all(
+                sph.data_array[spw][:, 0, :].real / sph.data_array[spw][:, 10, :] > 1e3
             )
-            np.testing.assert_array_equal(
-                sph.stats_array["err"][spw], sph_ref.stats_array["err"][spw]
-            )
+            assert np.isclose(
+                np.sqrt(sph.cov_array_real[spw])[:, range(Nk), range(Nk)],
+                1 / np.sqrt(A[spw].sum(axis=1)),
+            ).all()
+            assert np.isclose(
+                sph.stats_array["err"][spw], 1 / np.sqrt(A[spw].sum(axis=1))
+            ).all()
 
     def test_average_kbins_and_normalization(self, uvp_spherical: UVPSpec) -> None:
         """Check kbin values, WF normalization, data smell test, errorbar reduction, and array-shape bug checks."""

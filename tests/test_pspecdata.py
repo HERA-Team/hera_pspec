@@ -2320,7 +2320,7 @@ class TestPspec:
         # mixed grouped/ungrouped format: [[(bl,)], bl]
         bls1_mixed = [[(24, 25)], (52, 53)]
         bls2_mixed = [[(24, 25)], (52, 53)]
-        pspec_ds.pspec(
+        uvp_mixed = pspec_ds.pspec(
             bls1_mixed,
             bls2_mixed,
             (0, 1),
@@ -2331,6 +2331,12 @@ class TestPspec:
             little_h=True,
             verbose=False,
         )
+        # each entry of bls1 is paired with the matching entry of bls2, whether
+        # it is a group of baselines or a single baseline
+        assert sorted(uvp_mixed.get_blpairs()) == [
+            ((24, 25), (24, 25)),
+            ((52, 53), (52, 53)),
+        ]
 
     def test_pspec_multiple_spws_and_select(self, beam_nf_dipole, uvd: UVData) -> None:
         """Test pspec() with multiple spectral windows and verify that select() works
