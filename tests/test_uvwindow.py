@@ -1,6 +1,7 @@
 import copy
 import warnings
 from collections.abc import Callable
+from contextlib import nullcontext
 from pathlib import Path
 
 import h5py
@@ -22,6 +23,10 @@ dfile = "zen.2458116.31939.HH.uvh5"
 ftfile = "FT_beam_HERA_dipole_test_xx.hdf5"
 basename = "FT_beam_HERA_dipole_test"
 outfile = "test.hdf5"
+
+# Spectral window ranges that FTBeam must reject: wrong length, reversed, and
+# outside the band
+BAD_SPWS = [(13,), (20, 10), (1001, 1022)]
 
 
 # Reading the FT beam file is slow, so the fixtures below that read it are
@@ -145,83 +150,73 @@ def uvp_for_uvwindow(
     return uvp, uvp_nocosmo, uvp_crosspol
 
 
+@pytest.fixture()
+def ft_beam_init_kwargs(ft_beam_spw: uvwindow.FTBeam) -> dict:
+    """FTBeam constructor arguments that rebuild ft_beam_spw from its arrays."""
+    return dict(
+        data=ft_beam_spw.ft_beam,
+        pol="xx",
+        freq_array=ft_beam_spw.freq_array,
+        mapsize=ft_beam_spw.mapsize,
+    )
+
+
 class TestFTBeamInit:
-    def test_from_array(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
+    def test_from_array(self, ft_beam_init_kwargs: dict) -> None:
         test = uvwindow.FTBeam(
-            data=data,
-            pol="xx",
-            freq_array=freq_array,
-            mapsize=mapsize,
-            verbose=False,
-            x_orientation="east",
+            **ft_beam_init_kwargs, verbose=False, x_orientation="east"
         )
         assert test.pol == "xx"
-        assert np.allclose(data, test.ft_beam)
+        assert np.allclose(ft_beam_init_kwargs["data"], test.ft_beam)
 
-    @pytest.mark.parametrize("bad_data", ["2d", "wrong_shape"])
+    @pytest.mark.parametrize(
+        "slice_data,match",
+        [
+            pytest.param(
+                lambda data: data[:, :, 0], "Wrong dimensions for data input", id="2d"
+            ),
+            pytest.param(
+                lambda data: data[:, :, :-1],
+                "Wrong dimensions for data input",
+                id="wrong_shape",
+            ),
+            pytest.param(
+                lambda data: data[:12, :, :], "data must have shape", id="freq_mismatch"
+            ),
+        ],
+    )
     def test_invalid_data_shape(
-        self, ft_beam_spw: uvwindow.FTBeam, bad_data: str
+        self,
+        ft_beam_init_kwargs: dict,
+        slice_data: Callable[[np.ndarray], np.ndarray],
+        match: str,
     ) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        sliced = data[:, :, 0] if bad_data == "2d" else data[:, :, :-1]
-        with pytest.raises(ValueError, match="Wrong dimensions for data input"):
-            uvwindow.FTBeam(
-                data=sliced, pol="xx", freq_array=freq_array, mapsize=mapsize
-            )
+        data = slice_data(ft_beam_init_kwargs["data"])
+        with pytest.raises(ValueError, match=match):
+            uvwindow.FTBeam(**{**ft_beam_init_kwargs, "data": data})
 
-    def test_freq_mismatch(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(ValueError, match="data must have shape"):
-            uvwindow.FTBeam(
-                data=data[:12, :, :], pol="xx", freq_array=freq_array, mapsize=mapsize
-            )
-
-    def test_int_pol(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        test = uvwindow.FTBeam(
-            data=data, pol=-5, freq_array=freq_array, mapsize=mapsize
-        )
+    def test_int_pol(self, ft_beam_init_kwargs: dict) -> None:
+        test = uvwindow.FTBeam(**{**ft_beam_init_kwargs, "pol": -5})
         assert test.pol == uvutils.polnum2str(-5)
 
-    @pytest.mark.parametrize("bad_pol", ["test", 12])
+    @pytest.mark.parametrize(
+        "bad_pol,exc_type,match",
+        [
+            ("test", ValueError, "Wrong polarisation"),
+            (12, ValueError, "Wrong polarisation"),
+            (3.4, TypeError, "Must feed pol as str or int"),
+        ],
+        ids=["unknown_str", "unknown_int", "float"],
+    )
     def test_invalid_pol(
-        self, ft_beam_spw: uvwindow.FTBeam, bad_pol: str | int
+        self,
+        ft_beam_init_kwargs: dict,
+        bad_pol: str | int | float,
+        exc_type: type[Exception],
+        match: str,
     ) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(ValueError, match="Wrong polarisation"):
-            uvwindow.FTBeam(
-                pol=bad_pol, data=data, freq_array=freq_array, mapsize=mapsize
-            )
-
-    def test_float_pol_raises_typeerror(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        data, freq_array, mapsize = (
-            ft_beam_spw.ft_beam,
-            ft_beam_spw.freq_array,
-            ft_beam_spw.mapsize,
-        )
-        with pytest.raises(TypeError, match="Must feed pol as str or int"):
-            uvwindow.FTBeam(pol=3.4, data=data, freq_array=freq_array, mapsize=mapsize)
+        with pytest.raises(exc_type, match=match):
+            uvwindow.FTBeam(**{**ft_beam_init_kwargs, "pol": bad_pol})
 
 
 nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
@@ -268,17 +263,6 @@ class TestFTBeamFromBeam:
         for i in range(small_ft_beam.freq_array.size):
             assert np.argmax(small_ft_beam.ft_beam[i]) == (ngrid**2) // 2
 
-    def test_pol_as_int(self, small_ft_beam: uvwindow.FTBeam) -> None:
-        test = uvwindow.FTBeam.from_beam(
-            beamfile=nf_dipole_beamfits,
-            pol=-5,
-            freq_array=small_ft_beam.freq_array,
-            mapsize=1.0,
-            npix=29,
-        )
-        assert test.pol == "xx"
-        assert np.allclose(test.ft_beam, small_ft_beam.ft_beam)
-
     def test_too_few_frequencies(self, nf_dipole_beam_freqs: np.ndarray) -> None:
         with pytest.raises(ValueError, match="at least three frequencies"):
             uvwindow.FTBeam.from_beam(
@@ -310,15 +294,27 @@ class TestFTBeamFromBeam:
         # ...which is not trivially true: the beam changes with frequency
         assert not np.allclose(test.ft_beam[1], test.ft_beam[2])
 
-    def test_even_npix_adjusted_to_odd(self, small_ft_beam: uvwindow.FTBeam) -> None:
-        # npix=30 is adjusted down to 29, reproducing small_ft_beam exactly
-        test = uvwindow.FTBeam.from_beam(
+    @pytest.mark.parametrize(
+        "override",
+        [
+            pytest.param({"pol": -5}, id="pol_as_int"),
+            # npix=30 is adjusted down to 29
+            pytest.param({"npix": 30}, id="even_npix_adjusted_to_odd"),
+        ],
+    )
+    def test_equivalent_arguments(
+        self, small_ft_beam: uvwindow.FTBeam, override: dict
+    ) -> None:
+        """Check that equivalent from_beam arguments reproduce small_ft_beam exactly."""
+        kwargs = dict(
             beamfile=nf_dipole_beamfits,
             pol="xx",
             freq_array=small_ft_beam.freq_array,
             mapsize=1.0,
-            npix=30,
+            npix=29,
         )
+        test = uvwindow.FTBeam.from_beam(**{**kwargs, **override})
+        assert test.pol == "xx"
         assert test == small_ft_beam
 
     @pytest.mark.parametrize(("mapsize", "ngrid"), [(0.35, 15), (uvwindow._MAX_R, 29)])
@@ -392,16 +388,6 @@ class TestFTBeamFromFile:
         assert test.x_orientation == "east"
         np.testing.assert_array_equal(test.freq_array, ft_bandwidth[5:25])
 
-    def test_invalid_ftfile_type(self) -> None:
-        # The TypeError comes from pathlib; its wording varies between Python
-        # versions, so only the exception type is checked.
-        with pytest.raises(TypeError):
-            uvwindow.FTBeam.from_file(ftfile=12.0)
-
-    def test_invalid_ftfile_path(self) -> None:
-        with pytest.raises(ValueError, match="Wrong ftfile input"):
-            uvwindow.FTBeam.from_file(ftfile="whatever")
-
     def test_spw_range_matches_fixture(
         self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
     ) -> None:
@@ -419,17 +405,61 @@ class TestFTBeamFromFile:
         assert np.allclose(test.freq_array, ft_bandwidth)
 
     @pytest.mark.parametrize(
-        ("bad_freqs", "match"),
+        "make_kwargs,exc_type,match",
         [
-            (np.array([250e6, 251e6]), "beyond the bandwidth"),
-            (np.array([100e6]), "at least two frequencies"),
+            # The TypeError comes from pathlib; its wording varies between
+            # Python versions, so only the exception type is checked.
+            pytest.param(
+                lambda bandwidth: dict(ftfile=12.0),
+                TypeError,
+                None,
+                id="ftfile_not_path_like",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(ftfile="whatever"),
+                ValueError,
+                "Wrong ftfile input",
+                id="ftfile_missing",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile, freq_array=np.array([250e6, 251e6])
+                ),
+                ValueError,
+                "beyond the bandwidth",
+                id="freqs_beyond_bandwidth",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile, freq_array=np.array([100e6])
+                ),
+                ValueError,
+                "at least two frequencies",
+                id="single_frequency",
+            ),
+            pytest.param(
+                lambda bandwidth: dict(
+                    ftfile=DATA_PATH / ftfile,
+                    spw_range=(5, 25),
+                    freq_array=bandwidth[5:25],
+                ),
+                ValueError,
+                "both spw_range and freq_array",
+                id="spw_range_and_freq_array",
+            ),
         ],
     )
-    def test_invalid_freq_array(self, bad_freqs: np.ndarray, match: str) -> None:
-        with pytest.raises(ValueError, match=match):
-            uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=bad_freqs)
+    def test_invalid_input(
+        self,
+        ft_bandwidth: np.ndarray,
+        make_kwargs: Callable[[np.ndarray], dict],
+        exc_type: type[Exception],
+        match: str | None,
+    ) -> None:
+        with pytest.raises(exc_type, match=match):
+            uvwindow.FTBeam.from_file(**make_kwargs(ft_bandwidth))
 
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
         with (
             pytest.warns(DeprecationWarning, match="spw_range"),
@@ -439,17 +469,19 @@ class TestFTBeamFromFile:
 
 
 class TestFTBeamGaussian:
-    def test_array_widths(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        freq_array = ft_beam_spw.freq_array
-        widths = -0.0343 * freq_array / 1e6 + 11.30
-        test = uvwindow.FTBeam.gaussian(freq_array=freq_array, widths=widths, pol="xx")
-        assert test.freq_array.shape == freq_array.shape
-
-    def test_scalar_width(self, ft_beam_spw: uvwindow.FTBeam) -> None:
+    @pytest.mark.parametrize(
+        "reduce_widths", [lambda w: w, np.mean], ids=["array_widths", "scalar_width"]
+    )
+    def test_widths(
+        self,
+        ft_beam_spw: uvwindow.FTBeam,
+        reduce_widths: Callable[[np.ndarray], np.ndarray | float],
+    ) -> None:
+        """Check that widths can be given per frequency or as a single value."""
         freq_array = ft_beam_spw.freq_array
         widths = -0.0343 * freq_array / 1e6 + 11.30
         test = uvwindow.FTBeam.gaussian(
-            freq_array=freq_array, widths=np.mean(widths), pol="xx"
+            freq_array=freq_array, widths=reduce_widths(widths), pol="xx"
         )
         assert test.freq_array.shape == freq_array.shape
 
@@ -500,7 +532,7 @@ class TestFTBeamUpdateSpw:
         np.testing.assert_array_equal(test.freq_array, full_freqs[5:25])
         np.testing.assert_array_equal(test.ft_beam, full_ft_beam[5:25])
 
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
+    @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_range(
         self,
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
@@ -577,13 +609,16 @@ class TestUVWindowInit:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, verbose=True)
         assert test.verbose
 
-    def test_little_h_true(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=True)
-        assert test.kunits.is_equivalent(units.h / units.Mpc)
-
-    def test_little_h_false(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        assert test.kunits.is_equivalent(units.Mpc ** (-1))
+    @pytest.mark.parametrize(
+        "little_h,kunits",
+        [(True, units.h / units.Mpc), (False, units.Mpc ** (-1))],
+        ids=["little_h_true", "little_h_false"],
+    )
+    def test_little_h(
+        self, ft_beam_spw: uvwindow.FTBeam, little_h: bool, kunits: units.Unit
+    ) -> None:
+        test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=little_h)
+        assert test.kunits.is_equivalent(kunits)
 
 
 class TestUVWindowFromUvpspec:
@@ -599,22 +634,17 @@ class TestUVWindowFromUvpspec:
             uvp.polpair_array[ipol], pol_strings=True
         )
 
-    def test_happy_path(
-        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
+    # uvp_for_uvwindow holds (uvp, uvp without cosmology, cross-pol uvp)
+    @pytest.mark.parametrize("iuvp", [0, 2], ids=["happy_path", "crosspol"])
+    def test_matches_uvp(
+        self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec], iuvp: int
     ) -> None:
-        uvp, _, _ = uvp_for_uvwindow
+        uvp = uvp_for_uvwindow[iuvp]
         uvw = uvwindow.UVWindow.from_uvpspec(
             uvp, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
         )
         self._assert_matches_uvp(uvw, uvp, ipol=0)
         assert uvw.cosmo == uvp.cosmo
-
-    def test_crosspol(self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]) -> None:
-        _, _, uvp_crosspol = uvp_for_uvwindow
-        uvw = uvwindow.UVWindow.from_uvpspec(
-            uvp_crosspol, ipol=0, spw=0, ftbeam=DATA_PATH / basename
-        )
-        self._assert_matches_uvp(uvw, uvp_crosspol, ipol=0)
 
     def test_no_cosmo_warns(
         self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]
@@ -857,21 +887,26 @@ class TestUVWindowGetKperpBins:
         ):
             uvwindow_obj.get_kperp_bins(bl_lens=[])
 
-    def test_scalar_returns_units(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
+    @pytest.mark.parametrize(
+        "select_bl_lens",
+        [lambda bl_lens: bl_lens[12], lambda bl_lens: bl_lens],
+        ids=["scalar", "array"],
+    )
+    def test_linear_bins_with_units(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        select_bl_lens: Callable[[np.ndarray], np.ndarray | float],
     ) -> None:
-        kperps = uvwindow_obj.get_kperp_bins(red_bl_lens[12])
+        bl_lens = select_bl_lens(red_bl_lens)
+        kperps = uvwindow_obj.get_kperp_bins(bl_lens)
         assert uvwindow_obj.kunits.is_equivalent(kperps.unit)
-
-    def test_array(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
-        kperp_bins = uvwindow_obj.get_kperp_bins(red_bl_lens).value
+        kperp_bins = kperps.value
         # linearly spaced bins covering the longest baseline
         np.testing.assert_allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0])
         kperp_max = uvwindow_obj.cosmo.bl_to_kperp(
             uvwindow_obj.avg_z, little_h=True
-        ) * np.max(red_bl_lens)
+        ) * np.max(bl_lens)
         assert kperp_bins.max() > kperp_max
 
     def test_large_array_warns(
@@ -887,7 +922,9 @@ class TestUVWindowGetKparaBins:
             uvwindow_obj.get_kpara_bins(freq_array=uvwindow_obj.freq_array[2])
 
     def test_happy_path(self, uvwindow_obj: uvwindow.UVWindow) -> None:
-        kpara_bins = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
+        kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
+        assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
+        kpara_bins = kparas.value
         # linearly spaced bins, one per delay step, covering the largest delay
         kpara_per_tau = uvwindow_obj.cosmo.tau_to_kpara(
             uvwindow_obj.avg_z, little_h=True
@@ -897,10 +934,6 @@ class TestUVWindowGetKparaBins:
             np.diff(kpara_bins), kpara_per_tau * np.diff(dly_array)[0]
         )
         assert kpara_bins.max() > kpara_per_tau * np.abs(dly_array).max()
-
-    def test_returns_units(self, uvwindow_obj: uvwindow.UVWindow) -> None:
-        kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array)
-        assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
 
     def test_large_bandwidth_warns(self, uvwindow_obj: uvwindow.UVWindow) -> None:
         HERA_bw = np.linspace(1, 2, 1024, endpoint=False) * 1e8
@@ -957,60 +990,48 @@ class TestUVWindowGetCylindricalWf:
             kpara, uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array).value
         )
 
-    def test_custom_kperp_bins(
+    @pytest.mark.parametrize("axis", ["kperp", "kpara"])
+    def test_custom_bins(
         self,
         uvwindow_obj: uvwindow.UVWindow,
         cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+        axis: str,
     ) -> None:
-        bl_len, kperp, _, cyl_wf = cyl_wf_result
-        kperp2, _, cyl_wf2 = uvwindow_obj.get_cylindrical_wf(
-            bl_len,
-            kperp_bins=kperp * uvwindow_obj.kunits,
-            kpara_bins=None,
-            return_bins="unweighted",
+        """Check that passing the default bins explicitly reproduces the default result."""
+        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
+        bins = {"kperp_bins": None, "kpara_bins": None}
+        bins[f"{axis}_bins"] = {"kperp": kperp, "kpara": kpara}[
+            axis
+        ] * uvwindow_obj.kunits
+        kperp2, kpara2, cyl_wf2 = uvwindow_obj.get_cylindrical_wf(
+            bl_len, **bins, return_bins="unweighted"
         )
         assert np.allclose(cyl_wf2, cyl_wf)
         assert np.allclose(kperp2, kperp)
+        assert np.allclose(kpara2, kpara)
 
-    def test_custom_kpara_bins(
+    @pytest.mark.parametrize(
+        "bad_kwarg,bad_bins",
+        [
+            ("kperp_bins", np.logspace(-2, 0, 100)),
+            ("kpara_bins", np.logspace(-1, 1, 100)),
+        ],
+        ids=["kperp", "kpara"],
+    )
+    def test_nonlinear_bins_error(
         self,
         uvwindow_obj: uvwindow.UVWindow,
-        cyl_wf_result: tuple[float, np.ndarray, np.ndarray, np.ndarray],
+        red_bl_lens: np.ndarray,
+        bad_kwarg: str,
+        bad_bins: np.ndarray,
     ) -> None:
-        bl_len, kperp, kpara, cyl_wf = cyl_wf_result
-        _, kpara3, cyl_wf3 = uvwindow_obj.get_cylindrical_wf(
-            bl_len,
-            kperp_bins=None,
-            kpara_bins=kpara * uvwindow_obj.kunits,
-            return_bins="unweighted",
-        )
-        assert np.allclose(cyl_wf3, cyl_wf)
-        assert np.allclose(kpara, kpara3)
-
-    def test_nonlinear_kperp_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
+        bins = {"kperp_bins": None, "kpara_bins": None}
+        bins[bad_kwarg] = bad_bins * uvwindow_obj.kunits
         with pytest.raises(
-            ValueError, match="get_cylindrical_wf: kperp_bins must be linearly spaced"
+            ValueError, match=f"get_cylindrical_wf: {bad_kwarg} must be linearly spaced"
         ):
             uvwindow_obj.get_cylindrical_wf(
-                red_bl_lens[12],
-                kperp_bins=np.logspace(-2, 0, 100) * uvwindow_obj.kunits,
-                kpara_bins=None,
-                return_bins="unweighted",
-            )
-
-    def test_nonlinear_kpara_error(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
-    ) -> None:
-        with pytest.raises(
-            ValueError, match="get_cylindrical_wf: kpara_bins must be linearly spaced"
-        ):
-            uvwindow_obj.get_cylindrical_wf(
-                red_bl_lens[12],
-                kperp_bins=None,
-                kpara_bins=np.logspace(-1, 1, 100) * uvwindow_obj.kunits,
-                return_bins="unweighted",
+                red_bl_lens[12], **bins, return_bins="unweighted"
             )
 
     def test_odd_number_of_delays(
@@ -1427,30 +1448,34 @@ class TestUVWindowRunAndWrite:
         assert np.allclose(np.sum(cyl_wf_none, axis=(1, 2)), 1.0, atol=1e-3)
         assert not np.allclose(cyl_wf_none, cyl_wf_taper)
 
-    def test_clobber_false_raises(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
+    @pytest.mark.parametrize(
+        "clobber,second_write",
+        [
+            (False, pytest.raises(IOError, match="exists, not overwriting")),
+            (True, nullcontext()),
+        ],
+        ids=["clobber_false_raises", "clobber_true_overwrites"],
+    )
+    def test_clobber(
+        self,
+        uvwindow_obj: uvwindow.UVWindow,
+        red_bl_lens: np.ndarray,
+        tmp_path: Path,
+        clobber: bool,
+        second_write,
     ) -> None:
+        """Check that writing to an existing file needs clobber=True."""
         uvwindow_obj.run_and_write(
             filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
         )
-        with pytest.raises(IOError, match="exists, not overwriting"):
+        with second_write:
             uvwindow_obj.run_and_write(
-                filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=False
+                filepath=str(tmp_path / outfile),
+                bl_lens=[red_bl_lens[:1]],
+                kperp_bins=None,
+                kpara_bins=None,
+                clobber=clobber,
             )
-
-    def test_clobber_true_overwrites(
-        self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
-    ) -> None:
-        uvwindow_obj.run_and_write(
-            filepath=str(tmp_path / outfile), bl_lens=red_bl_lens[:1], clobber=True
-        )
-        uvwindow_obj.run_and_write(
-            filepath=str(tmp_path / outfile),
-            bl_lens=[red_bl_lens[:1]],
-            kperp_bins=None,
-            kpara_bins=None,
-            clobber=True,
-        )
 
     def test_weights_mismatch_error(
         self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray, tmp_path: Path
@@ -1539,23 +1564,31 @@ class TestFTBeamSelectFreqs:
             interp.ft_beam, 0.75 * full.ft_beam[3:10] + 0.25 * full.ft_beam[4:11]
         )
 
-    def test_out_of_coverage_raises(
+    @pytest.mark.parametrize(
+        "make_bad_freqs,match",
+        [
+            pytest.param(
+                lambda bandwidth: np.array([bandwidth.max() + 1e6] * 3),
+                "beyond the bandwidth",
+                id="out_of_coverage",
+            ),
+            pytest.param(
+                lambda bandwidth: bandwidth[:1],
+                "at least two frequencies",
+                id="single_frequency",
+            ),
+        ],
+    )
+    def test_invalid_freqs_raise(
         self,
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
         ft_bandwidth: np.ndarray,
+        make_bad_freqs: Callable[[np.ndarray], np.ndarray],
+        match: str,
     ) -> None:
         full = make_ft_beam_obj()
-        with pytest.raises(ValueError, match="beyond the bandwidth"):
-            full.select_freqs(np.array([ft_bandwidth.max() + 1e6] * 3))
-
-    def test_single_frequency_raises(
-        self,
-        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
-        ft_bandwidth: np.ndarray,
-    ) -> None:
-        full = make_ft_beam_obj()
-        with pytest.raises(ValueError, match="at least two frequencies"):
-            full.select_freqs(ft_bandwidth[:1])
+        with pytest.raises(ValueError, match=match):
+            full.select_freqs(make_bad_freqs(ft_bandwidth))
 
 
 class TestFTBeamFromFileFreqArray:
@@ -1569,14 +1602,6 @@ class TestFTBeamFromFileFreqArray:
         test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, freq_array=target)
         assert np.allclose(test.freq_array, target)
         assert np.array_equal(test.ft_beam, full.ft_beam[5:25])
-
-    def test_both_selections_raise(self, ft_bandwidth: np.ndarray) -> None:
-        with pytest.raises(ValueError, match="both spw_range and freq_array"):
-            uvwindow.FTBeam.from_file(
-                ftfile=DATA_PATH / ftfile,
-                spw_range=(5, 25),
-                freq_array=ft_bandwidth[5:25],
-            )
 
     def test_interpolation_through_partial_read(
         self,
