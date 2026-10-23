@@ -4,6 +4,7 @@ This adds several mock UVPSpec objects that can be used throughout the tests.
 """
 
 import copy
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -13,7 +14,7 @@ from pyuvdata import UVData
 
 from hera_pspec import PSpecBeamUV, PSpecData, UVPSpec, conversions, grouping, utils
 from hera_pspec.data import DATA_PATH
-from hera_pspec.testing import build_vanilla_uvpspec
+from hera_pspec.testing import build_vanilla_uvpspec, synthetic_uvdata
 
 DATA_PATH = Path(DATA_PATH)
 
@@ -53,9 +54,17 @@ def beam_nf_pstokes() -> PSpecBeamUV:
 
 
 @pytest.fixture(scope="session")
-def beam_nf_efield() -> PSpecBeamUV:
-    """PSpecBeamUV for the HERA NF efield beam. Tests that modify it must deepcopy it."""
-    return PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+def synthetic_uvd() -> Callable[..., UVData]:
+    """Factory for small, seeded synthetic UVData objects filled with Gaussian noise.
+
+    Call it with the keyword arguments of ``hera_pspec.testing.synthetic_uvdata``
+    (nfreq, ntimes, antpairs, antenna_positions, pols, sigma, freq_cov,
+    flag_chans, vis_units, seed, ...). Each call returns a new object, so tests
+    may modify it freely. Example::
+
+        uvd = synthetic_uvd(nfreq=16, ntimes=100, pols=("xx", "yy"), seed=3)
+    """
+    return synthetic_uvdata
 
 
 @pytest.fixture(scope="session")
@@ -182,14 +191,6 @@ def uvd_zen_all_xx() -> UVData:
     """Session-cached UVData from zen.all.xx.LST.1.06964.uvA."""
     uvd = UVData()
     uvd.read_miriad(str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA"))
-    return uvd
-
-
-@pytest.fixture(scope="session")
-def uvd_zen_all_yy() -> UVData:
-    """Session-cached UVData from zen.all.yy.LST.1.06964.uvA."""
-    uvd = UVData()
-    uvd.read_miriad(str(DATA_PATH / "zen.all.yy.LST.1.06964.uvA"))
     return uvd
 
 
