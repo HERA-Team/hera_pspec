@@ -53,6 +53,12 @@ def beam_nf_pstokes() -> PSpecBeamUV:
 
 
 @pytest.fixture(scope="session")
+def beam_nf_efield() -> PSpecBeamUV:
+    """PSpecBeamUV for the HERA NF efield beam. Tests that modify it must deepcopy it."""
+    return PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+
+
+@pytest.fixture(scope="session")
 def vanilla_uvp() -> UVPSpec:
     return build_vanilla_uvpspec()[0]
 
@@ -179,6 +185,14 @@ def uvd_zen_all_xx() -> UVData:
     """Session-cached UVData from zen.all.xx.LST.1.06964.uvA."""
     uvd = UVData()
     uvd.read_miriad(str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA"))
+    return uvd
+
+
+@pytest.fixture(scope="session")
+def uvd_zen_all_yy() -> UVData:
+    """Session-cached UVData from zen.all.yy.LST.1.06964.uvA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.all.yy.LST.1.06964.uvA"))
     return uvd
 
 

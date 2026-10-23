@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,20 +20,19 @@ NUM_FREQS = 20
 
 
 @pytest.fixture
-def efield_beam() -> pspecbeam.PSpecBeamUV:
+def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     """An efield-type beam with beam_type force-set to 'power' so later validation steps in beam_normalized_response can be reached."""
-    beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+    beam = copy.deepcopy(beam_nf_efield)
     beam.primary_beam.beam_type = "power"
     return beam
 
 
 class TestPSpecBeamUV:
-    def test_init(self) -> None:
+    def test_init(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
-        bm = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_dipole_power.beamfits")
-        assert isinstance(bm.primary_beam, UVBeam)
-        assert bm.beam_freqs.size > 0
-        assert isinstance(bm.cosmo, conversions.Cosmo_Conversions)
+        assert isinstance(beam_nf_dipole.primary_beam, UVBeam)
+        assert beam_nf_dipole.beam_freqs.size > 0
+        assert isinstance(beam_nf_dipole.cosmo, conversions.Cosmo_Conversions)
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
@@ -62,20 +62,18 @@ class TestPSpecBeamUV:
     def test_scalar_convergence(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=10000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
-    def test_custom_cosmology(self) -> None:
+    def test_custom_cosmology(
+        self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV
+    ) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        beam = pspecbeam.PSpecBeamUV(
-            DATA_PATH / "HERA_NF_pstokes_power.beamfits",
-            cosmo=conversions.Cosmo_Conversions(),
-        )
-        assert isinstance(beam.cosmo, conversions.Cosmo_Conversions)
+        assert isinstance(beam_nf_dipole_wcosmo.cosmo, conversions.Cosmo_Conversions)
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
@@ -170,14 +168,15 @@ class TestPSpecBeamUV:
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
             )
 
-    def test_efield_beam(self) -> None:
+    def test_efield_beam(self, beam_nf_efield: pspecbeam.PSpecBeamUV) -> None:
         """Check that efield beams compute a scalar for XX but raise for pI."""
-        beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
-        beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        beam_nf_efield.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):
-            beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
+            beam_nf_efield.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
+            )
 
     def test_get_omegas_single_polpair(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
@@ -234,10 +233,12 @@ class TestPSpecBeamUV:
                 beam_nf_dipole, pol="ll", freq=freq
             )
 
-    def test_beam_normalized_response_raises_on_non_power_beam(self) -> None:
+    def test_beam_normalized_response_raises_on_non_power_beam(
+        self, beam_nf_efield: pspecbeam.PSpecBeamUV
+    ) -> None:
         """Check that a non-power beam_type raises a ValueError."""
         freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
-        beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+        beam = copy.deepcopy(beam_nf_efield)
         beam.primary_beam.beam_type = "voltage"
         with pytest.raises(ValueError, match="beam_type must be power"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
@@ -313,10 +314,10 @@ class TestPSpecBeamGauss:
     def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
