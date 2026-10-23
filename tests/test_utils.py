@@ -32,11 +32,8 @@ class TestCircularAverage:
         """Check that wrapping near 2*pi averages near 0/2*pi rather than pi."""
         angles_wrap = np.array([6.2, 0.1])
         result = utils.circular_average(angles_wrap)
-        assert (result < 0.5) or (result > 5.5)
-
-        # Verify the buggy arithmetic mean would give the wrong (pi-region) result
-        buggy_result = np.mean(angles_wrap)
-        assert 2.5 < buggy_result < 3.5
+        # 6.2 is 6.2 - 2pi below zero, so the mean is halfway between that and 0.1
+        assert np.isclose(result, (6.2 - 2 * np.pi + 0.1) / 2, rtol=1e-10)
 
     def test_matches_arithmetic_mean_without_wrap(self) -> None:
         """Check that circular and arithmetic means agree when there's no wrap."""
@@ -589,10 +586,13 @@ class TestUvdToTsys:
 
 
 class TestLog:
-    def test_prints_message(self) -> None:
-        """Check that log() runs without raising for both default and explicit verbosity levels."""
+    def test_prints_message(self, capsys: pytest.CaptureFixture) -> None:
+        """Check that log() prints the message, indented by two spaces per level."""
         utils.log("message")
         utils.log("message", lvl=2)
+        assert capsys.readouterr().out == "message\n    message\n"
+        utils.log("message", verbose=False)
+        assert capsys.readouterr().out == ""
 
     def test_writes_to_logfile(self, tmp_path: Path) -> None:
         """Check that log() writes the message verbatim to a given file handle."""
