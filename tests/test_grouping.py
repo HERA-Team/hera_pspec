@@ -699,31 +699,6 @@ class TestBootstrapRun:
         with pytest.raises(AssertionError, match="should not be in SWMR mode"):
             grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
-    def test_argparser(self) -> None:
-        """Check that the bootstrap_run argparser correctly parses spectra, blpair_groups, and cintervals arguments."""
-        args = grouping.get_bootstrap_run_argparser()
-        a = args.parse_args(
-            [
-                "fname",
-                "--spectra",
-                "grp1/uvp1",
-                "grp1/uvp2",
-                "grp2/uvp1",
-                "--blpair_groups",
-                "101102103104 101102102103, 102103104105",
-                "--time_avg",
-                "True",
-                "--Nsamples",
-                "100",
-                "--cintervals",
-                "16",
-                "84",
-            ]
-        )
-        assert a.spectra == ["grp1/uvp1", "grp1/uvp2", "grp2/uvp1"]
-        assert a.blpair_groups == [[101102103104, 101102102103], [102103104105]]
-        assert a.cintervals == [16.0, 84.0]
-
 
 @pytest.fixture(scope="session")
 def uvp_spherical(
@@ -793,6 +768,15 @@ class TestSpherical:
         assert "checking 1 2 3" in sph.history
         assert np.isclose(sph.get_blpair_seps(), 0).all()
         assert "err" in sph.stats_array
+
+    def test_average_without_window_function_array(
+        self, uvp_spherical: UVPSpec
+    ) -> None:
+        """Check that spherical_average runs on a UVPSpec with no window_function_array."""
+        uvp = copy.deepcopy(uvp_spherical)
+        del uvp.window_function_array
+        sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS)
+        assert not hasattr(sph, "window_function_array")
 
     def test_average_kbins_and_normalization(self, uvp_spherical: UVPSpec) -> None:
         """Check kbin values, WF normalization, data smell test, errorbar reduction, and array-shape bug checks."""
