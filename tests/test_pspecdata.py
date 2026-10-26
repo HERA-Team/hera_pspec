@@ -29,6 +29,7 @@ from hera_pspec import (
     pspecbeam,
     pspecdata,
     testing,
+    unit_helpers,
     utils,
     uvwindow,
 )
@@ -1577,7 +1578,7 @@ class TestScalar:
         ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
         freqs = ds.freqs[ds.spw_range[0] : ds.spw_range[1]]
         unit = (
-            uvputils.parse_unit_string(length_unit)
+            unit_helpers.parse_unit_string(length_unit)
             if isinstance(length_unit, str)
             else length_unit
         )

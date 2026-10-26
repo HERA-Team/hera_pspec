@@ -9,7 +9,7 @@ import numpy as np
 from astropy import stats as astats
 from astropy import units
 
-from . import __version__, conversions, utils
+from . import __version__, conversions, unit_helpers, utils
 from . import uvpspec_utils as uvputils
 from .uvpspec import _ordered_unique
 
@@ -99,7 +99,7 @@ def _check_k_bin_inputs(k_inputs, little_h, stacklevel=3):
         if value is None:
             continue
         if isinstance(value, units.Quantity):
-            if little_h is not None and bool(little_h) != uvputils.is_littleh(
+            if little_h is not None and bool(little_h) != unit_helpers.is_littleh(
                 value.unit
             ):
                 raise ValueError(

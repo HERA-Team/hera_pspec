@@ -19,6 +19,7 @@ from hera_pspec import (
     UVPSpec,
     conversions,
     plot,
+    unit_helpers,
     uvpspec,
 )
 from hera_pspec import uvpspec_utils as uvputils
@@ -73,9 +74,9 @@ class TestParsePspecUnit:
             ("Mpc3", units.Mpc**3),
             ("Hz sr", units.Hz * units.sr),
             ("", units.dimensionless_unscaled),
-            ("uncalib", uvputils.uncalib),
-            ("UNCALIB", uvputils.uncalib),
-            ("unknown", uvputils.uncalib),
+            ("uncalib", unit_helpers.uncalib),
+            ("UNCALIB", unit_helpers.uncalib),
+            ("unknown", unit_helpers.uncalib),
             ("K str", units.K * units.sr),
             ("k STR", units.K * units.sr),
             ("K sr", units.K * units.sr),
@@ -84,21 +85,21 @@ class TestParsePspecUnit:
             ("mK", units.mK),
             ("MK", units.mK),
             (b"mK", units.mK),
-            ("Mpc3 uncalib2 / littleh3", uvputils.uncalib**2 * MPC3_H3),
+            ("Mpc3 uncalib2 / littleh3", unit_helpers.uncalib**2 * MPC3_H3),
         ],
     )
     def test_known_strings(self, string, unit) -> None:
-        assert uvputils.parse_pspec_unit(string) == unit
+        assert unit_helpers.parse_pspec_unit(string) == unit
 
     @pytest.mark.parametrize("string", ["not a unit", "Hz str [other note]", "str"])
     def test_unknown_strings_raise(self, string: str) -> None:
         with pytest.raises(ValueError, match="Cannot interpret"):
-            uvputils.parse_pspec_unit(string)
+            unit_helpers.parse_pspec_unit(string)
 
     @pytest.mark.parametrize("string", ["h^-1 Mpc", "Mpc3 / h3", "h"])
     def test_hours_raise(self, string: str) -> None:
         with pytest.raises(ValueError, match="hours"):
-            uvputils.parse_pspec_unit(string)
+            unit_helpers.parse_pspec_unit(string)
 
     @pytest.mark.parametrize(
         "string,canonical",
@@ -115,9 +116,9 @@ class TestParsePspecUnit:
         ],
     )
     def test_canonical_unit_string(self, string: str, canonical: str) -> None:
-        assert uvputils.canonical_unit_string(string) == canonical
+        assert unit_helpers.canonical_unit_string(string) == canonical
         # canonical strings are fixed points
-        assert uvputils.canonical_unit_string(canonical) == canonical
+        assert unit_helpers.canonical_unit_string(canonical) == canonical
 
     @pytest.mark.parametrize(
         "string,canonical,is_deltasq",
@@ -133,33 +134,33 @@ class TestParsePspecUnit:
     def test_canonical_norm_units(
         self, string, canonical: str, is_deltasq: bool
     ) -> None:
-        assert uvputils.canonical_norm_units(string) == (canonical, is_deltasq)
+        assert unit_helpers.canonical_norm_units(string) == (canonical, is_deltasq)
 
     def test_is_littleh(self) -> None:
-        assert uvputils.is_littleh(MPC3_H3)
-        assert uvputils.is_littleh(cu.littleh / units.Mpc)
-        assert uvputils.is_littleh("Mpc3 / littleh3")
-        assert uvputils.is_littleh("h^-3 Mpc^3")
-        assert not uvputils.is_littleh(units.Mpc**3)
-        assert not uvputils.is_littleh("Mpc3")
-        assert not uvputils.is_littleh("Hz sr")
-        assert not uvputils.is_littleh(units.dimensionless_unscaled)
+        assert unit_helpers.is_littleh(MPC3_H3)
+        assert unit_helpers.is_littleh(cu.littleh / units.Mpc)
+        assert unit_helpers.is_littleh("Mpc3 / littleh3")
+        assert unit_helpers.is_littleh("h^-3 Mpc^3")
+        assert not unit_helpers.is_littleh(units.Mpc**3)
+        assert not unit_helpers.is_littleh("Mpc3")
+        assert not unit_helpers.is_littleh("Hz sr")
+        assert not unit_helpers.is_littleh(units.dimensionless_unscaled)
 
     def test_uncalib_enabled(self) -> None:
         with pytest.raises(ValueError):
             units.Unit("uncalib")
-        with uvputils.enabled_hera_units():
-            assert units.Unit("uncalib2 Hz sr") == uvputils.uncalib**2 * (
+        with unit_helpers.enabled_hera_units():
+            assert units.Unit("uncalib2 Hz sr") == unit_helpers.uncalib**2 * (
                 units.Hz * units.sr
             )
-        assert "uncalib" in uvputils.uncalib.to_string("latex_inline")
+        assert "uncalib" in unit_helpers.uncalib.to_string("latex_inline")
 
 
 class TestPspecUnits:
     @pytest.mark.parametrize(
         "vis_units,vis_unit",
         [
-            ("UNCALIB", uvputils.uncalib),
+            ("UNCALIB", unit_helpers.uncalib),
             ("Jy", units.Jy),
             ("mK", units.mK),
             ("K str", units.K * units.sr),
@@ -179,7 +180,7 @@ class TestPspecUnits:
         assert uvp.vis_unit == vis_unit
         assert uvp.norm_unit == norm_unit
         assert uvp.units == vis_unit**2 * norm_unit
-        assert uvp.vis_units == uvputils.unit_to_string(vis_unit)
+        assert uvp.vis_units == unit_helpers.unit_to_string(vis_unit)
         assert uvp.norm_units == ("Mpc3 / littleh3" if little_h else "Mpc3")
         assert uvp.deltasq is False
 
@@ -199,7 +200,7 @@ class TestPspecUnits:
     def test_vanilla(self, vanilla_uvp: UVPSpec) -> None:
         assert vanilla_uvp.vis_units == "uncalib"
         assert vanilla_uvp.norm_units == "Hz sr"
-        assert vanilla_uvp.units == uvputils.uncalib**2 * units.Hz * units.sr
+        assert vanilla_uvp.units == unit_helpers.uncalib**2 * units.Hz * units.sr
 
     def test_units_is_cached_unit(self, vanilla_uvp: UVPSpec) -> None:
         assert isinstance(vanilla_uvp.units, units.UnitBase)
@@ -292,9 +293,9 @@ class TestDeltasq:
         assert uvp.deltasq is True
         assert uvp.norm_units == canonical
         assert uvp.norm_unit == unit
-        assert uvp.units == uvputils.uncalib**2 * unit
+        assert uvp.units == unit_helpers.uncalib**2 * unit
         # little h of k is still known from norm_units
-        assert uvputils.is_littleh(uvp.norm_units) is ("h^-3" in legacy)
+        assert unit_helpers.is_littleh(uvp.norm_units) is ("h^-3" in legacy)
 
 
 class TestHdf5Units:
@@ -303,7 +304,7 @@ class TestHdf5Units:
         assert uvp.norm_units == "Mpc3 / littleh3"
         assert uvp.vis_units == "uncalib"
         assert uvp.deltasq is False
-        assert uvp.units == uvputils.uncalib**2 * MPC3_H3
+        assert uvp.units == unit_helpers.uncalib**2 * MPC3_H3
 
     @pytest.mark.parametrize(
         "name,stored_norm,stored_vis,norm_units,vis_units",
@@ -372,8 +373,8 @@ class TestHdf5Units:
         uvp = psc.get_pspec(lf.CONTAINER_GROUP, lf.UVP_WINDOWS_NAME)
         uvp.stats_array = {"P_N": {0: np.ones_like(uvp.data_array[0].real)}}
         uvp.write_hdf5(tmp_path / "uvp.h5")
-        unit = uvputils.unit_to_string(uvp.units)
-        cov_unit = uvputils.unit_to_string(uvp.units**2)
+        unit = unit_helpers.unit_to_string(uvp.units)
+        cov_unit = unit_helpers.unit_to_string(uvp.units**2)
         with h5py.File(tmp_path / "uvp.h5", "r") as f:
             assert f["data_spw0"].attrs["unit"] == unit
             assert f["stats_P_N_0"].attrs["unit"] == unit

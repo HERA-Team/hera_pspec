@@ -306,11 +306,11 @@ Power spectrum units
   uvp.units         # Unit("Mpc3 mK2 / littleh3")  (v0.x: the string '(mK)^2 h^-3 Mpc^3')
 
 Don't hand legacy strings to ``u.Unit``: astropy reads the ``h`` in
-``"h^-3 Mpc^3"`` as hour. ``uvputils.parse_pspec_unit`` maps them correctly.
+``"h^-3 Mpc^3"`` as hour. ``unit_helpers.parse_pspec_unit`` maps them correctly.
 
 .. code-block:: python
 
-  hp.uvputils.parse_pspec_unit("h^-3 Mpc^3")   # Unit("Mpc3 / littleh3")
+  hp.unit_helpers.parse_pspec_unit("h^-3 Mpc^3")   # Unit("Mpc3 / littleh3")
 
 ``convert_to_deltasq`` now sets ``deltasq`` and keeps ``norm_units``; ``units``
 includes the k³ factor. It can be applied only once.

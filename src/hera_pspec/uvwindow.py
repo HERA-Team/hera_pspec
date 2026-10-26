@@ -14,7 +14,7 @@ from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from scipy.interpolate import RegularGridInterpolator
 
-from . import conversions, utils
+from . import conversions, unit_helpers, utils
 from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
@@ -402,13 +402,13 @@ class FTBeam:
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
             _check_ftbeam_version(f, ftfile)
-            mapsize = uvputils.convert_from_stored_unit(
+            mapsize = unit_helpers.convert_from_stored_unit(
                 f["mapsize"][0],
                 f["mapsize"].attrs.get("unit", None),
                 _FTBEAM_MAPSIZE_UNIT,
                 "mapsize",
             )
-            bandwidth = uvputils.convert_from_stored_unit(
+            bandwidth = unit_helpers.convert_from_stored_unit(
                 np.array(f["freq"][...]),
                 f["freq"].attrs.get("unit", None),
                 _FTBEAM_FREQ_UNIT,
@@ -578,7 +578,7 @@ class FTBeam:
 
         with h5py.File(ftfile, "r") as f:
             _check_ftbeam_version(f, ftfile)
-            bandwidth = uvputils.convert_from_stored_unit(
+            bandwidth = unit_helpers.convert_from_stored_unit(
                 np.array(f["freq"][...]),
                 f["freq"].attrs.get("unit", None),
                 _FTBEAM_FREQ_UNIT,
@@ -798,7 +798,7 @@ def _resolve_kunits(kunits, little_h, stacklevel=3):
         return from_flag
     if kunits is not None:
         if isinstance(kunits, (str, bytes)):
-            kunits = uvputils.parse_unit_string(kunits)
+            kunits = unit_helpers.parse_unit_string(kunits)
         elif isinstance(kunits, (units.UnitBase, units.Quantity)):
             # 1 / u.Mpc is a Quantity of value 1
             kunits = units.Unit(kunits)
@@ -948,7 +948,7 @@ class UVWindow:
             DeprecationWarning,
             stacklevel=2,
         )
-        return uvputils.is_littleh(self.kunits)
+        return unit_helpers.is_littleh(self.kunits)
 
     @classmethod
     def from_uvpspec(
@@ -2051,7 +2051,7 @@ class UVWindow:
             else:
                 f.attrs["taper"] = self.taper
             # arrays
-            kunits = uvputils.unit_to_string(self.kunits)
+            kunits = unit_helpers.unit_to_string(self.kunits)
             dset = f.create_dataset(
                 "kperp_bins", shape=(nbins_kperp,), data=kperp_bins, dtype=float
             )

@@ -24,6 +24,7 @@ from . import pspecbeam as pspecbeam
 from . import pstokes as pstokes
 from . import response as response
 from . import testing as testing
+from . import unit_helpers as unit_helpers
 from . import utils as utils
 from . import uvpspec_utils as uvputils
 from .container import PSpecContainer as PSpecContainer

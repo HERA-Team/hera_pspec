@@ -37,7 +37,7 @@ Units of a ``UVPSpec``
 * :meth:`~hera_pspec.UVPSpec.window_k_unit` and
   :meth:`~hera_pspec.UVPSpec.get_window_function_kgrid` give the k unit and
   grid of the exact window functions.
-* :func:`hera_pspec.uvpspec_utils.parse_pspec_unit` parses ``norm_units`` and
+* :func:`hera_pspec.unit_helpers.parse_pspec_unit` parses ``norm_units`` and
   ``vis_units`` strings, including the legacy strings of v0.x files.
 
 The ``conversions`` module
@@ -76,4 +76,4 @@ The ``conversions`` module
 .. autoclass:: hera_pspec.conversions.Cosmo_Conversions
   :members:
 
-.. autofunction:: hera_pspec.uvpspec_utils.parse_pspec_unit
+.. autofunction:: hera_pspec.unit_helpers.parse_pspec_unit

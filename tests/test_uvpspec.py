@@ -21,6 +21,7 @@ from hera_pspec import (
     pspecbeam,
     pspecdata,
     testing,
+    unit_helpers,
     utils,
     uvpspec,
     uvwindow,
@@ -583,7 +584,7 @@ class TestUnitGetters:
     def test_k_values(self, vanilla_uvp: UVPSpec, norm_units: str, length_unit) -> None:
         """An explicit length_unit always wins over the object's own unit."""
         uvp = _with_norm_units(vanilla_uvp, norm_units)
-        unit = uvputils.parse_unit_string(length_unit)
+        unit = unit_helpers.parse_unit_string(length_unit)
         k_perp_expected, k_para_expected = _expected_ks(uvp, 0, unit)
         k_perp = uvp.get_kperps(0, length_unit=length_unit)
         k_para = uvp.get_kparas(0, length_unit=length_unit)

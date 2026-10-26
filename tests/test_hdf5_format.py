@@ -13,7 +13,7 @@ import pytest
 from astropy import units
 from astropy.cosmology import FLRW, Cosmology, FlatLambdaCDM, LambdaCDM, wCDM
 
-from hera_pspec import PSpecContainer, UVPSpec, conversions, uvwindow
+from hera_pspec import PSpecContainer, UVPSpec, conversions, unit_helpers, uvwindow
 from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 from tests import legacy_fixtures as lf
@@ -107,7 +107,7 @@ class TestWriteVersion2:
                     stored = f[name].attrs["unit"]
                 else:
                     stored = f.attrs[f"{name}_unit"]
-                assert uvputils.parse_unit_string(stored) == unit, name
+                assert unit_helpers.parse_unit_string(stored) == unit, name
 
     def test_window_function_k_units(
         self, uvp_windows: UVPSpec, tmp_path: Path
@@ -594,33 +594,35 @@ class TestUVWindowFiles:
             assert f["kpara_bins"].attrs["unit"] == kunit
             assert f["bl_lens"].attrs["unit"] == "m"
             assert f["dly_array"].attrs["unit"] == "s"
-            assert uvputils.parse_unit_string(kunit) == uvw.kunits
+            assert unit_helpers.parse_unit_string(kunit) == uvw.kunits
 
 
 class TestUnitHelpers:
     def test_parse_littleh(self) -> None:
-        assert uvputils.parse_unit_string("littleh / Mpc") == cu.littleh / units.Mpc
-        assert uvputils.parse_unit_string(b"Hz") == units.Hz
+        assert unit_helpers.parse_unit_string("littleh / Mpc") == cu.littleh / units.Mpc
+        assert unit_helpers.parse_unit_string(b"Hz") == units.Hz
         with pytest.raises(ValueError):
             units.Unit("littleh / Mpc")
 
     def test_enabled_hera_units_is_scoped(self) -> None:
-        with uvputils.enabled_hera_units():
+        with unit_helpers.enabled_hera_units():
             assert units.Unit("littleh") == cu.littleh
         with pytest.raises(ValueError):
             units.Unit("littleh")
 
     def test_convert_from_stored_unit(self) -> None:
         values = np.array([1.0, 2.0])
-        same = uvputils.convert_from_stored_unit(values, "s", units.s, "x")
+        same = unit_helpers.convert_from_stored_unit(values, "s", units.s, "x")
         assert same is values
-        assert uvputils.convert_from_stored_unit(values, None, units.s, "x") is values
+        assert (
+            unit_helpers.convert_from_stored_unit(values, None, units.s, "x") is values
+        )
         np.testing.assert_allclose(
-            uvputils.convert_from_stored_unit(values, b"ns", units.s, "x"),
+            unit_helpers.convert_from_stored_unit(values, b"ns", units.s, "x"),
             values * 1e-9,
         )
         with pytest.raises(ValueError, match="x is stored in unit 'Hz'"):
-            uvputils.convert_from_stored_unit(values, "Hz", units.s, "x")
+            unit_helpers.convert_from_stored_unit(values, "Hz", units.s, "x")
 
 
 class TestNormUnitsFromLegacyString:
@@ -643,13 +645,13 @@ class TestNormUnitsFromLegacyString:
         ],
     )
     def test_known_forms(self, string, unit, is_deltasq: bool) -> None:
-        result, deltasq = uvputils.norm_units_from_legacy_string(string)
+        result, deltasq = unit_helpers.norm_units_from_legacy_string(string)
         assert isinstance(result, units.UnitBase)
         assert result == unit
         assert deltasq is is_deltasq
 
     def test_littleh_is_not_hour(self) -> None:
-        unit, _ = uvputils.norm_units_from_legacy_string("h^-3 Mpc^3")
+        unit, _ = unit_helpers.norm_units_from_legacy_string("h^-3 Mpc^3")
         assert not unit.is_equivalent(units.Mpc**3 / units.hour**3)
 
     @pytest.mark.parametrize(
@@ -657,7 +659,7 @@ class TestNormUnitsFromLegacyString:
     )
     def test_unknown_raises(self, string: str) -> None:
         with pytest.raises(ValueError, match="Known forms are"):
-            uvputils.norm_units_from_legacy_string(string)
+            unit_helpers.norm_units_from_legacy_string(string)
 
 
 class TestCosmologyFromParams:

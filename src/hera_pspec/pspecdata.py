@@ -16,7 +16,15 @@ from astropy.cosmology import FLRW
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
-from . import __version__, container, conversions, pspecbeam, utils, uvpspec
+from . import (
+    __version__,
+    container,
+    conversions,
+    pspecbeam,
+    unit_helpers,
+    utils,
+    uvpspec,
+)
 from . import response as responses
 from . import uvpspec_utils as uvputils
 
@@ -27,13 +35,13 @@ def _resolve_length_unit(length_unit, little_h):
     """
     Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
 
-    Strings are parsed with :func:`uvpspec_utils.parse_unit_string` (so
+    Strings are parsed with :func:`unit_helpers.parse_unit_string` (so
     ``"Mpc / littleh"`` works); the rest is
     :func:`conversions.resolve_length_unit`, whose deprecation warning points
     at the caller of the public method that called this helper.
     """
     if isinstance(length_unit, (str, bytes)):
-        length_unit = uvputils.parse_unit_string(length_unit)
+        length_unit = unit_helpers.parse_unit_string(length_unit)
     return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
 
@@ -3278,7 +3286,7 @@ class PSpecData:
         -------
         vis_units : str
             Unit of the visibilities of the first dataset, as a canonical
-            astropy unit string (see ``uvpspec_utils.parse_pspec_unit``):
+            astropy unit string (see ``unit_helpers.parse_pspec_unit``):
             e.g. ``"mK"``, ``"Jy"``, ``"K sr"`` or ``"uncalib"``.
         norm_units : str
             Unit of the power spectrum normalisation, as a canonical astropy
@@ -3305,14 +3313,14 @@ class PSpecData:
             )
 
         # get visibility units
-        vis_units = uvputils.canonical_unit_string(self.dsets[0].vis_units)
+        vis_units = unit_helpers.canonical_unit_string(self.dsets[0].vis_units)
 
         # set pspec norm units
         if self.primary_beam is None:
             norm_unit = units.Hz * units.sr
         else:
             norm_unit = length_unit**3
-        norm_units = uvputils.unit_to_string(norm_unit)
+        norm_units = unit_helpers.unit_to_string(norm_unit)
 
         return vis_units, norm_units
 
@@ -4735,7 +4743,7 @@ class PSpecData:
             if not one_step_cosmo:
                 # legacy one-step output: no cosmological normalisation,
                 # labelled like a spectrum without a beam
-                uvp.norm_units = uvputils.unit_to_string(units.Hz * units.sr)
+                uvp.norm_units = unit_helpers.unit_to_string(units.Hz * units.sr)
         elif exact_norm:
             uvp.normalization = "two-step-exact"
         else:

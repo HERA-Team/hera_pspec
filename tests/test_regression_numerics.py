@@ -14,7 +14,7 @@ import pytest
 from astropy import units
 from astropy.cosmology import FLRW
 
-from hera_pspec import conversions
+from hera_pspec import conversions, unit_helpers
 from hera_pspec import uvpspec_utils as uvputils
 from tests.regression_cases import CASES, compute_case, read_legacy_uvp
 
@@ -76,8 +76,8 @@ def test_legacy_uvp_file_metadata() -> None:
     assert uvp.vis_units == "uncalib"
     assert uvp.deltasq is False
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
-    assert uvp.vis_unit == uvputils.uncalib
-    assert uvp.units == uvputils.uncalib**2 * units.Mpc**3 / cu.littleh**3
+    assert uvp.vis_unit == unit_helpers.uncalib
+    assert uvp.units == unit_helpers.uncalib**2 * units.Mpc**3 / cu.littleh**3
     assert isinstance(uvp.cosmo, FLRW)
     assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
     params = conversions.params_from_cosmology(uvp.cosmo)

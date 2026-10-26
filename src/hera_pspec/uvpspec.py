@@ -13,7 +13,7 @@ from astropy import units
 from astropy.cosmology import FLRW, Cosmology
 from pyuvdata import utils as uvutils
 
-from . import __version__, conversions, grouping, noise, pspecbeam, utils
+from . import __version__, conversions, grouping, noise, pspecbeam, unit_helpers, utils
 from . import uvpspec_utils as uvputils
 from .conversions import _LITTLEH_LENGTH
 from .parameter import PSpecParam
@@ -126,9 +126,9 @@ def _norm_unit(norm_units, deltasq):
     by the unit of k^3: ``(littleh / Mpc)**3`` if it contains littleh, else
     ``Mpc**-3`` (the k that ``UVPSpec.convert_to_deltasq`` uses).
     """
-    unit = uvputils.parse_pspec_unit(norm_units)
+    unit = unit_helpers.parse_pspec_unit(norm_units)
     if deltasq:
-        if uvputils.is_littleh(unit):
+        if unit_helpers.is_littleh(unit):
             unit = unit * (cu.littleh / units.Mpc) ** 3
         else:
             unit = unit * units.Mpc**-3
@@ -138,7 +138,9 @@ def _norm_unit(norm_units, deltasq):
 @functools.lru_cache(maxsize=64)
 def _pspec_unit(vis_units, norm_units, deltasq):
     """Return ``vis_unit**2 * norm_unit`` for the strings and flag, cached."""
-    return uvputils.parse_pspec_unit(vis_units) ** 2 * _norm_unit(norm_units, deltasq)
+    return unit_helpers.parse_pspec_unit(vis_units) ** 2 * _norm_unit(
+        norm_units, deltasq
+    )
 
 
 def _normalize_nested_sequence(value, arg_name, group_description):
@@ -1282,7 +1284,7 @@ class UVPSpec:
         except ValueError:
             # an unparsable norm_units string: keep the old littleh default
             return _LITTLEH_LENGTH
-        if uvputils.is_littleh(norm_unit) or norm_unit.is_equivalent(
+        if unit_helpers.is_littleh(norm_unit) or norm_unit.is_equivalent(
             units.Hz * units.sr
         ):
             return _LITTLEH_LENGTH
@@ -1309,7 +1311,7 @@ class UVPSpec:
         -------
         astropy.units.UnitBase
         """
-        if uvputils.is_littleh(self.norm_units):
+        if unit_helpers.is_littleh(self.norm_units):
             return _LITTLEH_K_UNIT
         return _MPC_K_UNIT
 
@@ -1351,14 +1353,14 @@ class UVPSpec:
         Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
 
         None for both gives :meth:`_default_length_unit`. Strings are parsed
-        with :func:`uvpspec_utils.parse_unit_string`; the rest is
+        with :func:`unit_helpers.parse_unit_string`; the rest is
         :func:`conversions.resolve_length_unit`, whose deprecation warning
         points at the caller of the public method that called this one.
         """
         if length_unit is None and little_h is None:
             return self._default_length_unit()
         if isinstance(length_unit, (str, bytes)):
-            length_unit = uvputils.parse_unit_string(length_unit)
+            length_unit = unit_helpers.parse_unit_string(length_unit)
         return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
     def get_blpairs(self):
@@ -1631,7 +1633,7 @@ class UVPSpec:
             uvp = copy.deepcopy(self)
 
         # k in the length unit of norm_units (this is what norm_unit assumes)
-        if uvputils.is_littleh(uvp.norm_units):
+        if unit_helpers.is_littleh(uvp.norm_units):
             length_unit = _LITTLEH_LENGTH
         else:
             length_unit = units.Mpc
@@ -2279,7 +2281,7 @@ class UVPSpec:
                 if version is not None and k in self._meta_attrs:
                     unit = getattr(self, "_" + k).unit
                     if unit is not None:
-                        val = uvputils.convert_from_stored_unit(
+                        val = unit_helpers.convert_from_stored_unit(
                             val, grp.attrs.get(f"{k}_unit", None), unit, k
                         )
                 setattr(self, k, val)
@@ -2290,7 +2292,7 @@ class UVPSpec:
                 if version is not None and k in self._meta_dsets:
                     unit = getattr(self, "_" + k).unit
                     if unit is not None:
-                        val = uvputils.convert_from_stored_unit(
+                        val = unit_helpers.convert_from_stored_unit(
                             val, dset.attrs.get("unit", None), unit, k
                         )
                 setattr(self, k, val)
@@ -2419,11 +2421,13 @@ class UVPSpec:
             If a string cannot be interpreted as a unit.
         """
         if hasattr(self, "norm_units"):
-            self.norm_units, is_deltasq = uvputils.canonical_norm_units(self.norm_units)
+            self.norm_units, is_deltasq = unit_helpers.canonical_norm_units(
+                self.norm_units
+            )
             if is_deltasq:
                 self.deltasq = True
         if hasattr(self, "vis_units"):
-            self.vis_units = uvputils.canonical_unit_string(self.vis_units)
+            self.vis_units = unit_helpers.canonical_unit_string(self.vis_units)
 
     def _check_stored_pspec_units(self, grp):
         """
@@ -2453,7 +2457,7 @@ class UVPSpec:
                 continue
             if isinstance(stored, bytes):
                 stored = stored.decode()
-            if uvputils.parse_pspec_unit(stored) != expected[kind]:
+            if unit_helpers.parse_pspec_unit(stored) != expected[kind]:
                 raise ValueError(
                     f"Dataset {name} is stored with unit '{stored}', but "
                     f"vis_units '{self.vis_units}' and norm_units "
@@ -2644,7 +2648,7 @@ class UVPSpec:
                 unit = getattr(self, "_" + k).unit
                 if unit is not None:
                     this_attr = _value_in_unit(this_attr, unit)
-                    attrs[f"{k}_unit"] = uvputils.unit_to_string(unit)
+                    attrs[f"{k}_unit"] = unit_helpers.unit_to_string(unit)
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
                 if k == "labels":
@@ -2662,19 +2666,19 @@ class UVPSpec:
                     dset = group.create_dataset(
                         k, data=_value_in_unit(getattr(self, k), unit)
                     )
-                    dset.attrs["unit"] = uvputils.unit_to_string(unit)
+                    dset.attrs["unit"] = unit_helpers.unit_to_string(unit)
 
-        integration_unit = uvputils.unit_to_string(self._integration_array.unit)
+        integration_unit = unit_helpers.unit_to_string(self._integration_array.unit)
         # The power spectra (and their errors in stats_array) are in
         # self.units, their covariances in self.units**2; window functions
         # are dimensionless ("")
         pspec_unit = self.units
-        data_unit = uvputils.unit_to_string(pspec_unit)
-        cov_unit = uvputils.unit_to_string(pspec_unit**2)
-        window_unit = uvputils.unit_to_string(units.dimensionless_unscaled)
+        data_unit = unit_helpers.unit_to_string(pspec_unit)
+        cov_unit = unit_helpers.unit_to_string(pspec_unit**2)
+        window_unit = unit_helpers.unit_to_string(units.dimensionless_unscaled)
         if getattr(self, "exact_windows", False):
             window_k_unit = self.window_k_unit()
-            window_k_unit_string = uvputils.unit_to_string(window_k_unit)
+            window_k_unit_string = unit_helpers.unit_to_string(window_k_unit)
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
@@ -2865,7 +2869,7 @@ class UVPSpec:
             self.beam_freqs = new_beam.beam_freqs
 
         one_step = getattr(self, "normalization", "two-step") == "one-step"
-        if one_step and uvputils.parse_pspec_unit(self.norm_units).is_equivalent(
+        if one_step and unit_helpers.parse_pspec_unit(self.norm_units).is_equivalent(
             units.Hz * units.sr
         ):
             raise ValueError(
@@ -2909,10 +2913,10 @@ class UVPSpec:
                 self.scalar_array[spw, j] = scalar
 
         # Update self.units if pspectra were not originally in cosmological units
-        if uvputils.parse_pspec_unit(self.norm_units).is_equivalent(
+        if unit_helpers.parse_pspec_unit(self.norm_units).is_equivalent(
             units.Hz * units.sr
         ):
-            self.norm_units = uvputils.unit_to_string(units.Mpc**3 / cu.littleh**3)
+            self.norm_units = unit_helpers.unit_to_string(units.Mpc**3 / cu.littleh**3)
 
     def _rescale_one_step_cosmology(self):
         """
@@ -3354,13 +3358,13 @@ class UVPSpec:
         Unit of the visibilities the power spectra were formed from.
 
         The astropy unit of the ``vis_units`` string, e.g. ``u.mK``, ``u.Jy``
-        or :data:`hera_pspec.uvpspec_utils.uncalib` for uncalibrated data.
+        or :data:`hera_pspec.unit_helpers.uncalib` for uncalibrated data.
 
         Returns
         -------
         astropy.units.UnitBase
         """
-        return uvputils.parse_pspec_unit(self.vis_units)
+        return unit_helpers.parse_pspec_unit(self.vis_units)
 
     @property
     def norm_unit(self):
@@ -3397,7 +3401,7 @@ class UVPSpec:
         -----
         Changed in v1.0: this returned the string
         ``"({vis_units})^2 {norm_units}"`` before; it now returns an astropy
-        unit. Use ``uvputils.unit_to_string(uvp.units)`` for a string.
+        unit. Use ``unit_helpers.unit_to_string(uvp.units)`` for a string.
         """
         return _pspec_unit(
             self.vis_units, self.norm_units, bool(getattr(self, "deltasq", False))
