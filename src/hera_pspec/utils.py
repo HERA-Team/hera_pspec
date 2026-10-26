@@ -46,7 +46,7 @@ def circular_average(angles, axis=0):
     >>> # Averaging near the 2*pi wrap
     >>> angles = np.array([6.2, 0.1])  # near 2*pi and just after
     >>> circular_average(angles)
-    0.15...  # approximately (6.2 + 0.1) / 2 - 2*pi
+    0.0084...  # (6.2 - 2*pi + 0.1) / 2
 
     >>> # Averaging angles not near wrap (should match arithmetic mean)
     >>> angles = np.array([1.0, 1.5, 2.0])

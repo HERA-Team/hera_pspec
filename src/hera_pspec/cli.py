@@ -1,7 +1,7 @@
 """A CLI interface for hera_pspec."""
 
 import copy
-import datetime
+import datetime as dt
 import glob
 import logging
 import pickle
@@ -559,7 +559,7 @@ def compute_ft_beam(
         overwrite=True,
         extra_attrs={
             "beam_file": str(beam_file),
-            "created_utc": datetime.datetime.now(datetime.UTC).isoformat(),
+            "created_utc": dt.datetime.now(dt.UTC).isoformat(),
             "producer": "pspec compute-ft-beam",
         },
     )
@@ -622,7 +622,7 @@ def _compute_one_wf(
         f.attrs["spw_freq_max_hz"] = float(spw_freqs.max())
         f.attrs["pspec_file"] = str(pspec_file)
         f.attrs["ft_beam_file"] = str(ft_beam_file)
-        f.attrs["created_utc"] = datetime.datetime.now(datetime.UTC).isoformat()
+        f.attrs["created_utc"] = dt.datetime.now(dt.UTC).isoformat()
         f.attrs["producer"] = "pspec compute-window-functions"
     logger.info("Wrote %s", out_path)
     return str(out_path.absolute())
