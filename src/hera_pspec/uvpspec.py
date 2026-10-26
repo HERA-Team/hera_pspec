@@ -1,7 +1,6 @@
 import ast
 import copy
 import fnmatch
-import functools
 import os
 import warnings
 from typing import Self
@@ -13,7 +12,16 @@ from astropy import units
 from astropy.cosmology import FLRW, Cosmology
 from pyuvdata import utils as uvutils
 
-from . import __version__, conversions, grouping, noise, pspecbeam, unit_helpers, utils
+from . import (
+    __version__,
+    _uvpspec_helpers,
+    conversions,
+    grouping,
+    noise,
+    pspecbeam,
+    unit_helpers,
+    utils,
+)
 from . import uvpspec_utils as uvputils
 from .conversions import _LITTLEH_LENGTH
 from .parameter import PSpecParam
@@ -42,105 +50,6 @@ _COSMO_ATTR_TOL = 1e-12
 # k units of the exact window function grids (see UVPSpec.window_k_unit)
 _LITTLEH_K_UNIT = cu.littleh / units.Mpc
 _MPC_K_UNIT = units.Mpc ** (-1)
-
-
-@functools.lru_cache(maxsize=32)
-def _cosmology_from_yaml(cosmo_yaml):
-    """
-    Parse an astropy cosmology from YAML.
-
-    Cached, since files repeat the same string and astropy cosmologies are
-    immutable; parsing costs several milliseconds per read otherwise.
-    """
-    return Cosmology.from_format(cosmo_yaml, format="yaml")
-
-
-# The "cosmo" dict string and "cosmo_yaml" written for each cosmology, keyed by
-# the parameter dict plus the class and name (the YAML holds both). Dumping the
-# YAML costs ~0.25 ms per write. The cosmology itself is never rebuilt here:
-# building a LambdaCDM leaves a reference cycle that holds the calling frames
-# (and so any open HDF5 objects in them) alive until the garbage collector runs.
-_COSMO_ATTRS_CACHE = {}
-_COSMO_ATTRS_CACHE_SIZE = 32
-
-
-def _cosmo_attrs_for_writing(cosmo):
-    """
-    Return the HDF5 attribute strings of a cosmology, cached.
-
-    Parameters
-    ----------
-    cosmo : astropy.cosmology.FLRW
-        The cosmology.
-
-    Returns
-    -------
-    cosmo_params : str
-        ``str(conversions.params_from_cosmology(cosmo))``, the v0.x dict
-        string of the ``cosmo`` attribute.
-    cosmo_yaml : str
-        ``cosmo.to_format("yaml")``.
-    """
-    params = conversions.params_from_cosmology(cosmo)
-    key = (type(cosmo), cosmo.name, tuple(sorted(params.items())))
-    try:
-        cached_cosmo, attrs = _COSMO_ATTRS_CACHE[key]
-    except KeyError:
-        pass
-    else:
-        # parameters outside the dict (e.g. w0 or Tcmb0) must match too
-        if cached_cosmo is cosmo or cached_cosmo.is_equivalent(cosmo):
-            return attrs
-    attrs = (str(params), cosmo.to_format("yaml"))
-    if len(_COSMO_ATTRS_CACHE) >= _COSMO_ATTRS_CACHE_SIZE:
-        _COSMO_ATTRS_CACHE.clear()
-    _COSMO_ATTRS_CACHE[key] = (cosmo, attrs)
-    return attrs
-
-
-def _value_in_unit(value, unit):
-    """Return a plain value in ``unit``: Quantities are converted, others kept."""
-    if isinstance(value, units.Quantity):
-        return value.to_value(unit)
-    return value
-
-
-def _spw_range_to_hz(spw_range):
-    """
-    Return a ``get_spw_ranges`` tuple with its frequencies as floats in Hz.
-
-    Frequency Quantities are converted; plain numbers are taken to be in Hz
-    (the pre-v1.0 form of the tuples).
-    """
-    return tuple(_value_in_unit(freq, units.Hz) for freq in spw_range[:2]) + tuple(
-        spw_range[2:]
-    )
-
-
-@functools.lru_cache(maxsize=64)
-def _norm_unit(norm_units, deltasq):
-    """
-    Return the normalisation unit of a ``norm_units`` string, cached.
-
-    For Delta^2 spectra (``deltasq``), the P(k) normalisation is multiplied
-    by the unit of k^3: ``(littleh / Mpc)**3`` if it contains littleh, else
-    ``Mpc**-3`` (the k that ``UVPSpec.convert_to_deltasq`` uses).
-    """
-    unit = unit_helpers.parse_pspec_unit(norm_units)
-    if deltasq:
-        if unit_helpers.is_littleh(unit):
-            unit = unit * (cu.littleh / units.Mpc) ** 3
-        else:
-            unit = unit * units.Mpc**-3
-    return unit
-
-
-@functools.lru_cache(maxsize=64)
-def _pspec_unit(vis_units, norm_units, deltasq):
-    """Return ``vis_unit**2 * norm_unit`` for the strings and flag, cached."""
-    return unit_helpers.parse_pspec_unit(vis_units) ** 2 * _norm_unit(
-        norm_units, deltasq
-    )
 
 
 def _normalize_nested_sequence(value, arg_name, group_description):
@@ -1280,7 +1189,7 @@ class UVPSpec:
         if norm_units is None:
             return _LITTLEH_LENGTH
         try:
-            norm_unit = _norm_unit(norm_units, False)
+            norm_unit = _uvpspec_helpers.norm_unit(norm_units, False)
         except ValueError:
             # an unparsable norm_units string: keep the old littleh default
             return _LITTLEH_LENGTH
@@ -1792,7 +1701,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_freq_array for s in spw]).all(), (
@@ -1829,7 +1738,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_dly_array for s in spw]).all(), (
@@ -1870,7 +1779,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_array for s in spw]).all(), (
@@ -2490,7 +2399,7 @@ class UVPSpec:
         """
         if isinstance(cosmo_yaml, bytes):
             cosmo_yaml = cosmo_yaml.decode()
-        cosmo = _cosmology_from_yaml(cosmo_yaml)
+        cosmo = _uvpspec_helpers.cosmology_from_yaml(cosmo_yaml)
         if cosmo_params is not None:
             params = ast.literal_eval(cosmo_params)
             from_yaml = conversions.params_from_cosmology(cosmo)
@@ -2637,7 +2546,7 @@ class UVPSpec:
                 # handle cosmo: the v0.x dict string (read by every version)
                 # and, when astropy can represent it, the astropy YAML
                 if k == "cosmo":
-                    cosmo_params, cosmo_yaml = _cosmo_attrs_for_writing(
+                    cosmo_params, cosmo_yaml = _uvpspec_helpers.cosmo_attrs_for_writing(
                         conversions.as_astropy_cosmology(self.cosmo)
                     )
                     attrs["cosmo"] = cosmo_params
@@ -2647,7 +2556,7 @@ class UVPSpec:
 
                 unit = getattr(self, "_" + k).unit
                 if unit is not None:
-                    this_attr = _value_in_unit(this_attr, unit)
+                    this_attr = _uvpspec_helpers.value_in_unit(this_attr, unit)
                     attrs[f"{k}_unit"] = unit_helpers.unit_to_string(unit)
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
@@ -2664,7 +2573,7 @@ class UVPSpec:
                     group.create_dataset(k, data=getattr(self, k))
                 else:
                     dset = group.create_dataset(
-                        k, data=_value_in_unit(getattr(self, k), unit)
+                        k, data=_uvpspec_helpers.value_in_unit(getattr(self, k), unit)
                     )
                     dset.attrs["unit"] = unit_helpers.unit_to_string(unit)
 
@@ -2691,7 +2600,7 @@ class UVPSpec:
             )
             dset = group.create_dataset(
                 f"integration_spw{i}",
-                data=_value_in_unit(
+                data=_uvpspec_helpers.value_in_unit(
                     self.integration_array[i], self._integration_array.unit
                 ),
                 dtype=np.float64,
@@ -2710,7 +2619,7 @@ class UVPSpec:
                 if self.exact_windows:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
-                        data=_value_in_unit(
+                        data=_uvpspec_helpers.value_in_unit(
                             self.window_function_kperp[i], window_k_unit
                         ),
                         dtype=np.float64,
@@ -2718,7 +2627,7 @@ class UVPSpec:
                     dset.attrs["unit"] = window_k_unit_string
                     dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
-                        data=_value_in_unit(
+                        data=_uvpspec_helpers.value_in_unit(
                             self.window_function_kpara[i], window_k_unit
                         ),
                         dtype=np.float64,
@@ -3383,7 +3292,9 @@ class UVPSpec:
         -------
         astropy.units.UnitBase
         """
-        return _norm_unit(self.norm_units, bool(getattr(self, "deltasq", False)))
+        return _uvpspec_helpers.norm_unit(
+            self.norm_units, bool(getattr(self, "deltasq", False))
+        )
 
     @property
     def units(self):
@@ -3403,7 +3314,7 @@ class UVPSpec:
         ``"({vis_units})^2 {norm_units}"`` before; it now returns an astropy
         unit. Use ``unit_helpers.unit_to_string(uvp.units)`` for a string.
         """
-        return _pspec_unit(
+        return _uvpspec_helpers.pspec_unit(
             self.vis_units, self.norm_units, bool(getattr(self, "deltasq", False))
         )
 
@@ -3533,7 +3444,7 @@ class UVPSpec:
                 noise_scalar=True,
             ).to_value(scalar_unit)
         else:
-            scalar = _value_in_unit(scalar, scalar_unit)
+            scalar = _uvpspec_helpers.value_in_unit(scalar, scalar_unit)
 
         # Get k vectors
         if form == "DelSq":
