@@ -1,3 +1,4 @@
+import warnings
 from pathlib import Path
 
 import astropy.units as u
@@ -340,12 +341,14 @@ class PSpecBeamBase:
 
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
-            print(
-                f"Warning: min freq {np.min(freqs)} < self.beam_freqs.min(), extrapolating..."
+            warnings.warn(
+                f"min freq {np.min(freqs)} < self.beam_freqs.min(), extrapolating...",
+                stacklevel=2,
             )
         if np.max(freqs) > self.beam_freqs.max():
-            print(
-                f"Warning: max freq {np.max(freqs)} > self.beam_freqs.max(), extrapolating..."
+            warnings.warn(
+                f"max freq {np.max(freqs)} > self.beam_freqs.max(), extrapolating...",
+                stacklevel=2,
             )
 
         Op = interp1d(

@@ -508,8 +508,11 @@ def check_corr_matrix(m: np.ndarray) -> None:
     assert m.ndim == 2
     assert m.shape[0] == m.shape[1]
     assert np.all(np.diag(m) == 1)
-    assert np.all(m - np.eye(m.shape[0]) <= 1)
+    # correlation coefficients are bounded by 1 in magnitude
+    assert np.all(np.abs(m) <= 1 + 1e-12)
     np.testing.assert_array_almost_equal(m.T, m)
+    # and a correlation matrix is positive semi-definite
+    assert np.all(np.linalg.eigvalsh(m) >= -1e-10)
 
 
 @pytest.mark.parametrize("n", [1, 6, 7])

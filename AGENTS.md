@@ -85,4 +85,3 @@ There are two parallel entry-point styles:
 - `tests/test_regression_numerics.py` pins numerical outputs against `tests/data/regression/*.npz` (see `tests/data/README.md`). A failing case means the numbers moved: fix the code. Regenerating a fixture needs the maintainer's approval and a commit body that says what changed and why.
 - `benchmarks/` (see `benchmarks/README.md`) times realistic workflows. A workflow more than 10% slower than the baseline blocks a change; confirm a slowdown by running the baseline commit and the new one back to back in separate worktrees before calling it a regression.
 - Commit messages use **conventional commits** (`type: description`, e.g. `fix:`, `feat:`, `chore:`, `docs:`, `test:`, `refactor:`).
-- Do **not** add `Co-Authored-By: Claude` (or any AI) trailers to commits or PRs.

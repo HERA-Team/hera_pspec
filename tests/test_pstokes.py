@@ -276,7 +276,12 @@ class TestConstructPstokes:
     def test_dual_pol_input(self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData) -> None:
         """Check that pI can be constructed from a single dual-polarization UVData object."""
         uvd3 = uvd1 + uvd2
-        pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes="pI")
+        uvdI = pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes="pI")
+        # same as constructing it from the two single-polarization objects
+        uvdI_ref = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes="pI")
+        np.testing.assert_array_equal(uvdI.polarization_array, [1])
+        np.testing.assert_allclose(uvdI.data_array, uvdI_ref.data_array)
+        np.testing.assert_array_equal(uvdI.flag_array, uvdI_ref.flag_array)
 
     def test_raises_when_same_polarization_used_twice(
         self, uvd1: pyuvdata.UVData

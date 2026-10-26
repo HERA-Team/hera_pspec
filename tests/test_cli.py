@@ -116,18 +116,18 @@ class TestFastMergeBaselines:
             print(result.stdout)
             assert result.exit_code == 0
 
-        # Test that the file we made has all the baselines in it.
+        # Test that the file we made has all the baselines in it (and no others).
         new = PSpecContainer(pth / "combined.pspec.h5", "r", keep_open=False)
-        newuvp = new.get_pspec("pspecgroup", "name")
-        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
+        for name in ["name", "name2"]:
+            newuvp = new.get_pspec("pspecgroup", name)
+            assert sorted(newuvp.get_blpairs()) == sorted(vanilla_uvp.get_blpairs())
 
-        newuvp = new.get_pspec("pspecgroup", "name2")
-        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
-
-        # Test that the file we made has all the baselines in it.
-        with open(pth / "combined.extra0.pkl", "rb") as fl:
-            data = pickle.load(fl)
-            assert all(blp in data for blp in vanilla_uvp.get_blpairs())
+        # Test that the extras were collected from every file.
+        for extra, value in [("extra0", [1, 2, 3]), ("extra1", "a nice string")]:
+            with open(pth / f"combined.{extra}.pkl", "rb") as fl:
+                data = pickle.load(fl)
+            assert sorted(data) == sorted(vanilla_uvp.get_blpairs())
+            assert all(np.all(v == value) for v in data.values())
 
     def test_batch_processing(self, vanilla_uvp, single_baseline_files: list[Path]):
         """Test that batch processing produces the same result as loading all at once."""
@@ -215,7 +215,7 @@ class TestFastMergeBaselines:
 def test_run_help():
     result = invoke(["run", "--help"])
     assert result.exit_code == 0, result.output
-    assert "run" in result.output.lower()
+    assert "--dset-pairs" in result.output
 
 
 def test_run_end_to_end(tmp_path):
@@ -252,6 +252,16 @@ def test_run_end_to_end(tmp_path):
     psc = container.PSpecContainer(str(out), mode="r")
     assert psc.groups() == ["dset0_dset1"]
     assert psc.spectra("dset0_dset1") == ["dset0_x_dset1_0"]
+
+    # the spectral window and baseline length/angle selections were applied
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1_0")
+    assert uvp.Nspws == 1
+    assert uvp.get_spw_ranges()[0][2] == 25
+    blvecs = uvp.get_blpair_blvecs()
+    bl_lens = np.linalg.norm(blvecs, axis=1)
+    bl_degs = np.degrees(np.arctan2(blvecs[:, 1], blvecs[:, 0])) % 180
+    assert np.all((bl_lens >= 14) & (bl_lens <= 15))
+    assert np.all((bl_degs >= 50) & (bl_degs <= 70))
 
 
 def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
@@ -633,7 +643,7 @@ def test_run_end_to_end_cosmology_and_length_unit(tmp_path):
 def test_bootstrap_help():
     result = invoke(["bootstrap", "--help"])
     assert result.exit_code == 0, result.output
-    assert "bootstrap" in result.output.lower()
+    assert "--nsamples" in result.output
 
 
 def test_bootstrap_bool_flags_round_trip(monkeypatch):
@@ -675,7 +685,7 @@ def test_bootstrap_blpair_group_parsed(monkeypatch):
 def test_auto_noise_help():
     result = invoke(["auto-noise", "--help"])
     assert result.exit_code == 0, result.output
-    assert "auto-noise" in result.output.lower()
+    assert "--err-type" in result.output
 
 
 def _auto_noise_fakes(monkeypatch, calls):
@@ -766,7 +776,7 @@ def test_auto_noise_multiple_err_types(monkeypatch):
 def test_generate_pstokes_help():
     result = invoke(["generate-pstokes", "--help"])
     assert result.exit_code == 0, result.output
-    assert "generate-pstokes" in result.output.lower()
+    assert "--pstokes" in result.output
 
 
 def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
@@ -853,7 +863,7 @@ class TestComputeFtBeam:
     def test_help(self):
         result = invoke(["compute-ft-beam", "--help"])
         assert result.exit_code == 0, result.output
-        assert "compute-ft-beam" in result.output.lower()
+        assert "--npix" in result.output
 
     @pytest.fixture(scope="class")
     def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
@@ -918,7 +928,7 @@ class TestComputeWindowFunctions:
     def test_help(self):
         result = invoke(["compute-window-functions", "--help"])
         assert result.exit_code == 0, result.output
-        assert "compute-window-functions" in result.output.lower()
+        assert "--workers" in result.output
 
     @pytest.fixture(scope="class")
     def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
@@ -958,12 +968,22 @@ class TestComputeWindowFunctions:
         assert path.is_file()
         assert path.name == "wf_exact_xx_clitest_spw00.hdf5"
 
-    def test_file_contents(self, wf_run: tuple[Result, Path]):
+    def test_file_contents(self, wf_run: tuple[Result, Path], vanilla_uvp: UVPSpec):
         result, _ = wf_run
         path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
         with h5py.File(path, "r") as f:
             assert {"wf", "kperp", "kpara"} <= set(f.keys())
-            assert f["wf"].ndim == 5  # (Nblpairs, Ndlys, Nkperp, Nkpara, Npol)
+            # (Nbltpairs, Ndlys, Nkperp, Nkpara, Npol)
+            wf = f["wf"][:]
+            assert wf.shape == (
+                vanilla_uvp.Nbltpairs,
+                vanilla_uvp.Ndlys,
+                f["kperp"].shape[0],
+                f["kpara"].shape[0],
+                1,
+            )
+            # each delay's window function is normalized over (kperp, kpara)
+            np.testing.assert_allclose(wf.sum(axis=(2, 3)), 1.0)
             assert f.attrs["dataset_label"] == "clitest"
             assert f.attrs["polpair"] == "xx"
             assert f.attrs["spw_index"] == 0
@@ -988,24 +1008,34 @@ class TestComputeWindowFunctions:
         assert result2.exit_code == 0
         assert path.stat().st_mtime == mtime  # not recomputed
 
-    def test_parallel_workers(self, wf_run: tuple[Result, Path], wf_pspec_file: Path):
-        result, out_dir = wf_run
+    def test_parallel_workers(
+        self, wf_run: tuple[Result, Path], wf_pspec_file: Path, tmp_path: Path
+    ):
+        # compute into a fresh directory (so nothing is reused) with a
+        # worker pool, and compare with the serial result
+        result, _ = wf_run
         path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        with h5py.File(path, "r") as f:
+            ft_path = f.attrs["ft_beam_file"]
+            wf_serial = f["wf"][:]
         result2 = invoke(
             [
                 "compute-window-functions",
                 str(wf_pspec_file),
-                str(path),
+                ft_path,
                 "--dataset-label",
                 "clitest",
                 "--out-dir",
-                str(out_dir),
+                str(tmp_path),
                 "--workers",
                 "2",
             ]
         )
         assert result2.exit_code == 0, result2.output
-        assert "WF_PATH=" in result2.output
+        path2 = Path(result2.output.split("WF_PATH=")[1].splitlines()[0])
+        assert path2.parent == tmp_path
+        with h5py.File(path2, "r") as f:
+            np.testing.assert_array_equal(f["wf"][:], wf_serial)
 
     def test_out_of_range_spws(self, wf_run: tuple[Result, Path], wf_pspec_file: Path):
         result, out_dir = wf_run

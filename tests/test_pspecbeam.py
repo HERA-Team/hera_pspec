@@ -87,10 +87,16 @@ class TestPSpecBeamUV:
     def test_scalar_other_stokes(
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV, pol: str
     ) -> None:
-        """Check that compute_pspec_scalar does not raise for the other Stokes parameters."""
-        beam_nf_pstokes.compute_pspec_scalar(
+        """Check compute_pspec_scalar for the other Stokes parameters."""
+        scalar = beam_nf_pstokes.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol=pol, num_steps=2000
         )
+        scalar_pI = beam_nf_pstokes.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+        )
+        # a positive scalar that uses the requested polarization's beam
+        assert np.isfinite(scalar) and scalar > 0
+        assert not np.isclose(scalar, scalar_pI, rtol=1e-3)
 
     def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
@@ -100,14 +106,22 @@ class TestPSpecBeamUV:
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check Jy_to_mK output shape/value and that non-float-array inputs raise a TypeError."""
+        """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
         M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11) * u.Hz)
         assert len(M) == 11
         # k_B from astropy.constants (CODATA 2018); CODATA 2014 gave 40.643366654821904
         np.testing.assert_almost_equal(M[0], 40.643352524643994)
         M = beam_nf_pstokes.Jy_to_mK(150e6 * u.Hz)
         assert isinstance(M, np.ndarray)
-        beam_nf_pstokes.Jy_to_mK(np.linspace(90, 210e6, 11) * u.Hz)
+
+        # Frequencies outside the beam's frequency range are extrapolated, with
+        # a warning for each side.
+        with (
+            pytest.warns(UserWarning, match="min freq .* extrapolating"),
+            pytest.warns(UserWarning, match="max freq .* extrapolating"),
+        ):
+            M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13) * u.Hz)
+        assert np.all(np.isfinite(M))
 
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
             beam_nf_pstokes.Jy_to_mK([1])
@@ -148,7 +162,14 @@ class TestPSpecBeamUV:
 
     def test_dipole_beam(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that dipole (linear-pol) beams compute a scalar for XX but raise for pI."""
-        beam_nf_dipole.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        scalar = beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX"
+        )
+        assert np.isfinite(scalar) and scalar > 0
+        # pol strings are case-insensitive
+        assert scalar == beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="xx"
+        )
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):

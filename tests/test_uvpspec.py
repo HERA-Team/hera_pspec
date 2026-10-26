@@ -183,10 +183,15 @@ def test_get_array_funcs(
 
 
 class TestGetFuncs:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_dlys(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ["vanilla_uvp", "vanilla_uvp_w_ndlys"])
+    def test_get_dlys(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        """Check get_dlys against the delays of the spectral window's frequencies."""
+        uvp = request.getfixturevalue(uvp_name)
         d = uvp.get_dlys(0)
-        assert len(d) == uvp.get_dlys(0).size
+        freqs = uvp.freq_array[uvp.spw_to_freq_indices(0)]
+        np.testing.assert_allclose(
+            d.to_value(units.s), utils.get_delays(freqs, n_dlys=uvp.Ndlys)
+        )
 
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_get_blpair_seps(self, uvp: uvpspec.UVPSpec) -> None:
@@ -200,6 +205,24 @@ class TestGetFuncs:
         k_perp, k_para = uvp.get_kperps(0), uvp.get_kparas(0)
         assert len(k_perp) == 30
         assert len(k_para) == uvp.get_dlys(0).size
+        # k is proportional to baseline length / delay, at the mean redshift,
+        # in the object's own length unit
+        z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(0)]))
+        length = uvp._default_length_unit()
+        np.testing.assert_allclose(
+            k_perp.to_value(1 / length),
+            uvp.get_blpair_seps().to_value(units.m)
+            * conversions.bl_to_kperp(z, uvp.cosmo, length).to_value(
+                1 / length / units.m
+            ),
+        )
+        np.testing.assert_allclose(
+            k_para.to_value(1 / length),
+            uvp.get_dlys(0).to_value(units.s)
+            * conversions.tau_to_kpara(z, uvp.cosmo, length).to_value(
+                1 / length / units.s
+            ),
+        )
 
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_get_data_tuple_key(self, uvp: uvpspec.UVPSpec) -> None:
@@ -1308,23 +1331,25 @@ class TestAverageSpectra:
 
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_blpair_averaging_with_weights(self, uvp: uvpspec.UVPSpec) -> None:
-        """Check that blpair_weights don't change the result here, since the weighted baselines hold identical data."""
+        """Check that blpair_weights give the weighted mean of different blpairs."""
         uvp1 = copy.deepcopy(uvp)
-        blpairs = [[101102101102, 101102101102]]
-        blpair_wgts = [[2.0, 0.0]]
-        uvp3a = uvp1.average_spectra(
-            blpair_groups=blpairs, time_avg=False, blpair_weights=None, inplace=False
-        )
-        uvp3b = uvp1.average_spectra(
-            blpair_groups=blpairs,
+        blps = [101102101102, 102103102103, 101103101103]
+        data = [uvp1.get_data((0, blp, ("xx", "xx"))) for blp in blps]
+        # the blpairs hold different data, so the weights matter
+        assert not np.allclose(data[0], data[1])
+        # Weights are normalized to sum to the number of blpairs in the group;
+        # these already do, so they are used as given.
+        uvp2 = uvp1.average_spectra(
+            blpair_groups=[blps],
             time_avg=False,
-            blpair_weights=blpair_wgts,
+            blpair_weights=[[2, 1, 0]],
             inplace=False,
         )
-        assert np.isclose(
-            uvp3a.get_data((0, 101102101102, ("xx", "xx"))),
-            uvp3b.get_data((0, 101102101102, ("xx", "xx"))),
-        ).all()
+        np.testing.assert_allclose(
+            uvp2.get_data((0, blps[0], ("xx", "xx"))),
+            (2 * data[0] + data[1]) / 3,
+            rtol=1e-12,
+        )
 
     @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
     def test_time_averaging(self, uvp: uvpspec.UVPSpec) -> None:
@@ -1392,6 +1417,27 @@ class TestGetExactWindowFunctions:
             ftbeam=self.FT_FILE, inplace=False
         )
         assert np.allclose(wf_array[0], uvp_exact_wfs.window_function_array[0])
+
+    def test_get_window_function_folded(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        """Check that get_window_function only slices the delay axis of folded exact window functions."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        uvp.fold_spectra()
+        key = uvp.get_all_keys()[0]
+        spw, blpairts, polpair = uvp.key_to_indices(key)
+        Ndlys = np.count_nonzero(uvp.spw_dly_array == spw)
+        wf = uvp.get_window_function(key)
+        # delays fold to positive values; kperp and kpara grids are untouched
+        assert wf.shape == (
+            len(blpairts),
+            Ndlys - Ndlys // 2 - 1,
+            *uvp.window_function_array[spw].shape[2:-1],
+        )
+        np.testing.assert_array_equal(
+            wf,
+            uvp.window_function_array[spw][
+                blpairts, -(Ndlys - Ndlys // 2 - 1) :, :, :, polpair
+            ],
+        )
 
     def test_recompute_single_spw_warns(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
         """Check that recomputing for one spw on an object with exact_windows already set warns."""
@@ -1543,9 +1589,34 @@ class TestFoldSpectra:
             rtol=1e-5,
         )
 
+        # Folding averages each positive delay with its negative counterpart,
+        # i.e. applies the linear map A (Ndlys//2 x Ndlys), so the folded data
+        # (which only hold the positive delays) are A d and the folded
+        # covariance is A C A^T.
+        key = (0, ((37, 38), (38, 39)), ("xx", "xx"))
+        data = uvp.get_data(key)
+        cov = uvp.get_cov(key)
+        Ndlys = data.shape[1]
+        assert Ndlys % 2 == 1
+        mid = Ndlys // 2
+        A = np.zeros((mid, Ndlys))
+        A[np.arange(mid), mid + 1 + np.arange(mid)] = 0.5
+        A[np.arange(mid), mid - 1 - np.arange(mid)] = 0.5
+        np.testing.assert_allclose(data_folded, data @ A.T, rtol=1e-10)
+        np.testing.assert_allclose(cov_folded, A @ cov @ A.T, rtol=1e-10)
+        # in the full arrays, the zero-delay bin is unchanged and the negative
+        # delays are emptied
+        np.testing.assert_array_equal(
+            uvp1.data_array[0][:, mid], uvp.data_array[0][:, mid]
+        )
+        assert np.all(uvp1.data_array[0][:, :mid] == 0)
+
 
 def test_str(vanilla_uvp: uvpspec.UVPSpec) -> None:
-    assert str(vanilla_uvp) != ""
+    s = str(vanilla_uvp)
+    assert f"Nblpairs: {vanilla_uvp.Nblpairs}\n" in s
+    assert f"blpair_array: shape {vanilla_uvp.blpair_array.shape}\n" in s
+    assert "history" not in s
 
 
 class TestScalarAndNoiseUnits:
@@ -1691,12 +1762,21 @@ def test_set_cosmology(
     uvp.set_cosmology(new_cosmo, overwrite=False)
     assert uvp.cosmo != new_cosmo
 
-    # test setting cosmology
+    # test setting cosmology: the spectra are rescaled by the ratio of the
+    # new to the old scalar
+    data_old = uvp.data_array[0].copy()
+    scalar_old = uvp.scalar_array.copy()
     uvp.set_cosmology(new_cosmo, overwrite=True)
     assert uvp.cosmo == new_cosmo
     assert uvp.norm_units == "Mpc3 / littleh3"
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert (uvp.scalar_array > 1.0).all()
+    assert not np.allclose(uvp.scalar_array, scalar_old)
+    np.testing.assert_allclose(
+        uvp.data_array[0],
+        data_old * (uvp.scalar_array[0] / scalar_old[0])[None, None, :],
+        rtol=1e-12,
+    )
     # an unnormalised object gets a littleh scalar
     np.testing.assert_array_equal(
         uvp.scalar_array[0, 0],
@@ -2402,14 +2482,11 @@ def test_backwards_compatibility_read() -> None:
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
-    for dattr in uvp._meta_deprecated:
-        with pytest.raises(AttributeError) as excinfo:
-            raise AttributeError("'UVPSpec' object has no attribute")
-        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
-    for dattr in uvp._meta_dsets_deprecated:
-        with pytest.raises(AttributeError) as excinfo:
-            raise AttributeError("'UVPSpec' object has no attribute")
-        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
+    # deprecated attributes stored in the old file are not loaded
+    assert len(uvp._meta_deprecated) > 0
+    for dattr in uvp._meta_deprecated + uvp._meta_dsets_deprecated:
+        with pytest.raises(AttributeError, match="'UVPSpec' object has no attribute"):
+            getattr(uvp, dattr)
     # assert check does not fail
     uvp.check()
 

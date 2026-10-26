@@ -179,7 +179,7 @@ class TestDelaySpectrum:
             component="abs",
         )
         elements = [(mpl.lines.Line2D, uvp.Nblpairs)]
-        assert axes_contains(f4.axes[0], elements)
+        assert axes_contains(f5.axes[0], elements)
         plt.close(f5)
 
         # test errorbar plotting w/ markers
@@ -192,6 +192,7 @@ class TestDelaySpectrum:
             normal_std=True,
             robust_std=False,
             verbose=False,
+            seed=0,
         )
 
         f6 = plot.delay_spectrum(
