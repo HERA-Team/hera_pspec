@@ -623,7 +623,6 @@ class TestUVWindowInit:
     def test_default_kunits(self, ft_beam_spw: uvwindow.FTBeam) -> None:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
         assert test.kunits == cu.littleh / units.Mpc
-        assert test.length_unit == units.Mpc / cu.littleh
         # astropy's units.h is the hour, not little h
         assert not test.kunits.is_equivalent(units.h / units.Mpc)
 
@@ -634,7 +633,6 @@ class TestUVWindowInit:
         test = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, kunits=kunits)
         assert test.kunits == units.Mpc ** (-1)
         assert str(test.kunits) == "1 / Mpc"
-        assert test.length_unit == units.Mpc
 
     @pytest.mark.parametrize("kunits", [cu.littleh / units.Mpc, "littleh / Mpc"])
     def test_littleh_kunits(self, ft_beam_spw: uvwindow.FTBeam, kunits) -> None:
@@ -2013,7 +2011,7 @@ class TestGetWfForTauKnownExamples:
 
     @staticmethod
     def _kpar_norm(uvw: uvwindow.UVWindow, tau: float) -> np.ndarray:
-        length_unit = uvw.length_unit
+        length_unit = 1 / uvw.kunits
         alpha = conversions.dRpara_df(uvw.avg_z, uvw.cosmo, length_unit).to_value(
             length_unit / units.Hz
         )

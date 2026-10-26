@@ -934,11 +934,6 @@ class UVWindow:
         self.avg_z = conversions.f2z(self.avg_nu)
 
     @property
-    def length_unit(self):
-        """Cosmological length unit, ``1 / kunits`` (h^-1 Mpc or Mpc)."""
-        return 1 / self.kunits
-
-    @property
     def little_h(self):
         """
         Deprecated: whether :attr:`kunits` is littleh / Mpc.
