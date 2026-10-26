@@ -527,3 +527,63 @@ class TestResolveLengthUnit:
     def test_bad_unit_raises(self, unit) -> None:
         with pytest.raises(ValueError, match="length_unit must be a length"):
             conversions.resolve_length_unit(unit)
+
+
+class TestRedshiftCache:
+    """The distance helpers cache by redshift, keyed on the cosmology."""
+
+    @pytest.mark.parametrize(
+        "helper",
+        [
+            conversions.dRperp_dtheta,
+            conversions.dRpara_df,
+            conversions.bl_to_kperp,
+            conversions.tau_to_kpara,
+        ],
+    )
+    def test_matches_array_path(self, helper) -> None:
+        # scalar and array calls (both cached) give the same numbers
+        zs = np.array([6.0, 8.0, 10.0])
+        scalar = u.Quantity([helper(z) for z in zs])
+        np.testing.assert_allclose(scalar.value, helper(zs).to_value(scalar.unit))
+
+    def test_equal_cosmologies_share_entries(self) -> None:
+        conversions.bl_to_kperp.cache_clear()
+        first = conversions.bl_to_kperp(8.0, conversions.DEFAULT_COSMOLOGY)
+        same = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.6844, Ob0=0.04911, name="x")
+        assert conversions.bl_to_kperp(8.0, same) == first
+        other = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7)
+        assert conversions.bl_to_kperp(8.0, other) != first
+
+    def test_returned_value_is_a_copy(self) -> None:
+        value = conversions.dRpara_df(8.0)
+        reference = value.copy()
+        value *= 2
+        assert conversions.dRpara_df(8.0) == reference
+
+    def test_length_unit_is_part_of_the_key(self) -> None:
+        littleh = conversions.dRperp_dtheta(8.0, length_unit=u.Mpc / cu.littleh)
+        mpc = conversions.dRperp_dtheta(8.0, length_unit=u.Mpc)
+        assert littleh.unit != mpc.unit
+        np.testing.assert_allclose(
+            littleh.to_value(
+                u.Mpc / u.rad, cu.with_H0(conversions.DEFAULT_COSMOLOGY.H0)
+            ),
+            mpc.to_value(u.Mpc / u.rad),
+        )
+
+    def test_array_result_is_a_copy(self) -> None:
+        zs = np.array([6.0, 8.0])
+        value = conversions.bl_to_kperp(zs)
+        reference = value.copy()
+        value[0] *= 2
+        np.testing.assert_array_equal(conversions.bl_to_kperp(zs), reference)
+
+    def test_large_arrays_bypass_the_cache(self) -> None:
+        zs = np.linspace(6.0, 10.0, conversions._MAX_CACHED_Z_SIZE + 1)
+        np.testing.assert_allclose(
+            conversions.tau_to_kpara(zs)[[0, -1]].value,
+            u.Quantity(
+                [conversions.tau_to_kpara(6.0), conversions.tau_to_kpara(10.0)]
+            ).value,
+        )

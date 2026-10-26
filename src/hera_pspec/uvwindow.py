@@ -1052,7 +1052,7 @@ class UVWindow:
 
     def _cosmo_factor(self, name, z):
         """
-        Return a cosmological conversion factor as a float, cached.
+        Return a cosmological conversion factor as a float.
 
         Parameters
         ----------
@@ -1060,7 +1060,7 @@ class UVWindow:
             One of ``"bl_to_kperp"`` ([h] Mpc^-1 per m), ``"tau_to_kpara"``
             ([h] Mpc^-1 per s), ``"dRperp_dtheta"`` ([h^-1] Mpc per rad) or
             ``"dRpara_df"`` ([h^-1] Mpc per Hz), with lengths in
-            :attr:`length_unit` (h^-1 Mpc or Mpc).
+            ``1 / kunits`` (h^-1 Mpc or Mpc).
         z : float
             Redshift.
 
@@ -1068,25 +1068,12 @@ class UVWindow:
         -------
         float
             The ``conversions`` helper of that name, evaluated with
-            :attr:`cosmo`. Cached per redshift, since the window function
-            methods call these repeatedly with the same redshift.
+            :attr:`cosmo` (the helpers cache by redshift themselves).
         """
-        key = (name, float(z), self.kunits)
-        cache = self.__dict__.setdefault("_cosmo_factor_cache", {})
-        cached = cache.get(key)
-        if cached is not None and cached[0] is self.cosmo:
-            return cached[1]
-        length_unit = 1 / self.kunits
-        helpers = {
-            "bl_to_kperp": (conversions.bl_to_kperp, 1 / length_unit / units.m),
-            "tau_to_kpara": (conversions.tau_to_kpara, 1 / length_unit / units.s),
-            "dRperp_dtheta": (conversions.dRperp_dtheta, length_unit / units.rad),
-            "dRpara_df": (conversions.dRpara_df, length_unit / units.Hz),
-        }
-        helper, unit = helpers[name]
-        value = float(helper(z, self.cosmo, length_unit).to_value(unit))
-        cache[key] = (self.cosmo, value)
-        return value
+        # the helpers return exactly the units listed above, so .value is
+        # already in them (converting to a freshly built unit is slow)
+        helper = getattr(conversions, name)
+        return float(helper(z, self.cosmo, 1 / self.kunits).value)
 
     def _get_kgrid(self, bl_len, width=0.020):
         """

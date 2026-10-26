@@ -2056,3 +2056,20 @@ class TestGetWfForTauKnownExamples:
         kpara_out, cyl = uvw._get_wf_for_tau(tau, wf1, kperp_bins, kpara_bins)
         assert np.allclose(cyl, wf1)
         assert np.allclose(kpara_out, kpar)
+
+
+@pytest.mark.parametrize(
+    ("name", "unit"),
+    [
+        ("bl_to_kperp", cu.littleh / units.Mpc / units.m),
+        ("tau_to_kpara", cu.littleh / units.Mpc / units.s),
+        ("dRperp_dtheta", units.Mpc / cu.littleh / units.rad),
+        ("dRpara_df", units.Mpc / cu.littleh / units.Hz),
+    ],
+)
+def test_cosmo_factor_units(ft_beam_spw: uvwindow.FTBeam, name: str, unit) -> None:
+    """_cosmo_factor takes .value, so the helpers must return these units."""
+    uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw)
+    result = getattr(conversions, name)(uvw.avg_z, uvw.cosmo, 1 / uvw.kunits)
+    assert result.unit == unit
+    assert uvw._cosmo_factor(name, uvw.avg_z) == result.to_value(unit)

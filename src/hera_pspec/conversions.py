@@ -366,6 +366,71 @@ def z2f(z):
     return units.f21 / (np.asarray(z) + 1) * u.Hz
 
 
+class _CosmologyKey:
+    """
+    Hashable stand-in for an astropy cosmology, for ``functools.lru_cache``.
+
+    Astropy cosmologies are not hashable. Two cosmologies of the same class
+    with the same parameters get equal keys, whatever their names.
+    """
+
+    __slots__ = ("cosmology", "_key")
+
+    def __init__(self, cosmology):
+        self.cosmology = cosmology
+        values = []
+        for name, value in cosmology.parameters.items():
+            value = getattr(value, "value", value)
+            if value is not None:
+                value = tuple(np.atleast_1d(value).astype(float).tolist())
+            values.append((name, value))
+        self._key = (type(cosmology), tuple(values))
+
+    def __hash__(self):
+        return hash(self._key)
+
+    def __eq__(self, other):
+        return isinstance(other, _CosmologyKey) and self._key == other._key
+
+
+# Largest redshift array the helpers cache (larger ones are computed directly).
+_MAX_CACHED_Z_SIZE = 4096
+
+
+def _cached_by_redshift(func):
+    """
+    Cache a ``func(z, cosmo, length_unit)`` helper by redshift.
+
+    UVWindow and the UVPSpec getters call these helpers many times with the
+    same redshift, or the same small array of redshifts (one per channel);
+    each call costs ~0.2 ms. The cached Quantity is copied on return, so
+    callers cannot modify it.
+    """
+
+    @functools.lru_cache(maxsize=1024)
+    def cached(z_bytes, z_shape, cosmology_key, length_unit):
+        z = np.frombuffer(z_bytes).reshape(z_shape)
+        if z.ndim == 0:
+            z = float(z)
+        return func(z, cosmology_key.cosmology, length_unit)
+
+    @functools.wraps(func)
+    def wrapper(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
+        if isinstance(z, u.Quantity):
+            return func(z, cosmo, length_unit)
+        z_array = np.asarray(z, dtype=float)
+        if z_array.size > _MAX_CACHED_Z_SIZE:
+            return func(z, cosmo, length_unit)
+        result = cached(
+            z_array.tobytes(), z_array.shape, _CosmologyKey(cosmo), u.Unit(length_unit)
+        )
+        return result.copy()
+
+    wrapper.cache_clear = cached.cache_clear
+    return wrapper
+
+
+@_cached_by_redshift
 def dRperp_dtheta(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     Transverse comoving distance per radian of angle at redshift ``z``.
@@ -395,6 +460,7 @@ def dRperp_dtheta(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     return _to_length_unit(distance, length_unit, cosmo) / u.rad
 
 
+@_cached_by_redshift
 def dRpara_df(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     Radial comoving distance per unit observed frequency at redshift ``z``.
@@ -452,6 +518,7 @@ def X2Y(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     return volume.to(length_unit**3 / (u.sr * u.Hz))
 
 
+@_cached_by_redshift
 def bl_to_kperp(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     Conversion factor from baseline length to k_perp at redshift ``z``.
@@ -484,6 +551,7 @@ def bl_to_kperp(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     return kperp.to(1 / length_unit / u.m)
 
 
+@_cached_by_redshift
 def tau_to_kpara(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     Conversion factor from delay to k_parallel at redshift ``z``.
