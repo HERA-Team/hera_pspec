@@ -62,9 +62,6 @@ def _as_1d_float_array(value, arg_name):
     return array
 
 
-_K_UNIT_HINT = "littleh / Mpc or 1 / Mpc"
-
-
 def _k_equivalencies(uvp):
     """littleh equivalencies for the cosmology of ``uvp`` (none if it has none)."""
     cosmo = getattr(uvp, "cosmo", None)
@@ -118,12 +115,12 @@ def _check_k_bin_inputs(k_inputs, little_h, stacklevel=3):
     if plain_names:
         messages.append(
             f"Passing {', '.join(plain_names)} as plain numbers is deprecated; "
-            f"pass k bins as an astropy Quantity in {_K_UNIT_HINT}."
+            "pass k bins as an astropy Quantity in littleh / Mpc or 1 / Mpc."
         )
     if little_h is not None:
         messages.append(
             "The little_h argument is deprecated; give the k bins as "
-            f"Quantities in {_K_UNIT_HINT} instead."
+            "Quantities in littleh / Mpc or 1 / Mpc instead."
         )
     if messages:
         warnings.warn(" ".join(messages), DeprecationWarning, stacklevel=stacklevel)
@@ -174,7 +171,7 @@ def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit):
             )
         except units.UnitConversionError as exc:
             raise units.UnitConversionError(
-                f"{arg_name} must be a wavenumber in {_K_UNIT_HINT}; cannot "
+                f"{arg_name} must be a wavenumber in littleh / Mpc or 1 / Mpc; cannot "
                 f"convert '{unit}' to '{k_unit}'."
             ) from exc
     return array
