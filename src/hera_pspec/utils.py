@@ -28,17 +28,6 @@ def _contains_quantity(value):
     return False
 
 
-def _as_quantity(value):
-    """Stack a (nested) list/tuple of Quantities into one Quantity."""
-    if isinstance(value, u.Quantity):
-        return value
-    if isinstance(value, (list, tuple)):
-        return u.Quantity([_as_quantity(item) for item in value])
-    # a plain number mixed with Quantities: astropy treats it as dimensionless,
-    # and the conversion below raises a clear error
-    return u.Quantity(value)
-
-
 def to_value_in(
     value,
     unit,
@@ -95,7 +84,13 @@ def to_value_in(
     unit = u.Unit(unit)
     if _contains_quantity(value):
         try:
-            quantity = _as_quantity(value)
+            # astropy stacks a flat list of Quantities but not a nested one
+            # (e.g. a list of (low, high) pairs), so stack the rows first
+            quantity = (
+                u.Quantity([u.Quantity(row) for row in value])
+                if isinstance(value, (list, tuple))
+                else value
+            )
             return quantity.to_value(unit, equivalencies=equivalencies or [])
         except u.UnitConversionError as err:
             given = value.unit if isinstance(value, u.Quantity) else "mixed units"
