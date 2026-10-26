@@ -1140,7 +1140,7 @@ class UVWindow:
 
         return kgrid, kperp_norm
 
-    def _kperp4bl_freq(self, freq, bl_len, ngrid):
+    def _kperp4bl_freq(self, freq, bl_len, ngrid, dRperp_dtheta=None):
         """
         Compute the range of kperp for a given baseline-freq pair.
 
@@ -1155,6 +1155,10 @@ class UVWindow:
         ngrid : int
             Number of pixels in the FT beam array.
             Internal use only. Do not modify.
+        dRperp_dtheta : float, optional
+            ``dRperp_dtheta`` at the redshift of ``freq``, in ``1 / kunits``
+            per radian. Computed if not given; callers looping over all
+            frequencies pass it to avoid one cosmology call per frequency.
 
         Returns
         ----------
@@ -1167,8 +1171,9 @@ class UVWindow:
         if not (self.freq_array.min() <= freq <= self.freq_array.max()):
             raise ValueError("Choose frequency within spectral window.")
 
-        z = conversions.f2z(freq)
-        R = self._cosmo_factor("dRperp_dtheta", z)  # [h^-1] Mpc
+        if dRperp_dtheta is None:
+            dRperp_dtheta = self._cosmo_factor("dRperp_dtheta", conversions.f2z(freq))
+        R = dRperp_dtheta  # [h^-1] Mpc
         # Fourier dual of sky angle theta
         q = (
             np.fft.fftshift(np.fft.fftfreq(ngrid))
@@ -1219,9 +1224,16 @@ class UVWindow:
         # and given baseline length
         ngrid = ft_beam.shape[-1]
         interp_ft_beam = np.zeros((kgrid.size, kgrid.size, self.Nfreqs))
+        # one vectorised cosmology call for all frequencies
+        length_unit = 1 / self.kunits
+        dRperp = conversions.dRperp_dtheta(
+            conversions.f2z(self.freq_array), self.cosmo, length_unit
+        ).to_value(length_unit / units.rad)
         for i in range(self.Nfreqs):
             # kperp values over frequency array for bl_len
-            k = self._kperp4bl_freq(self.freq_array[i], bl_len, ngrid=ngrid)
+            k = self._kperp4bl_freq(
+                self.freq_array[i], bl_len, ngrid=ngrid, dRperp_dtheta=dRperp[i]
+            )
             # interpolate the FT beam over values onto regular kgrid
             A_real = RegularGridInterpolator(
                 (k, k), ft_beam[i], bounds_error=False, fill_value=0.0
@@ -1270,7 +1282,7 @@ class UVWindow:
 
         return fnu
 
-    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins):
+    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins, alpha=None):
         """
         Get the cylindrical window function for a given delay.
 
@@ -1290,6 +1302,10 @@ class UVWindow:
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1
             units.
             Used for cylindrical binning. Must be linearly spaced.
+        alpha : float, optional
+            ``dRpara_df`` at :attr:`avg_z`, in ``1 / kunits`` per Hz.
+            Computed if not given; get_cylindrical_wf passes it once for all
+            delays.
 
         Returns
         ----------
@@ -1319,7 +1335,8 @@ class UVWindow:
 
         # get kparallel grid
         # conversion factor to cosmological units
-        alpha = self._cosmo_factor("dRpara_df", self.avg_z)
+        if alpha is None:
+            alpha = self._cosmo_factor("dRpara_df", self.avg_z)
         # frequency resolution
         delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
@@ -1585,9 +1602,10 @@ class UVWindow:
 
         # in frequency direction
         cyl_wf = np.zeros((self.Nfreqs, nbins_kperp, nbins_kpara))
+        alpha = self._cosmo_factor("dRpara_df", self.avg_z)
         for it, tau in enumerate(self.dly_array[: self.Nfreqs // 2 + 1]):
             kpara, cyl_wf[it, :, :] = self._get_wf_for_tau(
-                tau, wf_array1, kperp_bins, kpara_bins
+                tau, wf_array1, kperp_bins, kpara_bins, alpha=alpha
             )
         # fill by symmetry for tau = -tau
         if self.Nfreqs % 2 == 0:
@@ -1600,7 +1618,11 @@ class UVWindow:
             ]
         # except for tau at 1/4 and 3/4 of the spectral window for symmetry reasons
         _, cyl_wf[self.Nfreqs - self.Nfreqs // 4, :, :] = self._get_wf_for_tau(
-            -self.dly_array[self.Nfreqs // 4], wf_array1, kperp_bins, kpara_bins
+            -self.dly_array[self.Nfreqs // 4],
+            wf_array1,
+            kperp_bins,
+            kpara_bins,
+            alpha=alpha,
         )
 
         # normalisation of window functions
