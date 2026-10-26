@@ -1343,8 +1343,8 @@ class UVPSpec:
             )
         k_unit = self.window_k_unit()
         return (
-            _value_in_unit(self.window_function_kperp[spw], k_unit) << k_unit,
-            _value_in_unit(self.window_function_kpara[spw], k_unit) << k_unit,
+            units.Quantity(self.window_function_kperp[spw], k_unit),
+            units.Quantity(self.window_function_kpara[spw], k_unit),
         )
 
     def _resolve_length_unit(self, length_unit, little_h):
