@@ -53,14 +53,6 @@ def _check_ftbeam_version(f, ftfile):
         )
 
 
-def _read_ftbeam_freqs(f):
-    """Read the frequency array of an open FTBeam file, in Hz."""
-    dset = f["freq"]
-    return uvputils.convert_from_stored_unit(
-        np.array(dset[...]), dset.attrs.get("unit", None), _FTBEAM_FREQ_UNIT, "freq"
-    )
-
-
 def _cartesian_to_spherical(x, y):
     """Invert the simple zenith-angle map x = za*cos(az), y = za*sin(az)."""
     za = np.sqrt(x**2 + y**2)
@@ -416,7 +408,12 @@ class FTBeam:
                 _FTBEAM_MAPSIZE_UNIT,
                 "mapsize",
             )
-            bandwidth = _read_ftbeam_freqs(f)
+            bandwidth = uvputils.convert_from_stored_unit(
+                np.array(f["freq"][...]),
+                f["freq"].attrs.get("unit", None),
+                _FTBEAM_FREQ_UNIT,
+                "freq",
+            )
             # polarisation: prefer the attribute written by write_hdf5,
             # fall back to extracting it from the filename
             pol = f.attrs.get("pol", None)
@@ -581,7 +578,12 @@ class FTBeam:
 
         with h5py.File(ftfile, "r") as f:
             _check_ftbeam_version(f, ftfile)
-            bandwidth = _read_ftbeam_freqs(f)
+            bandwidth = uvputils.convert_from_stored_unit(
+                np.array(f["freq"][...]),
+                f["freq"].attrs.get("unit", None),
+                _FTBEAM_FREQ_UNIT,
+                "freq",
+            )
 
         if bandwidth.size <= 1:
             raise ValueError("Error reading file, empty bandwidth.")
