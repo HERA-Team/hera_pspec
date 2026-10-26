@@ -15,6 +15,7 @@ from pyuvdata import utils as uvutils
 
 from . import __version__, conversions, grouping, noise, pspecbeam, utils
 from . import uvpspec_utils as uvputils
+from .conversions import _LITTLEH_LENGTH
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
 
@@ -38,8 +39,6 @@ ONE_STEP_SCALAR_NUM_STEPS = 2000
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
 
-# Default cosmological length unit (h^-1 Mpc).
-_LITTLEH_LENGTH = units.Mpc / cu.littleh
 # k units of the exact window function grids (see UVPSpec.window_k_unit)
 _LITTLEH_K_UNIT = cu.littleh / units.Mpc
 _MPC_K_UNIT = units.Mpc ** (-1)
