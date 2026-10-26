@@ -723,6 +723,7 @@ name = "hera-pspec"
 source = { editable = "." }
 dependencies = [
     { name = "astropy" },
+    { name = "attrs" },
     { name = "cyclopts" },
     { name = "h5py" },
     { name = "hera-calibration" },
@@ -775,6 +776,7 @@ tests = [
 [package.metadata]
 requires-dist = [
     { name = "astropy", specifier = ">=6.1.0" },
+    { name = "attrs", specifier = ">=23.1.0" },
     { name = "cyclopts", specifier = ">=4.0" },
     { name = "h5py", specifier = ">=3.11.0" },
     { name = "hera-calibration", specifier = ">=3.7.4" },

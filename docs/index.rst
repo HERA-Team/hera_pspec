@@ -24,6 +24,7 @@ Contents
    pspecbeam
    pspecdata
    uvpspec
+   bandpower_kernels
    container
    plot
    tutorials
