@@ -132,6 +132,10 @@ def _calc_P_N(
     """
     :func:`calc_P_N` on plain floats: scalar in L^3 / (Hz sr), Tsys in K,
     t_int in s and k in 1 / L; returns mK^2 L^3 (mK^2 for DelSq).
+
+    Kept separate for speed: ``UVPSpec.generate_noise_spectra`` calls it for
+    every time and baseline pair with plain arrays, which skips the unit
+    conversions that :func:`calc_P_N` does on its Quantity inputs.
     """
     # assert form
     assert form in ("Pk", "DelSq"), (
