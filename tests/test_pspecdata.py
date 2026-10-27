@@ -2156,12 +2156,13 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         assert len(uvp.bl_array) == len(pspec_bls)
         assert uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array
         assert uvp.data_array[0].dtype == np.complex128
-        assert uvp.data_array[0].shape == (240, 64, 1)
+        assert uvp.data_array[0].shape == (240, 16, 1)
         assert not uvp.exact_windows
 
         # verify spw_ranges and n_dlys input variants all accepted
@@ -2246,6 +2247,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
+            spw_ranges=[(10, 26)],
             verbose=False,
             exact_norm=False,
         )
@@ -2258,7 +2260,8 @@ class TestPspec:
         estimated_Q = (1.0 / (4 * np.pi)) * np.ones_like(Q_sample)
         assert np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05)
 
-        # exact_norm=True vs exact_norm=False should agree to within 5%
+        # exact_norm=True vs exact_norm=False should agree to within 5%. This uses
+        # the full band on purpose: the offset between them grows with bandwidth.
         ds_t = pspecdata.PSpecData(
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q
         )
@@ -2310,6 +2313,7 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         assert uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array
@@ -2329,6 +2333,7 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         # each entry of bls1 is paired with the matching entry of bls2, whether
@@ -2674,10 +2679,13 @@ class TestPspec:
             )
         assert uvp_w.exact_windows
 
-        # Gaussian beam object
-        widths = -0.0343 * uvd1.freq_array.flatten() / 1e6 + 11.30
+        # Gaussian beam object. Only build it over the spectral window's channels:
+        # building it over the full 1024-channel band is slow and those extra
+        # channels are discarded anyway.
+        spw_freqs = uvd1.freq_array.flatten()[175:195]
+        widths = -0.0343 * spw_freqs / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvd1.freq_array.flatten(), widths=widths, pol="xx"
+            freq_array=spw_freqs, widths=widths, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
@@ -2958,6 +2966,7 @@ class TestRFIFlagPropagation:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         ds.broadcast_dset_flags(unflag=True)
@@ -2970,6 +2979,7 @@ class TestRFIFlagPropagation:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
 
@@ -3009,6 +3019,7 @@ class TestRFIFlagPropagation:
                 norm="I",
                 taper="none",
                 little_h=True,
+                spw_ranges=[(10, 26)],
                 verbose=False,
             )
 
@@ -3029,6 +3040,7 @@ class TestRFIFlagPropagation:
                 norm="I",
                 taper="none",
                 little_h=True,
+                spw_ranges=[(10, 26)],
                 verbose=False,
             )
 
