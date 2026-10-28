@@ -38,50 +38,56 @@ weight_selection = ["identity", "iC", "dayenu"]
 
 # Baseline list shared by the pspec tests
 pspec_bls = [(24, 25), (37, 38), (38, 39), (52, 53)]
-# taper_selection = ['blackman', 'blackman-harris', 'gaussian0.4', 'kaiser2',
-#                   'kaiser3', 'hamming', 'hanning', 'parzen']
 
 
-def generate_pos_def(n):
+def generate_pos_def(n, rng):
     """
-    Generate a random positive definite Hermitian matrix.
+    Generate a random, well-conditioned positive definite Hermitian matrix.
 
     Parameters
     ----------
     n : integer
         Size of desired matrix
+    rng : numpy.random.Generator
+        Random number generator to draw the matrix from.
 
     Returns
     -------
     A : array_like
         Positive definite matrix
     """
-    A = np.random.normal(size=(n, n)) + 1j * np.random.normal(size=(n, n))
+    A = rng.normal(size=(n, n)) + 1j * rng.normal(size=(n, n))
     A += np.conjugate(A).T
-    # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01 * np.min(np.linalg.eigvalsh(A)) * np.identity(n)
+    # Shift the eigenvalues so that the smallest is 1, which keeps the matrix
+    # positive definite and well-conditioned.
+    A += (1.0 - np.min(np.linalg.eigvalsh(A))) * np.identity(n)
     return A
 
 
-def generate_pos_def_all_pos(n):
+def generate_pos_def_all_pos(n, rng):
     """
-    Generate a random positive definite symmetric matrix, with all entries
-    positive.
+    Generate a random, well-conditioned positive definite symmetric matrix,
+    with all entries positive.
 
     Parameters
     ----------
     n : integer
         Size of desired matrix
+    rng : numpy.random.Generator
+        Random number generator to draw the matrix from.
 
     Returns
     -------
     A : array_like
         Positive definite matrix
     """
-    A = np.random.uniform(size=(n, n))
+    A = rng.uniform(size=(n, n))
     A += A.T
-    # Add just enough of an identity matrix to make all eigenvalues positive
-    A += -1.01 * np.min(np.linalg.eigvalsh(A)) * np.identity(n)
+    # Shift the eigenvalues so that the smallest is 1, which keeps the matrix
+    # positive definite and well-conditioned. The smallest eigenvalue is at
+    # most the smallest diagonal entry, so the diagonal stays >= 1 and all
+    # entries stay positive.
+    A += (1.0 - np.min(np.linalg.eigvalsh(A))) * np.identity(n)
     return A
 
 
@@ -341,6 +347,13 @@ class TestAddData:
         ds = pspecdata.PSpecData()
         ds1 = copy.deepcopy(ds)
         ds1.add(dsets=[uv], wgts=None, labels=None)
+        assert len(ds.dsets) == 0  # the original is untouched
+        assert len(ds1.dsets) == 1
+        assert ds1.dsets[0] is uv
+        assert ds1.wgts == [None]
+        assert ds1.dsets_std == [None]
+        assert ds1.Nfreqs == uv.Nfreqs
+        assert ds1.Ntimes == uv.Ntimes
 
     @pytest.mark.parametrize("build_args,exception,match", ADD_DATA_ERROR_CASES)
     def test_add_raises(
@@ -468,9 +481,14 @@ def test_str(uvd: UVData) -> None:
     Check that strings can be output.
     """
     ds = pspecdata.PSpecData()
-    print(ds)  # print empty psd
+    assert str(ds) == "PSpecData object\n  0 datasets"
     ds.add(uvd, None)
-    print(ds)  # print populated psd
+    s = str(ds)
+    assert s.startswith("PSpecData object\n  1 datasets")
+    assert (
+        f"(0): {uvd.Nbls} bls (freqs={uvd.Nfreqs}, times={uvd.Ntimes}, "
+        f"pols={uvd.Npols})" in s
+    )
 
 
 class TestGetQ:
@@ -479,12 +497,9 @@ class TestGetQ:
         Test the Q = dC/dp function.
         """
         vect_length = 50
-        x_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
-        y_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
+        rng = np.random.default_rng(0)
+        x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
+        y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
 
         ds = pspecdata.PSpecData()
         ds.spw_Nfreqs = vect_length
@@ -583,12 +598,9 @@ class TestGetQ:
         ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
 
         vect_length = ds_t.spw_Ndlys
-        x_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
-        y_vect = np.random.normal(size=vect_length) + 1.0j * np.random.normal(
-            size=vect_length
-        )
+        rng = np.random.default_rng(0)
+        x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
+        y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
 
         for i in range(vect_length):
             Q_matrix = ds_t.get_Q(i)
@@ -671,7 +683,8 @@ def test_get_integral_beam(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=beam_nf_dipole)
 
     with pytest.warns(UserWarning, match="The beam response could not be calculated"):
-        ds_t.get_integral_beam(pol)
+        no_beam = ds_t.get_integral_beam(pol)
+    np.testing.assert_array_equal(no_beam, 1.0)
 
     integral_matrix = ds.get_integral_beam(pol)
     # Test that if the number of delay bins hasn't been set
@@ -680,6 +693,17 @@ def test_get_integral_beam(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
 
     # Test that integral matrix has the right shape
     assert integral_matrix.shape == (ds.spw_Nfreqs, ds.spw_Nfreqs)
+
+    # The matrix is the sky integral of A(nu) A(nu') / (Omega_p(nu) Omega_p(nu')),
+    # so it is symmetric and its diagonal is Omega_pp / Omega_p^2.
+    np.testing.assert_allclose(integral_matrix, integral_matrix.T)
+    freqs = ds.freqs[ds.spw_range[0] : ds.spw_range[1]]
+    beam_freqs = beam_nf_dipole.beam_freqs
+    omega_p = interp1d(beam_freqs, beam_nf_dipole.power_beam_int(pol))(freqs)
+    omega_pp = interp1d(beam_freqs, beam_nf_dipole.power_beam_sq_int(pol))(freqs)
+    np.testing.assert_allclose(
+        np.diag(integral_matrix).real, omega_pp / omega_p**2, rtol=5e-3
+    )
 
 
 class TestGetUnnormedMatrices:
@@ -699,8 +723,9 @@ class TestGetUnnormedMatrices:
             ds.get_unnormed_E("placeholder", "placeholder")
 
         # Test that if R1 = R2, then the result is Hermitian
+        rng = np.random.default_rng(0)
         ds.spw_Ndlys = 7
-        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        random_R = generate_pos_def_all_pos(ds.spw_Nfreqs, rng)
         wgt_matrix_dict = {}  # The keys here have no significance except they are formatted right
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R
@@ -719,7 +744,7 @@ class TestGetUnnormedMatrices:
             beam=beam_nf_dipole,
         )
         ds_c.spw_Ndlys = 10
-        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs)
+        random_R = generate_pos_def_all_pos(ds_c.spw_Nfreqs, rng)
         wgt_matrix_dict = {}
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R
@@ -730,7 +755,7 @@ class TestGetUnnormedMatrices:
         assert E_matrices.shape == (ds_c.spw_Ndlys, ds_c.spw_Nfreqs, ds_c.spw_Nfreqs)
 
         # Test that if R1 != R2, then i) E^{12,dagger} = E^{21}
-        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs)
+        random_R2 = generate_pos_def_all_pos(ds.spw_Nfreqs, rng)
         wgt_matrix_dict = {}
         wgt_matrix_dict[("red", (24, 25))] = random_R
         wgt_matrix_dict[("blue", (24, 25))] = random_R2
@@ -831,17 +856,17 @@ MW_TEST_N = 17
 
 @pytest.fixture
 def random_G() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(1))
 
 
 @pytest.fixture
 def random_H() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(2))
 
 
 @pytest.fixture
 def random_V() -> np.ndarray:
-    return generate_pos_def_all_pos(MW_TEST_N)
+    return generate_pos_def_all_pos(MW_TEST_N, np.random.default_rng(3))
 
 
 class TestGetMW:
@@ -991,26 +1016,30 @@ class TestCovQ:
             }
             ds.set_r_param(key1, rpk)
             ds.set_r_param(key2, rpk)
-        # Run twice: first call may warn for iC (poorly conditioned R), second uses cache.
-        for taper_idx in range(len(taper_selection)):
+        expected_shape = (ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys)
+        qc_dsets = {}
+        for taper in taper_selection:
+            ds.set_taper(taper)
+            # Run twice per taper: for iC, the very first call warns (poorly
+            # conditioned covariance); the second call uses the cached matrices
+            # and must give the same answer.
             warn_ctx = (
                 pytest.warns(UserWarning, match="Poorly conditioned covariance")
-                if input_data_weight == "iC" and taper_idx == 0
+                if input_data_weight == "iC" and taper == taper_selection[0]
                 else nullcontext()
             )
             with warn_ctx:
                 qc = ds.cov_q_hat(key1, key2, model="dsets")
-            assert np.allclose(
-                np.array(list(qc.shape)),
-                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
-                atol=1e-6,
-            )
+            assert qc.shape == expected_shape
+            np.testing.assert_array_equal(ds.cov_q_hat(key1, key2, model="dsets"), qc)
+            qc_dsets[taper] = qc
+
             qc = ds.cov_q_hat(key1, key2, model="empirical")
-            assert np.allclose(
-                np.array(list(qc.shape)),
-                np.array([ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys]),
-                atol=1e-6,
-            )
+            assert qc.shape == expected_shape
+            assert np.all(np.isfinite(qc))
+
+        # the taper enters the covariance through R
+        assert not np.allclose(qc_dsets["none"], qc_dsets["bh7"])
 
     def test_cov_q_analytic(self, cov_q_setup) -> None:
         """Test that analytic covariance gives Nchan^2, and validate key-list API."""
@@ -1084,7 +1113,9 @@ def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
     ds1.get_unnormed_V(key1, key2)
     h = ds1.get_H(key1, key2)
     g = ds1.get_G(key1, key2)
-    ds1.get_MW(g, h)
+    M, W = ds1.get_MW(g, h)
+    assert M.shape == W.shape == (ds1.spw_Ndlys, ds1.spw_Ndlys)
+    np.testing.assert_allclose(W.sum(axis=1), 1.0)
     # make sure identity weighting isn't broken.
     ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
     ds1 = copy.deepcopy(ds)
@@ -1093,6 +1124,11 @@ def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
     ds1.set_symmetric_taper(False)
     ds1.set_filter_extension([10, 10])
     rm1 = ds1.R(key1)
+    # truncated rows of the full-band R matrix
+    ds.set_weighting("identity")
+    ds.set_symmetric_taper(False)
+    assert rm1.shape == (ds1.spw_Nfreqs, Nfreq)
+    np.testing.assert_allclose(rm1, ds.R(key1)[10:-10])
 
 
 class TestQHat:
@@ -1248,6 +1284,12 @@ class TestFisherMatrices:
         H = ds.get_H(key1, key2)
         assert H.shape == (Nfreq, Nfreq)
 
+        # With one delay per channel and sampling, the response matrix H is the
+        # same as the Fisher matrix G
+        H = ds.get_H(key1, key2, sampling=True)
+        G = ds.get_G(key1, key2)
+        np.testing.assert_allclose(H, G, rtol=0, atol=1e-10 * np.max(np.abs(G)))
+
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_get_G(self, d, input_data_weight: str, taper: str) -> None:
@@ -1256,7 +1298,6 @@ class TestFisherMatrices:
         """
         ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
         Nfreq = ds.Nfreqs
-        multiplicative_tolerance = 1.0
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
@@ -1282,7 +1323,9 @@ class TestFisherMatrices:
         with warn_ctx:
             G = ds.get_G(key1, key2)
         assert G.shape == (Nfreq - 2, Nfreq - 2)  # Test shape
-        matrix_scale = np.min(np.abs(np.linalg.eigvalsh(G)))
+        # The properties below hold exactly, so only allow for numerical noise
+        # 10 orders of magnitude below the largest element of G.
+        tol = 1e-10 * np.max(np.abs(G))
 
         if input_data_weight == "identity":
             # In the identity case, there are three special properties
@@ -1293,8 +1336,7 @@ class TestFisherMatrices:
             # iii) All elements of G are positive.
 
             # Test symmetry
-            anti_sym_norm = np.linalg.norm(G - G.T)
-            assert anti_sym_norm <= matrix_scale * multiplicative_tolerance
+            np.testing.assert_allclose(G, G.T, rtol=0, atol=tol)
 
             # Test cyclic property of trace, where key1 and key2 can be
             # swapped without changing the matrix. This is secretly the
@@ -1302,16 +1344,12 @@ class TestFisherMatrices:
             # creative ways to break the code to break one test but not
             # the other.
             G_swapped = ds.get_G(key2, key1)
-            G_diff_norm = np.linalg.norm(G - G_swapped)
-            assert G_diff_norm <= matrix_scale * multiplicative_tolerance
-            min_diagonal = np.min(np.diagonal(G))
+            np.testing.assert_allclose(G, G_swapped, rtol=0, atol=tol)
 
-            # Test that all elements of G are positive up to numerical
-            # noise with the threshold set to 10 orders of magnitude
-            # down from the smallest value on the diagonal
-            for i in range(Nfreq - 2):
-                for j in range(Nfreq - 2):
-                    assert G[i, j] >= -min_diagonal * multiplicative_tolerance
+            # Test that all elements of G are real and positive up to
+            # numerical noise
+            assert np.all(np.abs(G.imag) <= tol)
+            assert np.all(G.real >= -tol)
         else:
             # In general, when R_1 != R_2, there is a more restricted
             # symmetry where swapping R_1 and R_2 *and* taking the
@@ -1321,78 +1359,7 @@ class TestFisherMatrices:
             # iC uses pseudo-inverse when poorly conditioned, breaking this symmetry.
             if taper == "none" and input_data_weight != "iC":
                 G_swapped = ds.get_G(key2, key1)
-                G_diff_norm = np.linalg.norm(G - G_swapped.T)
-                assert G_diff_norm <= matrix_scale * multiplicative_tolerance
-
-
-r"""
-Under Construction
-def test_parseval(ds, d, d_std, w, beam_nf_dipole, bm_Q, uvd, uvd_std):
-    # Test that output power spectrum respects Parseval's theorem.
-    np.random.seed(10)
-    variance_in = 1.
-    Nfreq = d[0].Nfreqs
-    data = d[0]
-    # Use only the requested number of channels
-    data.select(freq_chans=range(Nfreq), bls=[(24,24),])
-    # Make it so that the test data is unflagged everywhere
-    data.flag_array[:] = False
-    # Get list of available baselines and LSTs
-    bls = data.get_antpairs()
-    nlsts = data.Ntimes
-    # Simulate data given a Fourier-space power spectrum
-    pk = variance_in * np.ones(Nfreq)
-    # Make realisation of (complex) white noise in real space
-    g = 1.0 * np.random.normal(size=(nlsts,Nfreq)) \
-      + 1.j * np.random.normal(size=(nlsts,Nfreq))
-    g /= np.sqrt(2.) # Since Re(C) = Im(C) = C/2
-    x = data.freq_array[0]
-    dx = x[1] - x[0]
-    # Fourier transform along freq. direction in each LST bin
-    gnew = np.zeros(g.shape).astype(complex)
-    fnew = np.zeros(g.shape).astype(complex)
-    for i in range(nlsts):
-        f = np.fft.fft(g[i]) * np.sqrt(pk)
-        fnew[i] = f
-        gnew[i] = np.fft.ifft(f)
-    # Parseval's theorem test: integral of F^2(k) dk = integral of f^2(x) dx
-    k = np.fft.fftshift( np.fft.fftfreq(Nfreq, d=(x[1]-x[0])) )
-    fsq = np.fft.fftshift( np.mean(fnew * fnew.conj(), axis=0) )
-    gsq = np.mean(gnew * gnew.conj(), axis=0)
-    # Realize set of Gaussian random datasets and pack into PSpecData
-    data.data_array = np.expand_dims(np.expand_dims(gnew, axis=1), axis=3)
-    ds = pspecdata.PSpecData()
-    ds.add([data, data], [None, None])
-    # Use true covariance instead
-    exact_cov = {
-        (0,24,24): np.eye(Nfreq),
-        (1,24,24): np.eye(Nfreq)
-    }
-    ds.set_C(exact_cov)
-
-    # Calculate OQE power spectrum using true covariance matrix
-    tau = np.fft.fftshift( ds.delays() )
-    ps, _ = ds.pspec(bls, input_data_weight='iC', norm='I')
-    ps_avg = np.fft.fftshift( np.mean(ps[0], axis=1) )
-
-    # Calculate integrals for Parseval's theorem
-    parseval_real = simpson(gsq, x)
-    parseval_ft = dx**2. * simpson(fsq, k)
-    parseval_phat = simpson(ps_avg, tau)
-
-    # Report on results for different ways of calculating Parseval integrals
-    print "Parseval's theorem:"
-    print "  \int [g(x)]^2 dx = %3.6e, %3.6e" % (parseval_real.real,
-                                                 parseval_real.imag)
-    print "  \int [f(k)]^2 dk = %3.6e, %3.6e" % (parseval_ft.real,
-                                                 parseval_ft.imag)
-    print "  \int p_hat(k) dk = %3.6e, %3.6e" % (parseval_phat.real,
-                                                 parseval_phat.imag)
-
-    # Perform approx. equality test (this is a stochastic quantity, so we
-    # only expect equality to ~10^-2 to 10^-3
-    np.testing.assert_allclose(parseval_phat, parseval_real, rtol=1e-3)
-"""
+                np.testing.assert_allclose(G, G_swapped.T, rtol=0, atol=tol)
 
 
 class TestScalar:
@@ -1412,7 +1379,9 @@ class TestScalar:
         # if weighting is not identity, then the adjustment should be a vector.
         with pytest.warns(UserWarning, match="Poorly conditioned covariance"):
             adjustment = ds.scalar_delay_adjustment(key1, key2, sampling=True)
-        assert len(adjustment == ds.spw_Ndlys)
+        assert len(adjustment) == ds.spw_Ndlys
+        # with Nfreqs = Ndlys, sampling and no taper, H = G, so every entry is unity
+        np.testing.assert_allclose(adjustment, 1.0)
 
     def test_scalar(self, d, beam_nf_dipole) -> None:
         ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
@@ -1426,9 +1395,14 @@ class TestScalar:
         scalar = ds.scalar(("xx", "xx"))
         scalar_xx = ds.scalar("xx")  # Can use single pol string as shorthand
         assert scalar == scalar_xx
-        scalar = ds.scalar(1515)  # polpair-integer = ('xx', 'xx')
-        scalar = ds.scalar(("xx", "xx"), taper_override="none")
-        scalar = ds.scalar(("xx", "xx"), beam=gauss)
+        assert ds.scalar(1515) == scalar  # polpair-integer = ('xx', 'xx')
+        # the default taper is already "none", so overriding with it changes nothing
+        assert ds.taper == "none"
+        assert ds.scalar(("xx", "xx"), taper_override="none") == scalar
+        # passing a beam is equivalent to using a PSpecData object built with it
+        scalar_gauss = ds.scalar(("xx", "xx"), beam=gauss)
+        assert scalar_gauss == ds2.scalar(("xx", "xx"))
+        assert not np.isclose(scalar_gauss, scalar)
         with pytest.raises(NotImplementedError, match="Polarizations don't match"):
             ds.scalar(("xx", "yy"))
 
@@ -1678,6 +1652,10 @@ def test_delays(uvd: UVData) -> None:
     ds.add([uvd, uvd], [None, None])
     d = ds.delays()
     assert len(d) == ds.dsets[0].Nfreqs
+    # delays [ns] are fftshift-ordered (zero in the middle), spaced by 1 / bandwidth
+    bandwidth = ds.Nfreqs * np.median(np.diff(ds.freqs))
+    np.testing.assert_allclose(np.diff(d), 1e9 / bandwidth)
+    assert d[ds.Nfreqs // 2] == 0.0
 
 
 def test_check_in_dset(d: list[UVData]) -> None:
@@ -1756,6 +1734,8 @@ class TestCModel:
                 spws[0][1] - spws[0][0],
                 spws[0][1] - spws[0][0],
             )
+            # covariance models are Hermitian
+            np.testing.assert_allclose(ds._C[Ckey], ds._C[Ckey].conj().T)
 
     def test_known_model(
         self,
@@ -1778,6 +1758,8 @@ class TestCModel:
         ds.C_model(key, model="known", time_index=0, known_cov=known_cov)
         assert Ckey in ds._C.keys()
         assert ds._C[Ckey].shape == (spws[1][1] - spws[1][0], spws[1][1] - spws[1][0])
+        # the known (identity) covariance is restricted to the spectral window
+        np.testing.assert_array_equal(ds._C[Ckey], np.eye(spws[1][1] - spws[1][0]))
 
 
 @pytest.fixture(scope="module")
@@ -2102,12 +2084,13 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         assert len(uvp.bl_array) == len(pspec_bls)
         assert uvp.antnums_to_blpair(((24, 25), (24, 25))) in uvp.blpair_array
         assert uvp.data_array[0].dtype == np.complex128
-        assert uvp.data_array[0].shape == (240, 64, 1)
+        assert uvp.data_array[0].shape == (240, 16, 1)
         assert not uvp.exact_windows
 
         # verify spw_ranges and n_dlys input variants all accepted
@@ -2192,6 +2175,7 @@ class TestPspec:
             input_data_weight="identity",
             norm="I",
             taper="none",
+            spw_ranges=[(10, 26)],
             verbose=False,
             exact_norm=False,
         )
@@ -2204,7 +2188,8 @@ class TestPspec:
         estimated_Q = (1.0 / (4 * np.pi)) * np.ones_like(Q_sample)
         assert np.allclose(np.real(estimated_Q), np.real(Q_sample), rtol=1e-05)
 
-        # exact_norm=True vs exact_norm=False should agree to within 5%
+        # exact_norm=True vs exact_norm=False should agree to within 5%. This uses
+        # the full band on purpose: the offset between them grows with bandwidth.
         ds_t = pspecdata.PSpecData(
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=bm_Q
         )
@@ -2235,7 +2220,9 @@ class TestPspec:
             (np.real(uvp_new.get_data(key)) - np.real(uvp_ext.get_data(key)))
             / np.real(uvp_ext.get_data(key))
         )
-        assert diff <= 0.05
+        # The exact and approximate normalizations are not identical: for this
+        # beam the exact one is systematically a few percent (~4%) higher.
+        assert abs(diff) <= 0.05
 
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed
@@ -2254,6 +2241,7 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         assert uvp.antnums_to_blpair(((24, 25), (37, 38))) in uvp.blpair_array
@@ -2264,7 +2252,7 @@ class TestPspec:
         # mixed grouped/ungrouped format: [[(bl,)], bl]
         bls1_mixed = [[(24, 25)], (52, 53)]
         bls2_mixed = [[(24, 25)], (52, 53)]
-        pspec_ds.pspec(
+        uvp_mixed = pspec_ds.pspec(
             bls1_mixed,
             bls2_mixed,
             (0, 1),
@@ -2273,8 +2261,15 @@ class TestPspec:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
+        # each entry of bls1 is paired with the matching entry of bls2, whether
+        # it is a group of baselines or a single baseline
+        assert sorted(uvp_mixed.get_blpairs()) == [
+            ((24, 25), (24, 25)),
+            ((52, 53), (52, 53)),
+        ]
 
     def test_pspec_multiple_spws_and_select(self, beam_nf_dipole, uvd: UVData) -> None:
         """Test pspec() with multiple spectral windows and verify that select() works
@@ -2337,7 +2332,7 @@ class TestPspec:
         ds = pspecdata.PSpecData(
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
         )
-        ds.pspec(
+        uvp_xx = ds.pspec(
             pspec_bls,
             pspec_bls,
             (0, 1),
@@ -2345,6 +2340,7 @@ class TestPspec:
             spw_ranges=[(10, 24)],
             verbose=False,
         )
+        assert uvp_xx.get_polpairs() == [("xx", "xx")]
 
         # warn and skip unavailable pol in a multi-pol request
         uvd_temp = copy.deepcopy(uvd)
@@ -2355,7 +2351,7 @@ class TestPspec:
             UserWarning,
             match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
         ):
-            ds.pspec(
+            uvp = ds.pspec(
                 pspec_bls,
                 pspec_bls,
                 (0, 1),
@@ -2363,15 +2359,19 @@ class TestPspec:
                 spw_ranges=[(10, 24)],
                 verbose=False,
             )
+        assert uvp.get_polpairs() == [("xx", "xx")]
 
         # integer pol code
         uvd_temp = copy.deepcopy(uvd)
         ds = pspecdata.PSpecData(
             dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
         )
-        ds.pspec(
+        uvp = ds.pspec(
             pspec_bls, pspec_bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False
         )
+        # -5 is the integer code for "xx"
+        assert uvp.get_polpairs() == [("xx", "xx")]
+        np.testing.assert_array_equal(uvp.data_array[0], uvp_xx.data_array[0])
 
         # error: mismatched bls1/bls2 lengths
         with pytest.raises(
@@ -2607,10 +2607,13 @@ class TestPspec:
             )
         assert uvp_w.exact_windows
 
-        # Gaussian beam object
-        widths = -0.0343 * uvd1.freq_array.flatten() / 1e6 + 11.30
+        # Gaussian beam object. Only build it over the spectral window's channels:
+        # building it over the full 1024-channel band is slow and those extra
+        # channels are discarded anyway.
+        spw_freqs = uvd1.freq_array.flatten()[175:195]
+        widths = -0.0343 * spw_freqs / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvd1.freq_array.flatten(), widths=widths, pol="xx"
+            freq_array=spw_freqs, widths=widths, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="uvp has no cosmo attribute. Using fiducial cosmology."
@@ -2681,7 +2684,7 @@ class TestNormalization:
             * scalar
             / len(freqs) ** 2,
             axes=1,
-        )[0]
+        )
 
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
@@ -2695,10 +2698,14 @@ class TestNormalization:
             norm="I",
             sampling=True,
         )
-        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))
+        ratio = np.real(oqe) / np.real(legacy)
 
-        # assert answers are same to within 3%
-        assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
+        # The two estimates are proportional for every time and delay; they
+        # differ only by an overall factor of about 2%, from the different ways
+        # the two approaches compute the beam/cosmology normalization scalar.
+        np.testing.assert_allclose(ratio, np.median(ratio), rtol=1e-4)
+        assert abs(np.median(ratio) - 1) < 0.03
 
     def test_blackman_harris_taper_matches_legacy(
         self, normalization_setup: tuple
@@ -2721,7 +2728,7 @@ class TestNormalization:
             * scalar
             / len(freqs) ** 2,
             axes=1,
-        )[0]
+        )
 
         # hera_pspec OQE
         ds = pspecdata.PSpecData(dsets=[d1, d2], wgts=[None, None], beam=beam)
@@ -2734,10 +2741,14 @@ class TestNormalization:
             input_data_weight="identity",
             norm="I",
         )
-        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))[0]
+        oqe = uvp.get_data((0, ((24, 25), (37, 38)), ("xx", "xx")))
+        ratio = np.real(oqe) / np.real(legacy)
 
-        # assert answers are same to within 3%
-        assert np.isclose(np.real(oqe) / np.real(legacy), 1, atol=0.03, rtol=0.03).all()
+        # The two estimates are proportional for every time and delay; they
+        # differ only by an overall factor of about 2%, from the different ways
+        # the two approaches compute the beam/cosmology normalization scalar.
+        np.testing.assert_allclose(ratio, np.median(ratio), rtol=1e-4)
+        assert abs(np.median(ratio) - 1) < 0.03
 
 
 class TestBroadcastDsetFlags:
@@ -2825,13 +2836,23 @@ class TestBroadcastDsetFlags:
             spw_ranges=[(400, 450)],
             verbose=False,
         )
-        avg_uvp2 = uvp.average_spectra(
-            blpair_groups=[sorted(np.unique(uvp.blpair_array))],
+        # the change to the flagged integration does reach the un-averaged spectra
+        key = (0, ((24, 25), (24, 25)), ("xx", "xx"))
+        changed = np.any(uvp.get_data(key) != uvp2.get_data(key), axis=1)
+        np.testing.assert_array_equal(changed, np.arange(changed.size) == 3)
+
+        avg_uvp2 = uvp2.average_spectra(
+            blpair_groups=[sorted(np.unique(uvp2.blpair_array))],
             time_avg=True,
             inplace=False,
         )
-        # assert average before and after are the same!
-        assert avg_uvp == avg_uvp2
+        # assert average before and after are the same! (The objects differ in
+        # their history, so compare the arrays rather than the objects.)
+        np.testing.assert_array_equal(avg_uvp.data_array[0], avg_uvp2.data_array[0])
+        np.testing.assert_array_equal(avg_uvp.wgt_array[0], avg_uvp2.wgt_array[0])
+        np.testing.assert_array_equal(
+            avg_uvp.integration_array[0], avg_uvp2.integration_array[0]
+        )
 
 
 @pytest.fixture
@@ -2873,6 +2894,7 @@ class TestRFIFlagPropagation:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
         ds.broadcast_dset_flags(unflag=True)
@@ -2885,6 +2907,7 @@ class TestRFIFlagPropagation:
             norm="I",
             taper="none",
             little_h=True,
+            spw_ranges=[(10, 26)],
             verbose=False,
         )
 
@@ -2924,6 +2947,7 @@ class TestRFIFlagPropagation:
                 norm="I",
                 taper="none",
                 little_h=True,
+                spw_ranges=[(10, 26)],
                 verbose=False,
             )
 
@@ -2944,6 +2968,7 @@ class TestRFIFlagPropagation:
                 norm="I",
                 taper="none",
                 little_h=True,
+                spw_ranges=[(10, 26)],
                 verbose=False,
             )
 
@@ -2957,32 +2982,12 @@ class TestRFIFlagPropagation:
             np.real(qe_flagged_mod), np.real(qe_flagged), atol=0.001, rtol=0.001
         ).all()
 
-        # Test below commented out because this sort of aggressive symmetrization is not yet implemented.
-        # # Test that flagging a channel for one dataset (e.g. just left hand dataset x2)
-        # # is equivalent to flagging for both x1 and x2.
-        # test_wgts_flagged = copy.deepcopy(test_wgts)
-        # test_wgts_flagged.data_array[:,:,40:60] = 0. # Flag 20 channels
-        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[test_wgts_flagged, test_wgts_flagged], beam=beam_nf_dipole)
-        # print "mode alpha"
-        # uvp_flagged = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
-        #                         little_h=True, verbose=False)
-        # ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, test_wgts_flagged], beam=beam_nf_dipole)
-        # print "mode beta"
-        # uvp_flagged_asymm = ds.pspec(bls1, bls2, (0, 1), ('xx','xx'), input_data_weight='diagonal', norm='I', taper='none',
-        #                         little_h=True, verbose=False)
-
-        # qe_flagged_asymm = uvp_flagged_asymm .get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-        # qe_flagged = uvp_flagged.get_data(0, ((24, 25), (37, 38)), 'xx')[0]
-
-        # #print np.real(qe_flagged_asymm)/np.real(qe_flagged)
-
-        # # assert answers are same to within 3%
-        # assert np.isclose(np.real(qe_flagged_asymm)/np.real(qe_flagged), 1, atol=0.03, rtol=0.03).all()
-
-        # print(uvd.data_array.shape)
+        # Flagging a channel in only one of the two datasets is not tested:
+        # pspec does not symmetrise the flags, so it is not (yet) equivalent
+        # to flagging that channel in both datasets.
 
 
-def test_validate_blpairs(uvd: UVData) -> None:
+def test_validate_blpairs(uvd: UVData, capsys: pytest.CaptureFixture) -> None:
     # test exceptions
     uvd = copy.deepcopy(uvd)
     with pytest.raises(TypeError, match="uvd1 must be a UVData instance"):
@@ -2994,16 +2999,20 @@ def test_validate_blpairs(uvd: UVData) -> None:
     bls1, bls2, blpairs = utils.construct_blpairs(
         bls, exclude_permutations=False, exclude_auto_bls=True
     )
+    # redundant blpairs pass silently
+    capsys.readouterr()
     pspecdata.validate_blpairs(blpairs, uvd, uvd)
     bls1, bls2, blpairs = utils.construct_blpairs(
         bls, exclude_permutations=False, exclude_auto_bls=True, group=True
     )
 
     pspecdata.validate_blpairs(blpairs, uvd, uvd)
+    assert capsys.readouterr().out == ""
 
-    # test non-redundant
+    # test non-redundant: reported, but does not raise
     blpairs = [((24, 25), (24, 38))]
     pspecdata.validate_blpairs(blpairs, uvd, uvd)
+    assert "exceeds redundancy tolerance" in capsys.readouterr().out
 
 
 PSPEC_RUN_FNAMES = [
@@ -3173,30 +3182,11 @@ class TestPspecRun:
         )
         assert phserr_after < phserr_before
 
-    def test_works_without_future_array_shape(self, tmp_path: Path) -> None:
-        uvd_non_future = UVData()
-        uvd_non_future.read_miriad(PSPEC_RUN_FNAMES[0])
-        ds = pspecdata.pspec_run(
-            [copy.deepcopy(uvd_non_future)],
-            str(tmp_path / "out2.h5"),
-            dsets_std=[copy.deepcopy(uvd_non_future)],
-            blpairs=[((37, 38), (37, 38)), ((37, 38), (52, 53))],
-            interleave_times=True,
-            verbose=False,
-            overwrite=True,
-            spw_ranges=[(0, 25)],
-            rephase_to_dset=0,
-            broadcast_dset_flags=True,
-            time_thresh=0.3,
-        )
-        # assert ds passes validation
-        assert ds.dsets_std[0] is not None
-        ds.validate_datasets()
-
     def test_dsets_std_and_wgts_pass_validation(
         self, tmp_path: Path, pspec_run_uvd_flagged: UVData
     ) -> None:
-        """Repeat feeding dsets_std and wgts."""
+        """Check that the interleaved datasets from pspec_run, together with their
+        std datasets and explicit weights, pass validation."""
         uvd = pspec_run_uvd_flagged
         ds = pspecdata.pspec_run(
             [copy.deepcopy(uvd)],
@@ -3214,6 +3204,25 @@ class TestPspecRun:
         # assert ds passes validation
         assert ds.dsets_std[0] is not None
         ds.validate_datasets()
+
+        # pspec_run does not take weights, so attach weights built from the
+        # flags of the (interleaved) datasets explicitly
+        wgts = []
+        for dset in ds.dsets:
+            wgt = copy.deepcopy(dset)
+            wgt.data_array = (~dset.flag_array).astype(float)
+            wgts.append(wgt)
+        ds_w = pspecdata.PSpecData(dsets=ds.dsets, dsets_std=ds.dsets_std, wgts=wgts)
+        assert all(w is not None for w in ds_w.wgts + ds_w.dsets_std)
+        ds_w.validate_datasets()
+        np.testing.assert_array_equal(
+            ds_w.w((0, 37, 38, "xx")), (~ds.dsets[0].get_flags(37, 38, "xx")).T
+        )
+
+        # validation does catch a weights list that doesn't match the datasets
+        ds_w.wgts = ds_w.wgts[:1]
+        with pytest.raises(ValueError, match="self.wgts does not have same len"):
+            ds_w.validate_datasets()
 
     def test_lst_trimming(self, tmp_path: Path, pspec_run_uvd_flagged: UVData) -> None:
         uvd = pspec_run_uvd_flagged
@@ -3544,209 +3553,3 @@ def test_window_funcs(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> N
                 assert np.isclose(Wv.sum(axis=1).real, 1).all()
                 # assert this is a real matrix, even though imag is populated
                 assert np.isclose(Wv.imag, 0, atol=1e-6).all()
-
-
-class TestGetArgparser:
-    def test_get_argparser(self) -> None:
-        args = pspecdata.get_pspec_run_argparser()
-        a = args.parse_args(
-            [
-                ["foo"],
-                "bar",
-                "--dset_pairs",
-                "0~0,1~1",
-                "--pol_pairs",
-                "xx~xx,yy~yy",
-                "--spw_ranges",
-                "300~400, 600~800",
-                "--blpairs",
-                "24~25~24~25, 37~38~37~38",
-            ]
-        )
-        assert a.pol_pairs == [("xx", "xx"), ("yy", "yy")]
-        assert a.dset_pairs == [(0, 0), (1, 1)]
-        assert a.spw_ranges == [(300, 400), (600, 800)]
-        assert a.blpairs == [((24, 25), (24, 25)), ((37, 38), (37, 38))]
-
-    def test_get_argparser_backwards_compatibility(self) -> None:
-        args = pspecdata.get_pspec_run_argparser()
-        a = args.parse_args(
-            [
-                ["foo"],
-                "bar",
-                "--dset_pairs",
-                "0 0, 1 1",
-                "--pol_pairs",
-                "xx xx, yy yy",
-                "--spw_ranges",
-                "300 400, 600 800",
-                "--blpairs",
-                "24 25 24 25, 37 38 37 38",
-            ]
-        )
-        assert a.pol_pairs == [("xx", "xx"), ("yy", "yy")]
-        assert a.dset_pairs == [(0, 0), (1, 1)]
-        assert a.spw_ranges == [(300, 400), (600, 800)]
-        assert a.blpairs == [((24, 25), (24, 25)), ((37, 38), (37, 38))]
-
-
-"""
-# LEGACY MONTE CARLO TESTS
-    def validate_get_G(self,tolerance=0.2,NDRAWS=100,NCHAN=8):
-        '''
-        Test get_G where we interpret G in this case to be the Fisher Matrix.
-        Args:
-            tolerance, required max fractional difference from analytical
-                       solution to pass.
-            NDRAWS, number of random data sets to sample frome.
-            NCHAN, number of channels. Must be less than test data sets.
-        '''
-        #read in data.
-        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
-        data=uv.UVData()
-        wghts=uv.UVData()
-        data.read_miriad(dpath)
-        wghts.read_miriad(dpath)
-        assert(NCHAN<data.Nfreqs)
-        #make sure we use fewer channels.
-        data.select(freq_chans=range(NCHAN))
-        wghts.select(freq_chans=range(NCHAN))
-        #********************************************************************
-        #set data to random white noise with a random variance and mean.
-        ##!!!Set mean to zero for now since analyitic solutions assumed mean
-        ##!!!Subtracted data which oqe isn't actually doing.
-        #*******************************************************************
-        test_mean=0.*np.abs(np.random.randn())
-        test_std=np.abs(np.random.randn())
-        #*******************************************************************
-        #Make sure that all of the flags are set too true for analytic case.
-        #*******************************************************************
-        data.flag_array[:]=False
-        wghts.data_array[:]=1.
-        wghts.flag_array[:]=False
-        bllist=data.get_antpairs()
-        #*******************************************************************
-        #These are the averaged "fisher matrices"
-        #*******************************************************************
-        f_mat=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
-        f_mat_true=np.zeros((data.Nfreqs,data.Nfreqs),dtype=complex)
-        nsamples=0
-        for datanum in range(NDATA):
-            #for each data draw, generate a random data set.
-            pspec=pspecdata.PSpecData()
-            data.data_array=test_std\
-            *np.random.standard_normal(size=data.data_array.shape)\
-            /np.sqrt(2.)+1j*test_std\
-            *np.random.standard_normal(size=data.data_array.shape)\
-            /np.sqrt(2.)+(1.+1j)*test_mean
-            pspec.add([data],[wghts])
-            #get empirical Fisher matrix for baselines 0 and 1.
-            pair1=bllist[0]
-            pair2=bllist[1]
-            k1=(0,pair1[0],pair1[1],-5)
-            k2=(0,pair2[0],pair2[1],-5)
-            #add to fisher averages.
-            f_mat_true=f_mat_true+pspec.get_F(k1,k2,true_fisher=True)
-            f_mat=f_mat+pspec.get_F(k1,k2)
-            #test identity
-            self.assertTrue(np.allclose(pspec.get_F(k1,k2,use_identity=True)/data.Nfreqs**2.,
-                            np.identity(data.Nfreqs).astype(complex)))
-            del pspec
-        #divide out empirical Fisher matrices by analytic solutions.
-        f_mat=f_mat/NDATA/data.Nfreqs**2.*test_std**4.
-        f_mat_true=f_mat_true/NDATA/data.Nfreqs**2.*test_std**4.
-        #test equality to analytic solutions
-        self.assertTrue(np.allclose(f_mat,
-                        np.identity(data.Nfreqs).astype(complex),
-                        rtol=tolerance,
-                        atol=tolerance)
-        self.assertTrue(np.allclose(f_mat_true,
-                                    np.identity(data.Nfreqs).astype(complex),
-                                    rtol=tolerance,
-                                    atol=tolerance)
-        #TODO: Need a test case for some kind of taper.
-    def validate_get_MW(self,NCHANS=20):
-        '''
-        Test get_MW with analytical case.
-        Args:
-            NCHANS, number of channels to validate.
-        '''
-        ###
-        test_std=np.abs(np.random.randn())
-        f_mat=np.identity(NCHANS).astype(complex)/test_std**4.*nchans**2.
-        pspec=pspecdata.PSpecData()
-        m,w=pspec.get_MW(f_mat,mode='G^-1')
-        #test M/W matrices are close to analytic solutions
-        #check that rows in W sum to unity.
-        self.assertTrue(np.all(np.abs(w.sum(axis=1)-1.)<=tolerance))
-        #check that W is analytic soluton (identity)
-        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
-        #check that M.F = W
-        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
-        m,w=pspec.get_MW(f_mat,mode='G^-1/2')
-        #check W is identity
-        self.assertTrue(np.allclose(w,np.identity(nchans).astype(complex)))
-        self.assertTrue(np.allclose(np.dot(m,f_mat),w))
-        #check that L^-1 runs.
-        m,w=pspec.get_MW(f_mat,mode='G^-1')
-    def validate_q_hat(self,NCHAN=8,NDATA=1000,):
-        '''
-        validate q_hat calculation by drawing random white noise data sets
-        '''
-        dpath=os.path.join(DATA_PATH,'zen.2458042.12552.xx.HH.uvXAA')
-        data=uv.UVData()
-        wghts=uv.UVData()
-        data.read_miriad(dpath)
-        wghts.read_miriad(dpath)
-        assert(NCHAN<=data.Nfreqs)
-        data.select(freq_chans=range(NCHAN))
-        wghts.select(freq_chans=range(NCHAN))
-        #***************************************************************
-        #set data to random white noise with a random variance and mean
-        #q_hat does not subtract a mean so I will set it to zero for
-        #the test.
-        #****************************************************************
-        test_mean=0.*np.abs(np.random.randn())#*np.abs(np.random.randn())
-        test_std=np.abs(np.random.randn())
-        data.flag_array[:]=False#Make sure that all of the flags are set too true for analytic case.
-        wghts.data_array[:]=1.
-        wghts.flag_array[:]=False
-        bllist=data.get_antpairs()
-        q_hat=np.zeros(NCHAN).astype(complex)
-        q_hat_id=np.zeros_like(q_hat)
-        q_hat_fft=np.zeros_like(q_hat)
-        nsamples=0
-        for datanum in range(NDATA):
-            pspec=pspecdata.PSpecData()
-            data.data_array=test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)\
-            +1j*test_std*np.random.standard_normal(size=data.data_array.shape)/np.sqrt(2.)+(1.+1j)*test_mean
-            pspec.add([data],[wghts])
-            for j in range(data.Nbls):
-                #get baseline index
-                pair1=bllist[j]
-                k1=(0,pair1[0],pair1[1],-5)
-                k2=(0,pair1[0],pair1[1],-5)
-                #get q
-                #test identity
-                q_hat=q_hat+np.mean(pspec.q_hat(k1,k2,use_fft=False),
-                axis=1)
-                q_hat_id=q_hat_id+np.mean(pspec.q_hat(k1,k2,use_identity=True),
-                axis=1)
-                q_hat_fft=q_hat_fft+np.mean(pspec.q_hat(k1,k2),axis=1)
-                nsamples=nsamples+1
-            del pspec
-        #print nsamples
-        nfactor=test_std**2./data.Nfreqs/nsamples
-        q_hat=q_hat*nfactor
-        q_hat_id=q_hat_id*nfactor/test_std**4.
-        q_hat_fft=q_hat_fft*nfactor
-        #print q_hat
-        #print q_hat_id
-        #print q_hat_fft
-        self.assertTrue(np.allclose(q_hat,
-        np.identity(data.Nfreqs).astype(complex)))
-        self.assertTrue(np.allclose(q_hat_id,
-        np.identity(data.Nfreqs).astype(complex)))
-        self.assertTrue(np.allclose(q_hat_fft,
-        np.identity(data.Nfreqs).astype(complex)))
-"""

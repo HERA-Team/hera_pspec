@@ -1,5 +1,4 @@
 import copy
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -14,9 +13,6 @@ from hera_pspec import (
     testing,
     utils,
 )
-from hera_pspec.data import DATA_PATH
-
-DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
@@ -82,16 +78,21 @@ class TestSensitivity:
         assert Dsq[1] < P_N
 
 
-def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
+def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) -> None:
     """Check that the analytic noise 1-sigma amplitude matches the RMS of a noise simulation realization."""
-    # get simulated noise in Jy
-    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+    # get simulated noise in Jy (on a copy of zen.even.xx.LST.1.28828.uvOCRSA)
     Tsys = 300.0  # Kelvin
 
     # generate noise
     seed = 0
     uvd = testing.noise_sim(
-        uvfile, Tsys, beam_nf_dipole, seed=seed, whiten=True, inplace=False, Nextend=9
+        uvd_zen_even_xx,
+        Tsys,
+        beam_nf_dipole,
+        seed=seed,
+        whiten=True,
+        inplace=False,
+        Nextend=9,
     )
 
     # get redundant baseline group
@@ -295,8 +296,11 @@ def check_corr_matrix(m: np.ndarray) -> None:
     assert m.ndim == 2
     assert m.shape[0] == m.shape[1]
     assert np.all(np.diag(m) == 1)
-    assert np.all(m - np.eye(m.shape[0]) <= 1)
+    # correlation coefficients are bounded by 1 in magnitude
+    assert np.all(np.abs(m) <= 1 + 1e-12)
     np.testing.assert_array_almost_equal(m.T, m)
+    # and a correlation matrix is positive semi-definite
+    assert np.all(np.linalg.eigvalsh(m) >= -1e-10)
 
 
 @pytest.mark.parametrize("n", [1, 6, 7])

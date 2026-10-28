@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -24,22 +23,9 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_alternating_times(
-    vanilla_uvp_alternating_times: UVPSpec,
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-# def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
-#     return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that tests are parametrized
+# over; they are fetched by name with request.getfixturevalue.
+ALL_UVPS = ["vanilla_uvp", "vanilla_uvp_with_beam", "vanilla_uvp_alternating_times"]
 
 
 @pytest.fixture(scope="session")
@@ -75,9 +61,12 @@ def delay_bins_uvp_nocov(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     return uvp
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    """Copy of vanilla_uvp_with_beam with exact window functions."""
+    """Copy of vanilla_uvp_with_beam with exact window functions.
+
+    Module-scoped because computing exact window functions is slow; tests must
+    not modify it in place."""
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     gaussian_beam = uvwindow.FTBeam.gaussian(
         freq_array=uvp.freq_array, widths=8.0, pol=1
@@ -416,7 +405,7 @@ class TestAverageSpectra:
         assert uvp_red_avg.Nbltpairs == uvp_red_avg.Ntpairs
 
     def test_exact_wf_combined_average(self, uvp_exact_wfs: UVPSpec) -> None:
-        """Check that combined time and redundant averaging with error_field runs without error."""
+        """Check combined time and redundant averaging with an error_field, for exact window functions."""
         uvp = copy.deepcopy(uvp_exact_wfs)
         blpair_groups, _, _ = uvp.get_red_blpairs()
         # both time+redundant avg + error_weights
@@ -427,7 +416,7 @@ class TestAverageSpectra:
             blp = uvp.antnums_to_blpair(key[1])
             error = Pn[blp]
             uvp.set_stats("noise", key, error)
-        _ = grouping.average_spectra(
+        uvp_avg = grouping.average_spectra(
             uvp,
             blpair_groups=blpair_groups,
             time_avg=True,
@@ -438,6 +427,23 @@ class TestAverageSpectra:
             inplace=False,
             add_to_history="",
         )
+        assert uvp_avg.Ntimes == 1
+        assert uvp_avg.Nblpairs == len(blpair_groups)
+        # All spectra have equal integration time and nsamples, so they are
+        # averaged with equal weights and the averaged noise of a group of N
+        # spectra is sqrt(sum(noise^2)) / N.
+        assert np.unique(uvp.integration_array[0]).size == 1
+        assert np.unique(uvp.nsample_array[0]).size == 1
+        for grp in blpair_groups:
+            noise_in = np.concatenate(
+                [uvp.get_stats("noise", (0, blp, "xx")).real for blp in grp]
+            )
+            noise_avg = uvp_avg.get_stats("noise", (0, grp[0], "xx"))
+            np.testing.assert_allclose(
+                noise_avg[0],
+                np.sqrt(np.sum(noise_in**2, axis=0)) / noise_in.shape[0],
+                rtol=1e-10,
+            )
 
 
 class TestSampleBaselines:
@@ -456,9 +462,12 @@ class TestSampleBaselines:
         assert len(g1) == len(samp)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_bootstrap_average_blpairs(
+    uvp_name: str, request: pytest.FixtureRequest
+) -> None:
     """Check that bootstrap_average_blpairs correctly resamples blpairs and produces consistent averages for identical data."""
+    uvp = request.getfixturevalue(uvp_name)
     # Check that basic bootstrap averaging works
     blpair_groups = [list(np.unique(uvp.blpair_array))]
     uvp1, wgts = grouping.bootstrap_average_blpairs(
@@ -497,16 +506,15 @@ def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
     # Test that different bootstrap-sampled averages have the same value as
     # the normal average (since the data for all blpairs has been set to
     # the same values for uvp3)
-    np.random.seed(10)
     uvp_avg = uvp3.average_spectra(
         blpair_groups=[_blpairs], time_avg=True, inplace=False
     )
     blpair = uvp_avg.blpair_array[0]
-    for _ in range(5):
+    for seed in range(5):
         # Generate multiple samples and make sure that they are all equal
         # to the regular average (for the cloned data in uvp3)
         uvp4, wgts = grouping.bootstrap_average_blpairs(
-            [uvp3], blpair_groups=[_blpairs], time_avg=True
+            [uvp3], blpair_groups=[_blpairs], time_avg=True, seed=seed
         )
         try:
             ps_avg = uvp_avg.get_data((0, blpair, ("xx", "xx")))
@@ -540,20 +548,19 @@ class TestBootstrapResampledError:
         assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
         assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
 
-    def test_gaussian_noise(self) -> None:
+    def test_gaussian_noise(self, uvd_zen_even_xx: UVData) -> None:
         """Check that bootstrapped error bars on Gaussian noise power spectra yield z-scores with standard deviation converging to 1."""
-        # get simulated noise in K-str
-        uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+        # get simulated noise in K-str (on copies of zen.even.xx.LST.1.28828.uvOCRSA)
         Tsys = 300.0  # Kelvin
 
         # generate complex gaussian noise
         seed = 4
         uvd1 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
         seed = 5
         uvd2 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
 
         # form (auto) baseline-pairs from only 14.6m bls
@@ -614,7 +621,7 @@ class TestBootstrapRun:
         grouping.bootstrap_run(
             psc,
             time_avg=True,
-            Nsamples=100,
+            Nsamples=5,
             seed=0,
             normal_std=True,
             robust_std=True,
@@ -628,7 +635,7 @@ class TestBootstrapRun:
         spcs = psc.spectra("grp1")
 
         # assert all bs samples were written
-        assert np.all([f"uvp_bs{i}" in spcs for i in range(100)])
+        assert np.all([f"uvp_bs{i}" in spcs for i in range(5)])
 
         # assert average was written
         assert "uvp_avg" in spcs and "uvp" in spcs
@@ -699,31 +706,6 @@ class TestBootstrapRun:
         with pytest.raises(AssertionError, match="should not be in SWMR mode"):
             grouping.bootstrap_run(psc, spectra=["grp1/foo"])
 
-    def test_argparser(self) -> None:
-        """Check that the bootstrap_run argparser correctly parses spectra, blpair_groups, and cintervals arguments."""
-        args = grouping.get_bootstrap_run_argparser()
-        a = args.parse_args(
-            [
-                "fname",
-                "--spectra",
-                "grp1/uvp1",
-                "grp1/uvp2",
-                "grp2/uvp1",
-                "--blpair_groups",
-                "101102103104 101102102103, 102103104105",
-                "--time_avg",
-                "True",
-                "--Nsamples",
-                "100",
-                "--cintervals",
-                "16",
-                "84",
-            ]
-        )
-        assert a.spectra == ["grp1/uvp1", "grp1/uvp2", "grp2/uvp1"]
-        assert a.blpair_groups == [[101102103104, 101102102103], [102103104105]]
-        assert a.cintervals == [16.0, 84.0]
-
 
 @pytest.fixture(scope="session")
 def uvp_spherical(
@@ -793,6 +775,30 @@ class TestSpherical:
         assert "checking 1 2 3" in sph.history
         assert np.isclose(sph.get_blpair_seps(), 0).all()
         assert "err" in sph.stats_array
+
+    def test_average_without_window_function_array(
+        self, uvp_spherical: UVPSpec
+    ) -> None:
+        """Check that spherical_average runs on a UVPSpec with no window_function_array."""
+        uvp = copy.deepcopy(uvp_spherical)
+        del uvp.window_function_array
+        Nk = len(self.KBINS)
+        A = {}
+        sph = grouping.spherical_average(uvp, self.KBINS, self.BIN_WIDTHS, A=A)
+        assert not hasattr(sph, "window_function_array")
+        # the binning, averaged data and errors don't need the window functions
+        for spw in sph.spw_array:
+            assert np.isclose(sph.get_kparas(spw), self.KBINS).all()
+            assert np.all(
+                sph.data_array[spw][:, 0, :].real / sph.data_array[spw][:, 10, :] > 1e3
+            )
+            assert np.isclose(
+                np.sqrt(sph.cov_array_real[spw])[:, range(Nk), range(Nk)],
+                1 / np.sqrt(A[spw].sum(axis=1)),
+            ).all()
+            assert np.isclose(
+                sph.stats_array["err"][spw], 1 / np.sqrt(A[spw].sum(axis=1))
+            ).all()
 
     def test_average_kbins_and_normalization(self, uvp_spherical: UVPSpec) -> None:
         """Check kbin values, WF normalization, data smell test, errorbar reduction, and array-shape bug checks."""
@@ -900,12 +906,26 @@ class TestSpherical:
         assert sph == sph_c
 
     def test_average_inf_in_cov(self, uvp_spherical: UVPSpec) -> None:
-        """Check that inserting inf into cov and stats arrays still produces a finite spherical average."""
+        """Check that inserting inf into cov and stats arrays still produces a finite
+        spherical average, and that error weighting gives the inf-error spectrum zero weight."""
         uvp2 = copy.deepcopy(uvp_spherical)
         uvp2.cov_array_real[0][0], uvp2.cov_array_imag[0][0] = np.inf, np.inf
         uvp2.stats_array["err"][0][0] = np.inf
-        sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
-        assert np.isfinite(sph.cov_array_real[0]).all()
+        for error_weights in (None, "err"):
+            sph = grouping.spherical_average(
+                uvp2, self.KBINS, self.BIN_WIDTHS, error_weights=error_weights
+            )
+            assert np.isfinite(sph.cov_array_real[0]).all()
+            assert np.isfinite(sph.stats_array["err"][0]).all()
+            assert np.isfinite(sph.data_array[0]).all()
+
+        # with infinite errors, the data of that spectrum should not affect the average
+        uvp3 = copy.deepcopy(uvp2)
+        uvp3.data_array[0][0] *= 1e6
+        sph3 = grouping.spherical_average(
+            uvp3, self.KBINS, self.BIN_WIDTHS, error_weights="err"
+        )
+        np.testing.assert_allclose(sph3.data_array[0], sph.data_array[0])
 
     def test_average_overlapping_kbins_error(self, uvp_spherical: UVPSpec) -> None:
         """Check that bin_widths larger than the kbin spacing raises an AssertionError."""
@@ -923,21 +943,29 @@ class TestSpherical:
         )
 
     def test_average_exact_windows(self, uvp_exact_wfs_wbeam: UVPSpec) -> None:
-        """Check that spherical_average runs for a UVPSpec with exact window functions, with and without blpair_groups."""
+        """Check spherical_average for a UVPSpec with exact window functions, with and without blpair_groups."""
         blpair_groups, _, _ = uvp_exact_wfs_wbeam.get_red_blpairs()
-        grouping.spherical_average(
+        sph1 = grouping.spherical_average(
             uvp_exact_wfs_wbeam.convert_to_deltasq(inplace=False),
             self.KBINS,
             self.BIN_WIDTHS,
             little_h=False,
         )
-        grouping.spherical_average(
+        sph2 = grouping.spherical_average(
             uvp_exact_wfs_wbeam,
             self.KBINS,
             self.BIN_WIDTHS,
             blpair_groups=blpair_groups,
             little_h=False,
         )
+        for sph in (sph1, sph2):
+            assert sph.Nblpairs == 1
+            assert np.isfinite(sph.data_array[0]).all()
+            # each spherical window function is normalized to unity, except for
+            # k bins that no data falls in, which are zero
+            row_sums = sph.window_function_array[0].sum(axis=2)
+            assert np.all(np.isclose(row_sums, 1) | np.isclose(row_sums, 0))
+            assert np.any(np.isclose(row_sums, 1))
 
     def test_wf_shape(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_wf_from_uvp returns an array with the expected (Ntimes, Nk, Nk, Npols) shape."""

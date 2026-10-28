@@ -2,7 +2,6 @@
 Module to construct pseudo-Stokes (I,Q,U,V) visibilities from miriad files or UVData objects
 """
 
-import argparse
 import copy
 import warnings
 from collections.abc import Iterable
@@ -515,49 +514,3 @@ def filter_dset_on_stokes_pol(dsets, pstokes):
     inp_dsets = [dsets[pols.index(desired_pols[0])], dsets[pols.index(desired_pols[1])]]
 
     return inp_dsets
-
-
-def generate_pstokes_argparser():
-    """
-    Get argparser to generate pstokes from linpol files.
-
-    Args:
-        N/A
-    Returns:
-        a: argparser object with arguments used in generate_pstokes_run.py
-    """
-    a = argparse.ArgumentParser(
-        description="argument parser for computing pstokes from linpol files."
-    )
-    a.add_argument(
-        "inputdata",
-        type=str,
-        help="Filename of UVData object withlinearly polarized data to add pstokes to.",
-    )
-    a.add_argument(
-        "--pstokes",
-        type=str,
-        help="list of pStokes you wish to calculate. Default is ['pI']",
-        nargs="+",
-        default="pI",
-    )
-    a.add_argument(
-        "--outputdata",
-        type=str,
-        help="Filename to write out data. Output includes original linear pols."
-        "if no outputdata is provided, will use inputdata, appending"
-        "pstokes to original linear pols.",
-    )
-    a.add_argument(
-        "--clobber",
-        action="store_true",
-        default=False,
-        help="Overwrite outputdata or original linpol only file.",
-    )
-    a.add_argument(
-        "--keep_vispols",
-        action="store_true",
-        default=False,
-        help="If inplace, keep the original linear polarizations in the input file. Default is False.",
-    )
-    return a
