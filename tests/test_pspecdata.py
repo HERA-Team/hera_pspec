@@ -3,6 +3,7 @@ import glob
 import json
 import os
 import warnings
+from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
 
@@ -196,42 +197,63 @@ def pspec_ds(beam_nf_dipole, uvd) -> pspecdata.PSpecData:
     )
 
 
+# A dict of arrays, i.e. visibilities that are not wrapped in a UVData object
+_ARRAY_DICT = {"(0,1)": np.arange(5), "(0,2)": np.arange(5)}
+
+INIT_ERROR_CASES = [
+    pytest.param(
+        lambda: ([uv.UVData(), uv.UVData(), uv.UVData()], [uv.UVData(), uv.UVData()]),
+        AssertionError,
+        "The dsets and wgts lists must have equal length",
+        id="unequal_wgts_length",
+    ),
+    pytest.param(
+        lambda: (np.ones((6, 8)), np.ones((6, 8))),
+        TypeError,
+        "dsets, dsets_std, wgts and cals must be UVData",
+        id="ndarray",
+    ),
+    pytest.param(
+        lambda: ([[0, 1, 2] for i in range(5)], [[0, 1, 2] for i in range(5)]),
+        TypeError,
+        "Only UVData objects can be used as datasets",
+        id="list_of_lists",
+    ),
+    pytest.param(
+        lambda: (12.0, 12.0),
+        TypeError,
+        "object of type 'float' has no len\\(\\)",
+        id="float",
+    ),
+    pytest.param(
+        lambda: ([12.0], [12.0]),
+        TypeError,
+        "Only UVData objects can be used as datasets",
+        id="list_of_floats",
+    ),
+    pytest.param(
+        lambda: (_ARRAY_DICT, _ARRAY_DICT),
+        TypeError,
+        "Only UVData objects can be used as datasets.",
+        id="dict_of_arrays",
+    ),
+    pytest.param(
+        lambda: ([_ARRAY_DICT], [_ARRAY_DICT]),
+        TypeError,
+        "Only UVData objects can be used as datasets",
+        id="list_of_dicts",
+    ),
+]
+
+
+@pytest.mark.parametrize("build_args,exception,match", INIT_ERROR_CASES)
+def test_init_raises(build_args, exception: type[Exception], match: str) -> None:
+    """Check that dsets/wgts of the wrong type or length are rejected by the constructor."""
+    with pytest.raises(exception, match=match):
+        pspecdata.PSpecData(*build_args())
+
+
 def test_init(uvd: UVData) -> None:
-    # Test creating empty PSpecData
-    ds = pspecdata.PSpecData()
-
-    # Test whether unequal no. of weights is picked up
-    with pytest.raises(
-        AssertionError, match="The dsets and wgts lists must have equal length"
-    ):
-        pspecdata.PSpecData(
-            [uv.UVData(), uv.UVData(), uv.UVData()], [uv.UVData(), uv.UVData()]
-        )
-
-    # Test passing data and weights of the wrong type
-    d_arr = np.ones((6, 8))
-    d_lst = [[0, 1, 2] for i in range(5)]
-    d_float = 12.0
-    d_dict = {"(0,1)": np.arange(5), "(0,2)": np.arange(5)}
-    with pytest.raises(
-        TypeError, match="dsets, dsets_std, wgts and cals must be UVData"
-    ):
-        pspecdata.PSpecData(d_arr, d_arr)
-    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
-        pspecdata.PSpecData(d_lst, d_lst)
-    with pytest.raises(TypeError, match="object of type 'float' has no len\\(\\)"):
-        pspecdata.PSpecData(d_float, d_float)
-    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
-        pspecdata.PSpecData([d_float], [d_float])
-    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets."):
-        pspecdata.PSpecData(d_dict, d_dict)
-    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
-        pspecdata.PSpecData([d_dict], [d_dict])
-
-    # Test exception when not a UVData instance
-    with pytest.raises(TypeError, match="Only UVData objects can be used as datasets"):
-        ds.add([1], [None])
-
     # Test get weights when fed a UVData for weights
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[uvd, uvd])
     key = (0, (24, 25), "xx")
@@ -268,6 +290,12 @@ ADD_DATA_ERROR_CASES = [
         TypeError,
         "Only UVData objects can be used as datasets",
         id="non_uvdata_dsets",
+    ),
+    pytest.param(
+        lambda uv: (([1], [None]), {}),
+        TypeError,
+        "Only UVData objects can be used as datasets",
+        id="non_uvdata_dsets_list_wgts",
     ),
     pytest.param(
         lambda uv: (([uv], [1]), {}),
@@ -491,24 +519,46 @@ def test_str(uvd: UVData) -> None:
     )
 
 
+@pytest.fixture(params=["get_Q_alt", "get_Q"])
+def q_matrix_getter(request, uvd: UVData) -> tuple[pspecdata.PSpecData, Callable]:
+    """(ds, getter) for the two ways of computing the Q = dC/dp matrices.
+
+    get_Q_alt only needs the number of frequencies, so it is tested on an empty
+    PSpecData; get_Q needs the frequencies themselves, so it uses real data.
+    """
+    if request.param == "get_Q_alt":
+        ds = pspecdata.PSpecData()
+        ds.spw_Nfreqs = 50
+    else:
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd])
+    return ds, getattr(ds, request.param)
+
+
 class TestGetQ:
-    def test_get_Q_alt(self) -> None:
+    @pytest.mark.parametrize(
+        "ndly_offset", [0, 3], ids=["ndlys_equals_nfreqs", "ndlys_below_nfreqs"]
+    )
+    def test_get_Q(
+        self, q_matrix_getter: tuple[pspecdata.PSpecData, Callable], ndly_offset: int
+    ) -> None:
         """
-        Test the Q = dC/dp function.
+        Test the Q = dC/dp matrices: shape, hermiticity of the quadratic form,
+        the zero-delay response and the delay-mode range check.
         """
-        vect_length = 50
+        ds, get_Q = q_matrix_getter
+        vect_length = ds.spw_Nfreqs
+        ndlys = vect_length - ndly_offset
+        if ndly_offset:
+            ds.set_Ndlys(ndlys)
         rng = np.random.default_rng(0)
         x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
         y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
 
-        ds = pspecdata.PSpecData()
-        ds.spw_Nfreqs = vect_length
-
-        for i in range(vect_length):
-            Q_matrix = ds.get_Q_alt(i)
+        for i in range(ndlys):
+            Q_matrix = get_Q(i)
             # Test that if the number of delay bins hasn't been set
             # the code defaults to putting that equal to Nfreqs
-            assert ds.spw_Ndlys == ds.spw_Nfreqs
+            assert ds.spw_Ndlys == ndlys
 
             xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
             yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
@@ -523,46 +573,29 @@ class TestGetQ:
             # x^t Q x should be real
             np.testing.assert_almost_equal(np.imag(xQx), 0.0)
 
+        # A constant x only responds to the zero-delay mode, which sits in the
+        # middle of the delay axis
         x_vect = np.ones(vect_length)
-        Q_matrix = ds.get_Q_alt(vect_length // 2)
+        Q_matrix = get_Q(ndlys // 2)
         xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
         np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
-        # Sending in sinusoids for x and y should give delta functions
-
-        # Now do all the same tests from above but for a different number
-        # of delay channels
-        ds.set_Ndlys(vect_length - 3)
-        for i in range(vect_length - 3):
-            Q_matrix = ds.get_Q_alt(i)
-            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
-            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
-            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-
-            # Test that Q matrix has the right shape
-            assert Q_matrix.shape == (vect_length, vect_length)
-
-            # Test that x^t Q y == conj(y^t Q x)
-            np.testing.assert_almost_equal(xQy, np.conjugate(yQx))
-
-            # x^t Q x should be real
-            np.testing.assert_almost_equal(np.imag(xQx), 0.0)
-
-        x_vect = np.ones(vect_length)
-        Q_matrix = ds.get_Q_alt((vect_length - 2) // 2 - 1)
-        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-        np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
-        # Sending in sinusoids for x and y should give delta functions
 
         # Make sure that error is raised when asking for a delay mode outside
         # of the range of delay bins
         with pytest.raises(
             IndexError, match="Cannot compute Q matrix for a mode outside"
         ):
-            ds.get_Q_alt(vect_length - 1)
+            get_Q(ndlys)
 
-        # Ensure that in the special case where the number of channels equals
-        # the number of delay bins, the FFT method gives the same answer as
-        # the explicit construction method
+    def test_get_Q_alt_fft_matches_explicit(self) -> None:
+        """
+        Test that when the number of channels equals the number of delay bins,
+        the FFT method gives the same answer as the explicit construction.
+        """
+        vect_length = 50
+        ds = pspecdata.PSpecData()
+        ds.spw_Nfreqs = vect_length
+
         multiplicative_tolerance = 0.001
         ds.set_Ndlys(vect_length)
         for alpha in range(vect_length):
@@ -577,82 +610,6 @@ class TestGetQ:
             match="Cannot estimate more delays than there are frequency channels",
         ):
             ds.set_Ndlys(vect_length + 100)
-
-    def test_get_Q(self, uvd: UVData) -> None:
-        """
-        Test the Q = dC_ij/dp function.
-
-        A general comment here:
-        I would really want to do away with try and exception statements. The reason to use them now
-        was that current unittests throw in empty datasets to these functions. Given that we are computing
-        the actual value of tau/freq/taper etc. we do need datasets! Currently, if there is no dataset,
-        Q_matrix is simply an identity matrix with same dimensions as that of vector length.
-        It will be very helpful if we can have more elegant solution for this.
-        AG: Update 2026/07/15: Previous versions of the test were using empty PSpecData object.
-        This has been changed, thereby avoiding the need for try/except blocks.
-        The test now checks that the Q matrix has the correct shape and properties,
-        and that it behaves as expected when applied to random vectors.
-
-        """
-        # Test if there is a warning if user does not pass the beam
-        ds_t = pspecdata.PSpecData(dsets=[uvd, uvd])
-
-        vect_length = ds_t.spw_Ndlys
-        rng = np.random.default_rng(0)
-        x_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
-        y_vect = rng.normal(size=vect_length) + 1.0j * rng.normal(size=vect_length)
-
-        for i in range(vect_length):
-            Q_matrix = ds_t.get_Q(i)
-            # Test that if the number of delay bins hasn't been set
-            # the code defaults to putting that equal to Nfreqs
-            assert ds_t.spw_Ndlys == ds_t.spw_Nfreqs
-
-            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
-            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
-            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-
-            # Test that Q matrix has the right shape
-            assert Q_matrix.shape == (vect_length, vect_length)
-
-            # Test that x^t Q y == conj(y^t Q x)
-            np.testing.assert_almost_equal(xQy, np.conjugate(yQx))
-
-            # x^t Q x should be real
-            np.testing.assert_almost_equal(np.imag(xQx), 0.0)
-
-        x_vect = np.ones(vect_length)
-        Q_matrix = ds_t.get_Q(vect_length / 2)
-        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-        np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
-
-        # Now do all the same tests from above but for a different number
-        # of delay channels
-        ds_t.set_Ndlys(vect_length - 3)
-        for i in range(vect_length - 3):
-            Q_matrix = ds_t.get_Q(i)
-            xQy = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, y_vect))
-            yQx = np.dot(np.conjugate(y_vect), np.dot(Q_matrix, x_vect))
-            xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-
-            # Test that Q matrix has the right shape
-            assert Q_matrix.shape == (vect_length, vect_length)
-
-            # Test that x^t Q y == conj(y^t Q x)
-            np.testing.assert_almost_equal(xQy, np.conjugate(yQx))
-
-            # x^t Q x should be real
-            np.testing.assert_almost_equal(np.imag(xQx), 0.0)
-
-        x_vect = np.ones(vect_length)
-        Q_matrix = ds_t.get_Q((vect_length - 2) / 2 - 1)
-        xQx = np.dot(np.conjugate(x_vect), np.dot(Q_matrix, x_vect))
-        np.testing.assert_almost_equal(xQx, np.abs(vect_length**2.0))
-
-        # Make sure that error is raised when asking for a delay mode outside
-        # of the range of delay bins
-        with pytest.raises(IndexError):
-            ds_t.get_Q(vect_length - 1)
 
     def test_get_Q_alt_tensor(self, uvd: UVData) -> None:
         uvd1 = copy.deepcopy(uvd)
@@ -968,6 +925,53 @@ class TestGetMW:
             ds.get_MW(random_G, random_H, mode="L^-1")
 
 
+# Keys of the two cross-multiplied baselines used by the q_hat/H/G/covariance tests
+QHAT_KEY1 = (0, 24, 38)
+QHAT_KEY2 = (1, 25, 38)
+
+
+def set_weighting_for_keys(ds: pspecdata.PSpecData, weighting: str, keys) -> None:
+    """Set ds's data weighting; for dayenu, also give each key (trivial) r_params.
+
+    Dayenu weighting cannot build R without r_params, so this also checks that
+    asking for R before they are set raises.
+    """
+    ds.set_weighting(weighting)
+    if weighting == "dayenu":
+        with pytest.raises(ValueError, match="r_param not set"):
+            ds.R(keys[0])
+        rpk = {
+            "filter_centers": [0.0],
+            "filter_half_widths": [0.0],
+            "filter_factors": [0.0],
+        }
+        for key in keys:
+            ds.set_r_param(key, rpk)
+
+
+@pytest.fixture(
+    params=[(w, t) for w in weight_selection for t in taper_selection],
+    ids=[f"{w}-{t}" for w in weight_selection for t in taper_selection],
+)
+def configured_ds(request, d: list[UVData]) -> tuple:
+    """(ds, key1, key2, warn_ctx) for every data weighting x taper combination.
+
+    ds is a PSpecData on two copies of d with the weighting and taper set.
+    warn_ctx must wrap the first R-dependent computation: iC weighting warns that
+    the empirical covariance is poorly conditioned.
+    """
+    weighting, taper = request.param
+    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+    set_weighting_for_keys(ds, weighting, (QHAT_KEY1, QHAT_KEY2))
+    ds.set_taper(taper)
+    warn_ctx = (
+        pytest.warns(UserWarning, match="Poorly conditioned covariance")
+        if weighting == "iC"
+        else nullcontext()
+    )
+    return ds, QHAT_KEY1, QHAT_KEY2, warn_ctx
+
+
 @pytest.fixture
 def cov_q_setup(d, d_std):
     """PSpecData + analytic covariance matrix for test_cov_q tests."""
@@ -1005,17 +1009,7 @@ class TestCovQ:
         """
         ds, _, key1, key2 = cov_q_setup
 
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
+        set_weighting_for_keys(ds, input_data_weight, (key1, key2))
         expected_shape = (ds.Ntimes, ds.spw_Ndlys, ds.spw_Ndlys)
         qc_dsets = {}
         for taper in taper_selection:
@@ -1132,42 +1126,18 @@ def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
 
 
 class TestQHat:
-    @pytest.mark.parametrize("taper", taper_selection)
-    @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_shape_conjugate_symmetry_and_key_lists(
-        self, d: list[UVData], input_data_weight: str, taper: str
-    ) -> None:
+    def test_shape_conjugate_symmetry_and_key_lists(self, configured_ds) -> None:
         """Test that q_hat has the right shape, that swapping x1<->x2 yields the
         complex conjugate, and that list-of-duplicate-key inputs scale q_hat
         linearly in each argument."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds, key1, key2, warn_ctx = configured_ds
         Nfreq = ds.Nfreqs
         Ntime = ds.Ntimes
         Ndlys = Nfreq - 3
         ds.spw_Ndlys = Ndlys
 
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
-        key3 = [(0, 24, 38), (0, 24, 38)]
-        key4 = [(1, 25, 38), (1, 25, 38)]
-
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError, match="r_param not set"):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        ds.set_taper(taper)
-        warn_ctx = (
-            pytest.warns(UserWarning, match="Poorly conditioned covariance")
-            if input_data_weight == "iC"
-            else nullcontext()
-        )
+        key3 = [key1, key1]
+        key4 = [key2, key2]
 
         # Calculate q_hat for a pair of baselines and test output shape
         with warn_ctx:
@@ -1202,32 +1172,10 @@ class TestQHat:
                     q_hat_a[i, j].imag, 0.25 * q_hat_cc[i, j].imag
                 )
 
-    @pytest.mark.parametrize("taper", taper_selection)
-    @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_fft_matches_slow_method(
-        self, d: list[UVData], input_data_weight: str, taper: str
-    ) -> None:
+    def test_fft_matches_slow_method(self, configured_ds) -> None:
         """Check that the slow (explicit) method agrees with the FFT method."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds, key1, key2, warn_ctx = configured_ds
         ds.spw_Ndlys = ds.Nfreqs
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
-
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        ds.set_taper(taper)
-        warn_ctx = (
-            pytest.warns(UserWarning, match="Poorly conditioned covariance")
-            if input_data_weight == "iC"
-            else nullcontext()
-        )
         with warn_ctx:
             q_hat_a_slow = ds.q_hat(key1, key2, allow_fft=False)
         q_hat_a = ds.q_hat(key1, key2, allow_fft=True)
@@ -1246,34 +1194,12 @@ class TestQHat:
 
 
 class TestFisherMatrices:
-    @pytest.mark.parametrize("taper", taper_selection)
-    @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_H(self, d, input_data_weight: str, taper: str) -> None:
+    def test_get_H(self, configured_ds) -> None:
         """
         Test Fisher/weight matrix calculation.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds, key1, key2, warn_ctx = configured_ds
         Nfreq = ds.Nfreqs
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
-
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
-        ds.set_taper(taper)
-        warn_ctx = (
-            pytest.warns(UserWarning, match="Poorly conditioned covariance")
-            if input_data_weight == "iC"
-            else nullcontext()
-        )
 
         ds.set_Ndlys(Nfreq // 3)
         with warn_ctx:
@@ -1290,35 +1216,14 @@ class TestFisherMatrices:
         G = ds.get_G(key1, key2)
         np.testing.assert_allclose(H, G, rtol=0, atol=1e-10 * np.max(np.abs(G)))
 
-    @pytest.mark.parametrize("taper", taper_selection)
-    @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_G(self, d, input_data_weight: str, taper: str) -> None:
+    def test_get_G(self, configured_ds) -> None:
         """
         Test Fisher/weight matrix calculation.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds, key1, key2, warn_ctx = configured_ds
+        input_data_weight, taper = ds.data_weighting, ds.taper
         Nfreq = ds.Nfreqs
-        key1 = (0, 24, 38)
-        key2 = (1, 25, 38)
-
-        ds.set_weighting(input_data_weight)
-        if input_data_weight == "dayenu":
-            with pytest.raises(ValueError):
-                ds.R(key1)
-            rpk = {
-                "filter_centers": [0.0],
-                "filter_half_widths": [0.0],
-                "filter_factors": [0.0],
-            }
-            ds.set_r_param(key1, rpk)
-            ds.set_r_param(key2, rpk)
         ds.clear_cache()
-        ds.set_taper(taper)
-        warn_ctx = (
-            pytest.warns(UserWarning, match="Poorly conditioned covariance")
-            if input_data_weight == "iC"
-            else nullcontext()
-        )
         ds.set_Ndlys(Nfreq - 2)
         with warn_ctx:
             G = ds.get_G(key1, key2)
@@ -1423,45 +1328,75 @@ def phased_uvd_pair(d: list[UVData]) -> tuple[UVData, UVData]:
     return uvd, uvd2
 
 
+def _first_10_freqs(uvd: UVData) -> dict:
+    return {"frequencies": np.unique(uvd.freq_array)[:10]}
+
+
+def _first_10_times(uvd: UVData) -> dict:
+    return {"times": np.unique(uvd.time_array)[:10]}
+
+
+def _leave_unchanged(ds: pspecdata.PSpecData) -> None:
+    pass
+
+
+def _keep_first(attr: str) -> Callable[[pspecdata.PSpecData], None]:
+    """Return a function that truncates the list ds.<attr> to its first entry."""
+    return lambda ds: setattr(ds, attr, getattr(ds, attr)[:1])
+
+
+VALIDATE_DATASETS_ERROR_CASES = [
+    pytest.param(
+        _first_10_freqs,
+        _leave_unchanged,
+        "all dsets must have the same Nfreqs",
+        id="mismatched_nfreqs",
+    ),
+    pytest.param(
+        _first_10_times,
+        _leave_unchanged,
+        "all dsets must have the same Ntimes",
+        id="mismatched_ntimes",
+    ),
+    pytest.param(
+        _first_10_times,
+        _keep_first("labels"),
+        "self.labels does not have same len",
+        id="mismatched_labels_length",
+    ),
+    pytest.param(
+        _first_10_times,
+        _keep_first("dsets_std"),
+        "self.dsets_std does not have the same len",
+        id="mismatched_dsets_std_length",
+    ),
+    pytest.param(
+        _first_10_times,
+        _keep_first("wgts"),
+        "self.wgts does not have same len",
+        id="mismatched_wgts_length",
+    ),
+]
+
+
 class TestValidateDatasets:
-    def test_raises_on_mismatched_nfreqs(self, d: list[UVData]) -> None:
+    @pytest.mark.parametrize(
+        "select_kwargs,mutate_ds,match", VALIDATE_DATASETS_ERROR_CASES
+    )
+    def test_raises(
+        self,
+        d: list[UVData],
+        select_kwargs: Callable[[UVData], dict],
+        mutate_ds: Callable[[pspecdata.PSpecData], None],
+        match: str,
+    ) -> None:
+        """Check that the second dataset being a subset of the first, or lists of
+        labels/dsets_std/wgts that don't match the number of datasets, raise."""
         uvd = copy.deepcopy(d[0])
-        uvd2 = uvd.select(frequencies=np.unique(uvd.freq_array)[:10], inplace=False)
+        uvd2 = uvd.select(**select_kwargs(uvd), inplace=False)
         ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        with pytest.raises(ValueError, match="all dsets must have the same Nfreqs"):
-            ds.validate_datasets()
-
-    def test_raises_on_mismatched_ntimes(self, d: list[UVData]) -> None:
-        uvd = copy.deepcopy(d[0])
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        with pytest.raises(ValueError, match="all dsets must have the same Ntimes"):
-            ds.validate_datasets()
-
-    def test_raises_on_mismatched_labels_length(self, d: list[UVData]) -> None:
-        uvd = copy.deepcopy(d[0])
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        ds.labels = ds.labels[:1]
-        with pytest.raises(ValueError, match="self.labels does not have same len"):
-            ds.validate_datasets()
-
-    def test_raises_on_mismatched_dsets_std_length(self, d: list[UVData]) -> None:
-        uvd = copy.deepcopy(d[0])
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        ds.dsets_std = ds.dsets_std[:1]
-        with pytest.raises(
-            ValueError, match="self.dsets_std does not have the same len"
-        ):
-            ds.validate_datasets()
-
-    def test_raises_on_mismatched_wgts_length(self, d: list[UVData]) -> None:
-        uvd = copy.deepcopy(d[0])
-        uvd2 = uvd.select(times=np.unique(uvd.time_array)[:10], inplace=False)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd2], wgts=[None, None])
-        ds.wgts = ds.wgts[:1]
-        with pytest.raises(ValueError, match="self.wgts does not have same len"):
+        mutate_ds(ds)
+        with pytest.raises(ValueError, match=match):
             ds.validate_datasets()
 
     def test_succeeds_with_partial_freq_time_overlap(self, d: list[UVData]) -> None:
@@ -2072,6 +2007,24 @@ class TestGetAnalyticCovariance:
         assert np.isclose(np.mean(rms), 1.0, atol=0.1)
 
 
+@pytest.fixture
+def pol_ds(request, beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> pspecdata.PSpecData:
+    """PSpecData with the NF dipole beam whose datasets have the requested pols.
+
+    uvd only contains xx data; a copy relabelled as yy provides the other pol.
+    request.param is one of "xx" (both datasets xx), "xx_vs_yy" (the first
+    dataset is xx, the second yy) or "xx_and_yy" (both datasets contain xx and yy).
+    """
+    uvd_yy = copy.deepcopy(uvd)
+    uvd_yy.polarization_array = np.array([-6])
+    dsets = {
+        "xx": lambda: [uvd, uvd],
+        "xx_vs_yy": lambda: [uvd, uvd_yy],
+        "xx_and_yy": lambda: [uvd + uvd_yy] * 2,
+    }[request.param]()
+    return pspecdata.PSpecData(dsets=dsets, wgts=[None, None], beam=beam_nf_dipole)
+
+
 class TestPspec:
     def test_pspec_basic_execution(self, pspec_ds) -> None:
         """Test basic pspec() execution: output shapes, dtypes, and input parameter variants."""
@@ -2324,15 +2277,60 @@ class TestPspec:
         assert uvp.Ndlys == 10
         assert len(uvp.data_array) == 1
 
-    def test_pspec_polarizations(self, beam_nf_dipole, uvd: UVData) -> None:
-        """Test pspec() polarization handling: single pol, multi-pol, integer pol codes,
-        warnings for unavailable pols, and errors when all pols fail validation."""
-        # single available pol
-        uvd_temp = copy.deepcopy(uvd)
-        ds = pspecdata.PSpecData(
-            dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
+    @pytest.mark.parametrize(
+        "pol_ds,pols,skipped_pol,expected_polpairs",
+        [
+            ("xx", ("xx", "xx"), None, [("xx", "xx")]),
+            ("xx", [("xx", "xx"), ("yy", "yy")], "yy", [("xx", "xx")]),
+            # -5 is the integer code for "xx"
+            ("xx", (-5, -5), None, [("xx", "xx")]),
+            (
+                "xx_and_yy",
+                [("xx", "xx"), ("yy", "yy")],
+                None,
+                [("xx", "xx"), ("yy", "yy")],
+            ),
+            ("xx_and_yy", [("xx", "xx"), ("xy", "xy")], "xy", [("xx", "xx")]),
+        ],
+        ids=[
+            "single_pol",
+            "skips_unavailable_pol",
+            "integer_pol_code",
+            "multi_pol_uvdata",
+            "multi_pol_uvdata_skips_unavailable_pol",
+        ],
+        indirect=["pol_ds"],
+    )
+    def test_pspec_polarizations(
+        self,
+        pol_ds: pspecdata.PSpecData,
+        pols,
+        skipped_pol: str | None,
+        expected_polpairs: list,
+    ) -> None:
+        """Test that pspec() computes the requested polarization pairs, warning
+        about and skipping any that are not in the data."""
+        warn_ctx = (
+            pytest.warns(
+                UserWarning,
+                match=f"Polarization pair: \\('{skipped_pol}', '{skipped_pol}'\\) "
+                "failed the validation test",
+            )
+            if skipped_pol
+            else nullcontext()
         )
-        uvp_xx = ds.pspec(
+        with warn_ctx:
+            uvp = pol_ds.pspec(
+                pspec_bls, pspec_bls, (0, 1), pols, spw_ranges=[(10, 24)], verbose=False
+            )
+        assert uvp.get_polpairs() == expected_polpairs
+
+    @pytest.mark.parametrize("pol_ds", ["xx"], indirect=True)
+    def test_pspec_integer_pol_code_matches_string(
+        self, pol_ds: pspecdata.PSpecData
+    ) -> None:
+        """Test that an integer polarization code gives the same spectra as its string."""
+        uvp_xx = pol_ds.pspec(
             pspec_bls,
             pspec_bls,
             (0, 1),
@@ -2340,99 +2338,41 @@ class TestPspec:
             spw_ranges=[(10, 24)],
             verbose=False,
         )
-        assert uvp_xx.get_polpairs() == [("xx", "xx")]
-
-        # warn and skip unavailable pol in a multi-pol request
-        uvd_temp = copy.deepcopy(uvd)
-        ds = pspecdata.PSpecData(
-            dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
-        )
-        with pytest.warns(
-            UserWarning,
-            match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
-        ):
-            uvp = ds.pspec(
-                pspec_bls,
-                pspec_bls,
-                (0, 1),
-                [("xx", "xx"), ("yy", "yy")],
-                spw_ranges=[(10, 24)],
-                verbose=False,
-            )
-        assert uvp.get_polpairs() == [("xx", "xx")]
-
-        # integer pol code
-        uvd_temp = copy.deepcopy(uvd)
-        ds = pspecdata.PSpecData(
-            dsets=[uvd_temp, uvd_temp], wgts=[None, None], beam=beam_nf_dipole
-        )
-        uvp = ds.pspec(
+        # -5 is the integer code for "xx"
+        uvp = pol_ds.pspec(
             pspec_bls, pspec_bls, (0, 1), (-5, -5), spw_ranges=[(10, 24)], verbose=False
         )
-        # -5 is the integer code for "xx"
-        assert uvp.get_polpairs() == [("xx", "xx")]
         np.testing.assert_array_equal(uvp.data_array[0], uvp_xx.data_array[0])
 
-        # error: mismatched bls1/bls2 lengths
+    @pytest.mark.parametrize(
+        "pol_ds,pols,failing_pol",
+        [("xx", ("yy", "yy"), "yy"), ("xx_vs_yy", ("xx", "xx"), "xx")],
+        ids=["pol_not_in_data", "dsets_have_different_pols"],
+        indirect=["pol_ds"],
+    )
+    def test_pspec_raises_when_no_pol_is_valid(
+        self, pol_ds: pspecdata.PSpecData, pols: tuple, failing_pol: str
+    ) -> None:
+        """Test that pspec() raises if none of the requested polarization pairs are
+        present in both datasets."""
+        with pytest.warns(
+            UserWarning,
+            match=f"Polarization pair: \\('{failing_pol}', '{failing_pol}'\\) "
+            "failed the validation test",
+        ):
+            with pytest.raises(
+                ValueError, match="None of the specified polarization pairs"
+            ):
+                pol_ds.pspec(pspec_bls, pspec_bls, (0, 1), pols=pols)
+
+    @pytest.mark.parametrize("pol_ds", ["xx"], indirect=True)
+    def test_pspec_raises_on_mismatched_bls_lengths(
+        self, pol_ds: pspecdata.PSpecData
+    ) -> None:
         with pytest.raises(
             AssertionError, match="length of bls1 must equal length of bls2"
         ):
-            ds.pspec(pspec_bls[:1], pspec_bls, (0, 1), ("xx", "xx"))
-
-        # error: all requested pols fail validation (yy not present)
-        with pytest.warns(
-            UserWarning,
-            match="Polarization pair: \\('yy', 'yy'\\) failed the validation test",
-        ):
-            with pytest.raises(
-                ValueError, match="None of the specified polarization pairs"
-            ):
-                ds.pspec(pspec_bls, pspec_bls, (0, 1), pols=("yy", "yy"))
-
-        # error: dsets have mismatched polarizations
-        uvd1 = copy.deepcopy(uvd)
-        uvd1.polarization_array = np.array([-6])
-        ds = pspecdata.PSpecData(
-            dsets=[uvd_temp, uvd1], wgts=[None, None], beam=beam_nf_dipole
-        )
-        with pytest.warns(
-            UserWarning,
-            match="Polarization pair: \\('xx', 'xx'\\) failed the validation test",
-        ):
-            with pytest.raises(
-                ValueError, match="None of the specified polarization pairs"
-            ):
-                ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
-
-        # multi-pol UVData: both xx and yy present
-        uvd1 = copy.deepcopy(uvd)
-        uvd1.polarization_array = np.array([-6])
-        uvd2 = uvd + uvd1
-        ds = pspecdata.PSpecData(
-            dsets=[uvd2, uvd2], wgts=[None, None], beam=beam_nf_dipole
-        )
-        ds.pspec(
-            pspec_bls,
-            pspec_bls,
-            (0, 1),
-            [("xx", "xx"), ("yy", "yy")],
-            spw_ranges=[(10, 24)],
-            verbose=False,
-        )
-
-        # warn and skip xy pol when not present in multi-pol UVData
-        with pytest.warns(
-            UserWarning,
-            match="Polarization pair: \\('xy', 'xy'\\) failed the validation test",
-        ):
-            ds.pspec(
-                pspec_bls,
-                pspec_bls,
-                (0, 1),
-                [("xx", "xx"), ("xy", "xy")],
-                spw_ranges=[(10, 24)],
-                verbose=False,
-            )
+            pol_ds.pspec(pspec_bls[:1], pspec_bls, (0, 1), ("xx", "xx"))
 
     @pytest.mark.filterwarnings(
         "ignore:Some integrations have zero nsamples, but non-zero weights"
@@ -2751,38 +2691,48 @@ class TestNormalization:
         assert abs(np.median(ratio) - 1) < 0.03
 
 
+@pytest.fixture
+def broadcast_ds(uvd_zen_all_xx: UVData) -> pspecdata.PSpecData:
+    """PSpecData on two copies of zen.all.xx, for broadcast_dset_flags tests."""
+    return pspecdata.PSpecData(
+        dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
+        wgts=[None, None],
+    )
+
+
 class TestBroadcastDsetFlags:
-    def test_spw_selection_limits_broadcast(self, uvd_zen_all_xx: UVData) -> None:
-        ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
-            wgts=[None, None],
+    @pytest.mark.parametrize(
+        "spw_ranges,unflag,channels,expect_flags",
+        [
+            ([(400, 800)], False, slice(550, 650), False),
+            (None, False, slice(550, 650), True),
+            (None, True, slice(None), False),
+        ],
+        ids=[
+            "spw_selection_limits_broadcast",
+            "no_spw_selection_broadcasts_globally",
+            "unflag",
+        ],
+    )
+    def test_broadcast(
+        self,
+        broadcast_ds: pspecdata.PSpecData,
+        spw_ranges: list | None,
+        unflag: bool,
+        channels: slice,
+        expect_flags: bool,
+    ) -> None:
+        """Check which channels of (24, 25) end up flagged after broadcasting."""
+        broadcast_ds.broadcast_dset_flags(
+            spw_ranges=spw_ranges, time_thresh=0.2, unflag=unflag
         )
-        ds.broadcast_dset_flags(spw_ranges=[(400, 800)], time_thresh=0.2)
-        assert not ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
-
-    def test_no_spw_selection_broadcasts_globally(self, uvd_zen_all_xx: UVData) -> None:
-        ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
-            wgts=[None, None],
-        )
-        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2)
-        assert ds.dsets[0].get_flags(24, 25)[:, 550:650].any()
-
-    def test_unflag(self, uvd_zen_all_xx: UVData) -> None:
-        ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
-            wgts=[None, None],
-        )
-        ds.broadcast_dset_flags(spw_ranges=None, time_thresh=0.2, unflag=True)
-        assert not ds.dsets[0].get_flags(24, 25)[:, :].any()
+        flags = broadcast_ds.dsets[0].get_flags(24, 25)[:, channels]
+        assert flags.any() == expect_flags
 
     def test_single_integration_flagged_within_spw(
-        self, uvd_zen_all_xx: UVData
+        self, broadcast_ds: pspecdata.PSpecData
     ) -> None:
-        ds = pspecdata.PSpecData(
-            dsets=[copy.deepcopy(uvd_zen_all_xx), copy.deepcopy(uvd_zen_all_xx)],
-            wgts=[None, None],
-        )
+        ds = broadcast_ds
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False), 600, 0][
             3
         ] = True
@@ -3054,6 +3004,16 @@ def pspec_run_cal() -> UVCal:
     return uvc
 
 
+def _read_pspec_run_fnames() -> list[UVData]:
+    """Read PSPEC_RUN_FNAMES into UVData objects, to pass pspec_run pre-loaded data."""
+    uvds = []
+    for f in PSPEC_RUN_FNAMES:
+        uvd = UVData()
+        uvd.read_miriad(f)
+        uvds.append(uvd)
+    return uvds
+
+
 @pytest.mark.filterwarnings(
     "ignore:Some integrations have zero nsamples, but non-zero weights"
 )
@@ -3243,62 +3203,58 @@ class TestPspecRun:
             np.unique(ds.dsets[0].lst_array), np.unique(uvd2.lst_array)
         ).all()
 
-    def test_warns_and_returns_none_when_no_data_loaded(self, tmp_path: Path) -> None:
-        with pytest.warns(
-            UserWarning,
-            match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
-        ):
-            ds = pspecdata.pspec_run(
-                PSPEC_RUN_FNAMES,
-                str(tmp_path / "out_nobl.h5"),
-                Jy2mK=False,
-                verbose=False,
-                overwrite=True,
-                blpairs=[((500, 501), (600, 601))],
-            )  # blpairs that don't exist
-        assert ds is None
-        assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
-
-    def test_warns_and_returns_none_with_preloaded_uvdata(self, tmp_path: Path) -> None:
-        """Same as test_warns_and_returns_none_when_no_data_loaded but with
-        pre-loaded UVDatas."""
-        uvds = []
-        for f in PSPEC_RUN_FNAMES:
-            uvd = UVData()
-            uvd.read_miriad(f)
-            uvds.append(uvd)
-        with pytest.warns(
-            UserWarning,
-            match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
-        ):
-            ds = pspecdata.pspec_run(
-                uvds,
-                str(tmp_path / "out_nobl.h5"),
-                dsets_std=PSPEC_RUN_FNAMES_STD,
-                Jy2mK=False,
-                verbose=False,
-                overwrite=True,
-                blpairs=[((500, 501), (600, 601))],
-            )
-        assert ds is None
-        assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
-
-    def test_returns_ds_when_data_loaded_but_no_blpairs_match(
-        self, tmp_path: Path
+    @pytest.mark.parametrize(
+        "load_dsets,extra_kwargs,blpairs,expected_type",
+        [
+            (lambda: PSPEC_RUN_FNAMES, {}, [((500, 501), (600, 601))], type(None)),
+            (
+                _read_pspec_run_fnames,
+                {"dsets_std": PSPEC_RUN_FNAMES_STD},
+                [((500, 501), (600, 601))],
+                type(None),
+            ),
+            (
+                lambda: PSPEC_RUN_FNAMES,
+                {},
+                [((37, 38), (600, 601))],
+                pspecdata.PSpecData,
+            ),
+        ],
+        ids=[
+            "no_data_loaded",
+            "no_data_loaded_preloaded_uvdata",
+            "data_loaded_but_no_blpairs_match",
+        ],
+    )
+    def test_warns_when_no_blpairs_match(
+        self,
+        tmp_path: Path,
+        load_dsets: Callable[[], list],
+        extra_kwargs: dict,
+        blpairs: list,
+        expected_type: type,
     ) -> None:
+        """Check that blpairs absent from the data give a warning and no output file.
+
+        pspec_run returns None if none of the requested baselines are in the
+        data (whether given as file paths or pre-loaded UVData), and returns the
+        PSpecData if some baselines are present but no complete pair is.
+        """
+        dsets = load_dsets()
         with pytest.warns(
             UserWarning,
             match="pspec_run produced no output because the selected data contains no matching baseline-pairs.",
         ):
             ds = pspecdata.pspec_run(
-                PSPEC_RUN_FNAMES,
+                dsets,
                 str(tmp_path / "out_nobl.h5"),
                 Jy2mK=False,
                 verbose=False,
                 overwrite=True,
-                blpairs=[((37, 38), (600, 601))],
+                blpairs=blpairs,
+                **extra_kwargs,
             )
-        assert isinstance(ds, pspecdata.PSpecData)
+        assert isinstance(ds, expected_type)
         assert not os.path.exists(str(tmp_path / "out_nobl.h5"))
 
     def test_glob_parseable_input_dataset(self, tmp_path: Path) -> None:
