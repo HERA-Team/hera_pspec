@@ -9,7 +9,6 @@ import pytest
 from astropy import units
 from astropy.cosmology import FLRW, LambdaCDM
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -32,33 +31,18 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 
-# Setup Test Cases for this module
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(
-    beam_nf_dipole: PSpecBeamUV, vanilla_uvp_with_beam: UVPSpec
-) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_w_ndlys(vanilla_uvp_w_ndlys: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_w_ndlys
-
-
-def case_vanilla_uvp_delay_binned(vanilla_uvp_delay_binned: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_delay_binned
-
-
-def case_vanilla_uvp_alternating_times(
-    beam_nf_dipole: PSpecBeamUV, vanilla_uvp_alternating_times: UVPSpec
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-def case_uvp_exact_wfs(uvp_example_data: UVPSpec, uvp_exact_wfs: UVPSpec) -> UVPSpec:
-    return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that the tests below are
+# parametrized over. Tests fetch them by name with request.getfixturevalue, so
+# each one is built only once; tests that modify the object must deepcopy it.
+ALL_UVPS = [
+    "vanilla_uvp",
+    "vanilla_uvp_with_beam",
+    "vanilla_uvp_w_ndlys",
+    "vanilla_uvp_delay_binned",
+    "vanilla_uvp_alternating_times",
+    "uvp_exact_wfs",
+]
+VANILLA_UVPS = [name for name in ALL_UVPS if "vanilla" in name]
 
 
 @pytest.fixture
@@ -140,8 +124,9 @@ def test_param() -> None:
     parameter.PSpecParam("example", description="example", expected_type=int)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_eq(uvp: uvpspec.UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_eq(uvp_name: str, request: pytest.FixtureRequest) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     assert uvp == uvp
 
 
@@ -153,8 +138,11 @@ def test_eq(uvp: uvpspec.UVPSpec) -> None:
         (0, 101102101102, 1515),
     ],
 )
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_get_data_key_formats(uvp: uvpspec.UVPSpec, key: tuple) -> None:
+@pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+def test_get_data_key_formats(
+    uvp_name: str, request: pytest.FixtureRequest, key: tuple
+) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     d = uvp.get_data(key)
     assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
     assert d.dtype == complex
@@ -169,13 +157,15 @@ def test_get_data_key_formats(uvp: uvpspec.UVPSpec, key: tuple) -> None:
         ("get_nsamples", (10,), (0,)),
     ],
 )
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+@pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
 def test_get_array_funcs(
-    uvp: uvpspec.UVPSpec,
+    uvp_name: str,
+    request: pytest.FixtureRequest,
     method: str,
     expected_shape: tuple[int, ...],
     first_idx: tuple[int, ...],
 ) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
     result = getattr(uvp, method)(key)
     assert result.shape == expected_shape
@@ -194,15 +184,21 @@ class TestGetFuncs:
             d.to_value(units.s), utils.get_delays(freqs, n_dlys=uvp.Ndlys)
         )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpair_seps(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpair_seps(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         blp = uvp.get_blpair_seps()
         assert blp.unit == units.m
         assert len(blp) == 30
         assert np.isclose(blp.to_value(units.m), 14.60, rtol=1e-1, atol=1e-1).all()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_kperps_and_kparas(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_kperps_and_kparas(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         k_perp, k_para = uvp.get_kperps(0), uvp.get_kparas(0)
         assert len(k_perp) == 30
         assert len(k_para) == uvp.get_dlys(0).size
@@ -225,40 +221,52 @@ class TestGetFuncs:
             ),
         )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_data_tuple_key(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_data_tuple_key(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that get_data accepts a (spw, blpair, polpair) tuple key."""
+        uvp = request.getfixturevalue(uvp_name)
         key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
         d = uvp.get_data(key)
         assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_data_dict_key(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_data_dict_key(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that get_data accepts an equivalent {spw, blpair, polpair} dict key."""
+        uvp = request.getfixturevalue(uvp_name)
         key = {"spw": 0, "blpair": ((1, 2), (1, 2)), "polpair": ("xx", "xx")}
         d = uvp.get_data(key)
         assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpairs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpairs(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         blps = uvp.get_blpairs()
         assert blps == [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpair_blvecs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpair_blvecs(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check get_blpair_blvecs' output shape, and that use_second_bl gives the same vectors here."""
+        uvp = request.getfixturevalue(uvp_name)
         blp_vecs = uvp.get_blpair_blvecs()
         assert blp_vecs.shape == (uvp.Nblpairs, 3)
         blp_vecs2 = uvp.get_blpair_blvecs(use_second_bl=True)
         assert np.isclose(blp_vecs, blp_vecs2).all()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_polpairs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_polpairs(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         polpairs = uvp.get_polpairs()
         assert polpairs == [("xx", "xx")]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_all_keys(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_all_keys(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         keys = uvp.get_all_keys()
         assert keys == [
             (0, ((1, 2), (1, 2)), ("xx", "xx")),
@@ -266,9 +274,12 @@ class TestGetFuncs:
             (0, ((1, 3), (1, 3)), ("xx", "xx")),
         ]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_integrations_omit_flags(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_integrations_omit_flags(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that omit_flags drops zero-integration entries from the returned array."""
+        uvp = request.getfixturevalue(uvp_name)
         # deepcopy: case_* functions return the shared session-scoped fixture directly,
         # and this test mutates integration_array in place.
         uvp = copy.deepcopy(uvp)
@@ -689,8 +700,11 @@ def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
 
 
 class TestIndicesFuncs:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_key_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_key_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         spw, blpairts, pol = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
         assert spw == 0
         assert pol == 0
@@ -704,16 +718,22 @@ class TestIndicesFuncs:
             blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
         ).min()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_key_to_indices_polpair_formats_agree(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_key_to_indices_polpair_formats_agree(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that int, tuple, and single-pol-string polpair specs give the same indices."""
+        uvp = request.getfixturevalue(uvp_name)
         s1, b1, p1 = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
         s2, b2, p2 = uvp.key_to_indices((0, ((1, 2), (1, 2)), ("xx", "xx")))
         s3, b3, p3 = uvp.key_to_indices((0, ((1, 2), (1, 2)), "xx"))
         assert p1 == p2 == p3
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_spw_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_spw_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         spw1 = uvp.spw_to_dly_indices(0)
         assert len(spw1) == uvp.get_dlys(0).size
         spw2 = uvp.spw_to_freq_indices(0)
@@ -721,9 +741,12 @@ class TestIndicesFuncs:
         spw3 = uvp.spw_indices(0)
         assert len(spw3) == uvp.Nspws
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_spw_to_indices_accepts_spw_tuple(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_spw_to_indices_accepts_spw_tuple(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that feeding a spw tuple (from get_spw_ranges()) matches feeding the spw index."""
+        uvp = request.getfixturevalue(uvp_name)
         spw1b = uvp.spw_to_dly_indices(uvp.get_spw_ranges()[0])
         spw2b = uvp.spw_to_freq_indices(uvp.get_spw_ranges()[0])
         spw3b = uvp.spw_indices(uvp.get_spw_ranges()[0])
@@ -731,8 +754,11 @@ class TestIndicesFuncs:
         np.testing.assert_array_equal(uvp.spw_to_freq_indices(0), spw2b)
         np.testing.assert_array_equal(uvp.spw_indices(0), spw3b)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_polpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_polpair_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         pol = uvp.polpair_to_indices(("xx", "xx"))
         print(pol)
         assert len(pol) == 1
@@ -743,18 +769,22 @@ class TestIndicesFuncs:
         print(pol)
         assert len(pol) == 1
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_polpair_to_indices_raises_on_invalid_type(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         with pytest.raises(
             TypeError, match="polpair must be list of tuple or int or str"
         ):
             uvp.polpair_to_indices(3.14)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check blpair_to_indices for scalar int/tuple inputs, and that list-of-duplicates inputs agree with the scalar result."""
+        uvp = request.getfixturevalue(uvp_name)
         expected = np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
         inds = uvp.blpair_to_indices(101102101102)
         assert np.isclose(inds, expected).min()
@@ -766,8 +796,11 @@ class TestIndicesFuncs:
         inds_tuple_list = uvp.blpair_to_indices([((1, 2), (1, 2)), ((1, 2), (1, 2))])
         np.testing.assert_array_equal(inds_tuple_list, inds_tuple)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         time = uvp.time_avg_array[5]
         blpair = 101102101102
         inds = uvp.time_to_indices(time=time)
@@ -782,8 +815,11 @@ class TestIndicesFuncs:
 
 
 class TestSelect:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_bl_group_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_bl_group_select(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp1.select(bls=[(1, 2)], inplace=True)
         assert uvp1.Nblpairs == 1
@@ -823,27 +859,33 @@ class TestSelect:
         for rpkey in uvp2.get_r_params():
             assert rpkey == (37, 38, "xx") or rpkey == (38, 39, "xx")
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp2 = uvp1.select(blpairs=[101102101102, 102103102103], inplace=False)
         assert uvp2.Nblpairs == 2
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_polpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_polpair_select(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(polpairs=[1515], inplace=False)
         assert uvp2.polpair_array[0] == 1515
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
         assert uvp2.Ntimes == 1
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_blpair_and_polpair_select_preserves_stats_shape(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check that selecting on the full blpair/polpair set preserves data_array and stats_array shapes."""
+        uvp = request.getfixturevalue(uvp_name)
         Ndlys = uvp.get_dlys(0).size
         uvp1 = copy.deepcopy(uvp)
         uvp1.set_stats(
@@ -857,11 +899,12 @@ class TestSelect:
         assert uvp2.data_array[0].shape == (uvp1.Nbltpairs, Ndlys, 1)
         assert uvp2.stats_array["hi"][0].shape == (uvp1.Nbltpairs, Ndlys, 1)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_non_sliceable_select_single_blpair_multi_pol(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check select() on a non-sliceable combination of one blpair and a subset of polpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         Ndlys = uvp.get_dlys(0).size
         uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
         uvp2.polpair_array[0] = 1414
@@ -873,17 +916,19 @@ class TestSelect:
         )
         assert uvp5.data_array[0].shape == (uvp.Ntimes * 1, Ndlys, 3)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_lst_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_lst_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Check that selecting on the full set of lsts is a no-op."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(lsts=np.unique(uvp.lst_avg_array), inplace=False)
         assert uvp == uvp2
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_non_sliceable_select_multi_blpair_multi_pol(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check select() on a non-sliceable combination of multiple blpairs and multiple polpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         for i in [1414, 1313, 1212]:
             _uvp = copy.deepcopy(uvp)
@@ -900,8 +945,9 @@ def test_get_ENU_bl_vecs(vanilla_uvp: uvpspec.UVPSpec) -> None:
     assert np.isclose(bl_vecs[0], np.array([-14.6, 0.0, 0.0]), atol=1e-6).min()
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_check(uvp: uvpspec.UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_check(uvp_name: str, request: pytest.FixtureRequest) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     uvp = copy.deepcopy(uvp)
     uvp.check()
 
@@ -947,8 +993,11 @@ def test_get_r_params(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> N
     assert r_params == uvp.get_r_params()
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_write_read_hdf5(
+    uvp_name: str, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     uvp = copy.deepcopy(uvp)
 
     out = tmp_path / "ex.hdf5"
@@ -1316,8 +1365,11 @@ class TestSense:
 
 
 class TestAverageSpectra:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_averaging(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         Ndlys = uvp1.get_dlys(0).size
         blpairs = uvp1.get_blpair_groups_from_bl_groups(
@@ -1330,9 +1382,12 @@ class TestAverageSpectra:
         assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 3.0).all()
         assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (10, Ndlys)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_averaging_with_weights(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_averaging_with_weights(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that blpair_weights give the weighted mean of different blpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         blps = [101102101102, 102103102103, 101103101103]
         data = [uvp1.get_data((0, blp, ("xx", "xx"))) for blp in blps]
@@ -1352,8 +1407,11 @@ class TestAverageSpectra:
             rtol=1e-12,
         )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_averaging(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         Ndlys = uvp1.get_dlys(0).size
         uvp2 = uvp1.average_spectra(time_avg=True, inplace=False)
@@ -1363,9 +1421,12 @@ class TestAverageSpectra:
         ).all()
         assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (1, Ndlys)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_repeated_baselines_require_time_avg(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_repeated_baselines_require_time_avg(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that averaging repeated baselines without time_avg raises, but works (and collapses Nblpairs) with time_avg=True."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp1.blpair_array[uvp1.blpair_to_indices(102103102103)] = 101102101102
         with pytest.raises(ValueError):
@@ -1529,8 +1590,9 @@ class TestGetExactWindowFunctions:
 
 
 class TestFoldSpectra:
-    @parametrize_with_cases("uvp", cases=".")
-    def test_fold_spectra(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_fold_spectra(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
 
         uvp1.fold_spectra()
@@ -2426,16 +2488,18 @@ class TestCombineUvpspecStd:
 
 
 class TestRecursiveCombineUvpspec:
-    @parametrize_with_cases("uvp", cases=".")
-    def test_single(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_single(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with a single UVPSpec object."""
+        uvp = request.getfixturevalue(uvp_name)
         uvps_list = [copy.deepcopy(uvp)]
         combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
         assert_uvpspec_equal(combined_recursive, uvp)
 
-    @parametrize_with_cases("uvp", cases=".")
-    def test_pair(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_pair(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with a pair of UVPSpec objects."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp_copy = copy.deepcopy(uvp)
         uvp_copy.polpair_array[0] = 1414  # Slight modification for differentiation
         uvps_list = [uvp, uvp_copy]
@@ -2447,9 +2511,10 @@ class TestRecursiveCombineUvpspec:
 
         assert_uvpspec_equal(combined_recursive, combined_standard)
 
-    @parametrize_with_cases("uvp", cases=".")
-    def test_multiple(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_multiple(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with multiple UVPSpec objects."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp2 = copy.deepcopy(uvp)
         uvp2.polpair_array[0] = 1414

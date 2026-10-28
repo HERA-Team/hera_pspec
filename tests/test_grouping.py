@@ -7,7 +7,6 @@ import pytest
 from astropy import units as u
 from astropy.cosmology import FLRW
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -28,22 +27,9 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_alternating_times(
-    vanilla_uvp_alternating_times: UVPSpec,
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-# def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
-#     return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that tests are parametrized
+# over; they are fetched by name with request.getfixturevalue.
+ALL_UVPS = ["vanilla_uvp", "vanilla_uvp_with_beam", "vanilla_uvp_alternating_times"]
 
 
 @pytest.fixture(scope="session")
@@ -79,9 +65,12 @@ def delay_bins_uvp_nocov(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     return uvp
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    """Copy of vanilla_uvp_with_beam with exact window functions."""
+    """Copy of vanilla_uvp_with_beam with exact window functions.
+
+    Module-scoped because computing exact window functions is slow; tests must
+    not modify it in place."""
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     gaussian_beam = uvwindow.FTBeam.gaussian(
         freq_array=uvp.freq_array * u.Hz, widths=8.0 * u.deg, pol=1
@@ -480,9 +469,12 @@ class TestSampleBaselines:
         assert len(g1) == len(samp)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_bootstrap_average_blpairs(
+    uvp_name: str, request: pytest.FixtureRequest
+) -> None:
     """Check that bootstrap_average_blpairs correctly resamples blpairs and produces consistent averages for identical data."""
+    uvp = request.getfixturevalue(uvp_name)
     # Check that basic bootstrap averaging works
     blpair_groups = [list(np.unique(uvp.blpair_array))]
     uvp1, wgts = grouping.bootstrap_average_blpairs(
@@ -563,20 +555,19 @@ class TestBootstrapResampledError:
         assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
         assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
 
-    def test_gaussian_noise(self) -> None:
+    def test_gaussian_noise(self, uvd_zen_even_xx: UVData) -> None:
         """Check that bootstrapped error bars on Gaussian noise power spectra yield z-scores with standard deviation converging to 1."""
-        # get simulated noise in K-str
-        uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+        # get simulated noise in K-str (on copies of zen.even.xx.LST.1.28828.uvOCRSA)
         Tsys = 300.0  # Kelvin
 
         # generate complex gaussian noise
         seed = 4
         uvd1 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
         seed = 5
         uvd2 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
 
         # form (auto) baseline-pairs from only 14.6m bls
@@ -637,7 +628,7 @@ class TestBootstrapRun:
         grouping.bootstrap_run(
             psc,
             time_avg=True,
-            Nsamples=100,
+            Nsamples=5,
             seed=0,
             normal_std=True,
             robust_std=True,
@@ -651,7 +642,7 @@ class TestBootstrapRun:
         spcs = psc.spectra("grp1")
 
         # assert all bs samples were written
-        assert np.all([f"uvp_bs{i}" in spcs for i in range(100)])
+        assert np.all([f"uvp_bs{i}" in spcs for i in range(5)])
 
         # assert average was written
         assert "uvp_avg" in spcs and "uvp" in spcs

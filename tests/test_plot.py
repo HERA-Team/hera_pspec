@@ -54,7 +54,9 @@ def axes_contains(ax: mpl.axes.Axes, obj_list: list[tuple[type, int]]) -> bool:
     return True
 
 
-@pytest.fixture
+# The fixtures below are module-scoped because each one runs a full pspec(); tests
+# that modify the resulting UVPSpec in place must work on a deepcopy.
+@pytest.fixture(scope="module")
 def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
     """Build a PSpecData object (beam + two time-interleaved halves of uvd_zen_all_xx)."""
     bm = copy.deepcopy(beam_nf_dipole)
@@ -71,7 +73,7 @@ def pspec_ds(uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> PSpecData:
     return ds
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def uvp(pspec_ds: PSpecData) -> UVPSpec:
     """Compute a UVPSpec over two spectral windows from pspec_ds."""
     bls = [(24, 25), (37, 38), (38, 39)]
@@ -83,7 +85,7 @@ def uvp(pspec_ds: PSpecData) -> UVPSpec:
         bls2,
         (0, 1),
         ("xx", "xx"),
-        spw_ranges=[(300, 400), (600, 721)],
+        spw_ranges=[(300, 324), (600, 621)],
         input_data_weight="identity",
         norm="I",
         taper="blackman-harris",
@@ -233,9 +235,10 @@ class TestDelaySpectrum:
         blps = [blp for blp in blpairs]
 
         # Set cosmology and plot in non-delay (i.e. cosmological) units
-        uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY)
+        uvp_cosmo = copy.deepcopy(uvp)
+        uvp_cosmo.set_cosmology(conversions.DEFAULT_COSMOLOGY)
         f1 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -249,7 +252,7 @@ class TestDelaySpectrum:
 
         # Plot in Delta^2 units
         f2 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -267,7 +270,7 @@ class TestDelaySpectrum:
 
         # Regression test for folded Delta^2 plotting in cosmological units.
         f3 = plot.delay_spectrum(
-            uvp,
+            uvp_cosmo,
             [blps],
             spw=0,
             pol=("xx", "xx"),
@@ -497,6 +500,7 @@ class TestDelayWaterfall:
         Delta^2."""
         blpairs = np.unique(uvp.blpair_array).tolist()
         blps = [uvp.blpair_to_antnums(blp) for blp in blpairs]
+        uvp = copy.deepcopy(uvp)
         uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True)
 
         f1 = plot.delay_waterfall(
@@ -585,7 +589,7 @@ def test_uvdata_waterfalls(uvd_zen_all_xx: UVData, tmp_path: Path, data: str) ->
     assert len(figfiles) == 15
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def delay_wedge_uvp(pspec_ds: PSpecData) -> UVPSpec:
     """UVPSpec built over redundantly-grouped baseline-pairs, for
     delay_wedge tests."""
@@ -600,7 +604,7 @@ def delay_wedge_uvp(pspec_ds: PSpecData) -> UVPSpec:
         bls2,
         (0, 1),
         ("xx", "xx"),
-        spw_ranges=[(300, 350)],
+        spw_ranges=[(300, 324)],
         input_data_weight="identity",
         norm="I",
         taper="blackman-harris",

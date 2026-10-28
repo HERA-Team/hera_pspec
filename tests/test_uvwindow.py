@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from astropy import units
 from astropy.cosmology import FLRW, LambdaCDM
-from pyuvdata import UVBeam, UVData
+from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 from uvtools import dspec
 
@@ -26,22 +26,30 @@ basename = "FT_beam_HERA_dipole_test"
 outfile = "test.hdf5"
 
 
-@pytest.fixture()
+# Reading the FT beam file is slow, so the fixtures below that read it are
+# module-scoped. Tests that modify an FTBeam or UVWindow fixture must deepcopy it.
+@pytest.fixture(scope="module")
 def make_ft_beam_obj() -> Callable[[tuple[int, int] | None], uvwindow.FTBeam]:
+    """Factory returning a fresh copy of the FT beam read over a given channel range."""
+    cache = {}
+
     def _factory(spw_range: tuple[int, int] | None = None) -> uvwindow.FTBeam:
-        # channel spans are expressed via freq_array (spw_range is deprecated)
-        if spw_range is None:
-            return uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
-        bandwidth = uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
-        return uvwindow.FTBeam.from_file(
-            ftfile=DATA_PATH / ftfile,
-            freq_array=bandwidth[spw_range[0] : spw_range[1]] * units.Hz,
-        )
+        if spw_range not in cache:
+            # channel spans are expressed via freq_array (spw_range is deprecated)
+            if spw_range is None:
+                cache[spw_range] = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+            else:
+                bandwidth = uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
+                cache[spw_range] = uvwindow.FTBeam.from_file(
+                    ftfile=DATA_PATH / ftfile,
+                    freq_array=bandwidth[spw_range[0] : spw_range[1]] * units.Hz,
+                )
+        return copy.deepcopy(cache[spw_range])
 
     return _factory
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def ft_beam_spw(
     make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
 ) -> uvwindow.FTBeam:
@@ -54,7 +62,7 @@ def ft_bandwidth() -> np.ndarray:
     return uvwindow.FTBeam.get_bandwidth(DATA_PATH / ftfile)
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def uvwindow_obj(ft_beam_spw: uvwindow.FTBeam, cosmo: FLRW) -> uvwindow.UVWindow:
     return uvwindow.UVWindow(
         ftbeam_obj=ft_beam_spw,
@@ -73,13 +81,11 @@ def red_bl_lens(uvd_zen_2458116: UVData) -> np.ndarray:
 
 @pytest.fixture()
 def kbins() -> units.Quantity:
-    # kmax, dk = 1.0, 0.128 / 2
-    # krange = np.arange(dk * 1.5, kmax, step=dk)
     krange = np.arange(0.1, 5.0, step=0.3)
     return ((krange[1:] + krange[:-1]) / 2) * cu.littleh / units.Mpc
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def cyl_wf_result(
     uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
 ) -> tuple[units.Quantity, np.ndarray, np.ndarray, np.ndarray]:
@@ -240,10 +246,9 @@ nf_efield_beamfits = DATA_PATH / "HERA_NF_efield.beamfits"
 
 
 @pytest.fixture(scope="module")
-def nf_dipole_beam_freqs() -> np.ndarray:
-    beam = UVBeam()
-    beam.read_beamfits(str(nf_dipole_beamfits))
-    return np.unique(beam.freq_array)
+def nf_dipole_beam_freqs(beam_nf_dipole) -> np.ndarray:
+    # beam_nf_dipole is the session-cached PSpecBeamUV of nf_dipole_beamfits
+    return np.unique(beam_nf_dipole.primary_beam.freq_array)
 
 
 class TestFTBeamFromBeam:
@@ -409,11 +414,9 @@ class TestFTBeamFromFile:
         np.testing.assert_array_equal(test.freq_array, ft_bandwidth[5:25])
 
     def test_invalid_ftfile_type(self) -> None:
-        with pytest.raises(
-            TypeError,
-            match=r"expected str, bytes or os\.PathLike object, not float"
-            r"|argument should be a str or an os\.PathLike object where __fspath__ returns a str, not 'float'",
-        ):
+        # The TypeError comes from pathlib; its wording varies between Python
+        # versions, so only the exception type is checked.
+        with pytest.raises(TypeError):
             uvwindow.FTBeam.from_file(ftfile=12.0)
 
     def test_invalid_ftfile_path(self) -> None:
@@ -520,8 +523,10 @@ class TestFTBeamGetBandwidth:
 
 
 class TestFTBeamUpdateSpw:
-    def test_happy_path(self) -> None:
-        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+    def test_happy_path(
+        self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
+    ) -> None:
+        test = make_ft_beam_obj()
         full_freqs, full_ft_beam = test.freq_array.copy(), test.ft_beam.copy()
         with pytest.warns(DeprecationWarning, match="select_freqs"):
             test.update_spw((5, 25))
@@ -530,8 +535,12 @@ class TestFTBeamUpdateSpw:
         np.testing.assert_array_equal(test.ft_beam, full_ft_beam[5:25])
 
     @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
-    def test_invalid_range(self, bad_spw: tuple[int, ...]) -> None:
-        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+    def test_invalid_range(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        bad_spw: tuple[int, ...],
+    ) -> None:
+        test = make_ft_beam_obj()
         with (
             pytest.warns(DeprecationWarning, match="select_freqs"),
             pytest.raises(ValueError, match="Wrong spw range format"),
@@ -1366,12 +1375,12 @@ class TestUVWindowCylindricalToSpherical:
         bl_len, kperp, kpara, cyl_wf = cyl_wf_result
         ktot = np.sqrt(kperp[:, None] ** 2 + kpara**2)
         kbins_test = np.arange(2, 5, step=0.5) * uvwindow_obj.kunits
-        uvwindow_obj.verbose = True
+        uvw = copy.deepcopy(uvwindow_obj)
+        uvw.verbose = True
         with pytest.warns(UserWarning, match="Some spherical bins are empty"):
-            _ = uvwindow_obj.cylindrical_to_spherical(
+            _ = uvw.cylindrical_to_spherical(
                 cyl_wf=cyl_wf, kbins=kbins_test, ktot=ktot, bl_lens=bl_len
             )
-        uvwindow_obj.verbose = False
 
     def test_nonlinear_kbins_error(
         self,
@@ -1853,8 +1862,12 @@ class TestUVWindowRunAndWrite:
 
 
 class TestFTBeamSelectFreqs:
-    def test_exact_match_extracts_channels(self, ft_bandwidth: np.ndarray) -> None:
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+    def test_exact_match_extracts_channels(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
+    ) -> None:
+        full = make_ft_beam_obj()
         sub = full.select_freqs(ft_bandwidth[3:10] * units.Hz, inplace=False)
         assert np.allclose(sub.freq_array, ft_bandwidth[3:10])
         assert np.array_equal(sub.ft_beam, full.ft_beam[3:10])
@@ -1862,12 +1875,14 @@ class TestFTBeamSelectFreqs:
         assert full.freq_array.size == ft_bandwidth.size
 
     def test_mismatched_grid_interpolates_with_warning(
-        self, ft_bandwidth: np.ndarray
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
     ) -> None:
         # a quarter of the way between channels of a linear grid: linear
         # interpolation weighs the lower channel by 3/4 and the upper by 1/4
         # (unequal weights, so swapping them would be caught)
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        full = make_ft_beam_obj()
         targets = 0.75 * ft_bandwidth[3:10] + 0.25 * ft_bandwidth[4:11]
         with pytest.warns(UserWarning, match="interpolating"):
             interp = full.select_freqs(targets * units.Hz, inplace=False)
@@ -1876,20 +1891,32 @@ class TestFTBeamSelectFreqs:
             interp.ft_beam, 0.75 * full.ft_beam[3:10] + 0.25 * full.ft_beam[4:11]
         )
 
-    def test_out_of_coverage_raises(self, ft_bandwidth: np.ndarray) -> None:
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+    def test_out_of_coverage_raises(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
+    ) -> None:
+        full = make_ft_beam_obj()
         with pytest.raises(ValueError, match="beyond the bandwidth"):
             full.select_freqs(np.array([ft_bandwidth.max() + 1e6] * 3) * units.Hz)
 
-    def test_single_frequency_raises(self, ft_bandwidth: np.ndarray) -> None:
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+    def test_single_frequency_raises(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
+    ) -> None:
+        full = make_ft_beam_obj()
         with pytest.raises(ValueError, match="at least two frequencies"):
             full.select_freqs(ft_bandwidth[:1] * units.Hz)
 
 
 class TestFTBeamFromFileFreqArray:
-    def test_partial_read_matches_full_read(self, ft_bandwidth: np.ndarray) -> None:
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+    def test_partial_read_matches_full_read(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
+    ) -> None:
+        full = make_ft_beam_obj()
         target = ft_bandwidth[5:25]
         test = uvwindow.FTBeam.from_file(
             ftfile=DATA_PATH / ftfile, freq_array=target * units.Hz
@@ -1905,13 +1932,17 @@ class TestFTBeamFromFileFreqArray:
                 freq_array=ft_bandwidth[5:25] * units.Hz,
             )
 
-    def test_interpolation_through_partial_read(self, ft_bandwidth: np.ndarray) -> None:
+    def test_interpolation_through_partial_read(
+        self,
+        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
+        ft_bandwidth: np.ndarray,
+    ) -> None:
         # requested frequencies fall between the file's channels, so
         # select_freqs interpolates using only the padded channel range
         # read from disk; must equal loading the whole file and
         # interpolating. Starts at the first channel pair to stress the
         # edge padding.
-        full = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
+        full = make_ft_beam_obj()
         midpoints = 0.5 * (ft_bandwidth[0:8] + ft_bandwidth[1:9])
         with pytest.warns(UserWarning, match="interpolating"):
             part = uvwindow.FTBeam.from_file(

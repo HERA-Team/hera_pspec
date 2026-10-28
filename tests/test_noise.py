@@ -1,5 +1,4 @@
 import copy
-from pathlib import Path
 
 import astropy.cosmology.units as cu
 import numpy as np
@@ -17,9 +16,6 @@ from hera_pspec import (
     testing,
     utils,
 )
-from hera_pspec.data import DATA_PATH
-
-DATA_PATH = Path(DATA_PATH)
 
 
 @pytest.fixture
@@ -165,16 +161,21 @@ class TestSensitivity:
             sense.calc_scalar(freqs * u.Hz, "pI", length_unit=u.s)
 
 
-def test_noise_validation(beam_nf_dipole: PSpecBeamUV) -> None:
+def test_noise_validation(beam_nf_dipole: PSpecBeamUV, uvd_zen_even_xx: UVData) -> None:
     """Check that the analytic noise 1-sigma amplitude matches the RMS of a noise simulation realization."""
-    # get simulated noise in Jy
-    uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+    # get simulated noise in Jy (on a copy of zen.even.xx.LST.1.28828.uvOCRSA)
     Tsys = 300.0  # Kelvin
 
     # generate noise
     seed = 0
     uvd = testing.noise_sim(
-        uvfile, Tsys, beam_nf_dipole, seed=seed, whiten=True, inplace=False, Nextend=9
+        uvd_zen_even_xx,
+        Tsys,
+        beam_nf_dipole,
+        seed=seed,
+        whiten=True,
+        inplace=False,
+        Nextend=9,
     )
 
     # get redundant baseline group

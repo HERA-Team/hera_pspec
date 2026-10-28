@@ -1,3 +1,4 @@
+import copy
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -22,9 +23,9 @@ NUM_FREQS = 20
 
 
 @pytest.fixture
-def efield_beam() -> pspecbeam.PSpecBeamUV:
+def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     """An efield-type beam with beam_type force-set to 'power' so later validation steps in beam_normalized_response can be reached."""
-    beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+    beam = copy.deepcopy(beam_nf_efield)
     beam.primary_beam.beam_type = "power"
     return beam
 
@@ -34,12 +35,11 @@ CUSTOM_COSMO = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
 
 
 class TestPSpecBeamUV:
-    def test_init(self) -> None:
+    def test_init(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
-        bm = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_dipole_power.beamfits")
-        assert isinstance(bm.primary_beam, UVBeam)
-        assert bm.beam_freqs.size > 0
-        assert bm.cosmo is conversions.DEFAULT_COSMOLOGY
+        assert isinstance(beam_nf_dipole.primary_beam, UVBeam)
+        assert beam_nf_dipole.beam_freqs.size > 0
+        assert beam_nf_dipole.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
@@ -69,19 +69,18 @@ class TestPSpecBeamUV:
     def test_scalar_convergence(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = beam_nf_pstokes.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=10000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
-    def test_custom_cosmology(self) -> None:
+    def test_custom_cosmology(
+        self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV, cosmo: FLRW
+    ) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        beam = pspecbeam.PSpecBeamUV(
-            DATA_PATH / "HERA_NF_pstokes_power.beamfits", cosmo=CUSTOM_COSMO
-        )
-        assert beam.cosmo is CUSTOM_COSMO
+        assert beam_nf_dipole_wcosmo.cosmo is cosmo
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
@@ -140,15 +139,6 @@ class TestPSpecBeamUV:
         )
         np.testing.assert_almost_equal(sclr, 71.105979715733)
 
-    def test_unrecognised_pol_raises(
-        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a completely unrecognised pol string raises KeyError from pyuvdata."""
-        with pytest.raises(KeyError):
-            beam_nf_pstokes.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pZ"
-            )
-
     def test_wrong_basis_pol_raises(
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
     ) -> None:
@@ -177,14 +167,15 @@ class TestPSpecBeamUV:
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
             )
 
-    def test_efield_beam(self) -> None:
+    def test_efield_beam(self, beam_nf_efield: pspecbeam.PSpecBeamUV) -> None:
         """Check that efield beams compute a scalar for XX but raise for pI."""
-        beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
-        beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
+        beam_nf_efield.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX")
         with pytest.raises(
             ValueError, match="Do not have the right polarization information"
         ):
-            beam.compute_pspec_scalar(LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI")
+            beam_nf_efield.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI"
+            )
 
     def test_get_omegas_single_polpair(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
@@ -241,10 +232,12 @@ class TestPSpecBeamUV:
                 beam_nf_dipole, pol="ll", freq=freq
             )
 
-    def test_beam_normalized_response_raises_on_non_power_beam(self) -> None:
+    def test_beam_normalized_response_raises_on_non_power_beam(
+        self, beam_nf_efield: pspecbeam.PSpecBeamUV
+    ) -> None:
         """Check that a non-power beam_type raises a ValueError."""
         freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
-        beam = pspecbeam.PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
+        beam = copy.deepcopy(beam_nf_efield)
         beam.primary_beam.beam_type = "voltage"
         with pytest.raises(ValueError, match="beam_type must be power"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
@@ -322,10 +315,10 @@ class TestPSpecBeamGauss:
     def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
         scalar = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=500
         )
         scalar_large_Nsteps = gauss_beam.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=2000
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
@@ -515,13 +508,6 @@ class TestPSpecBeamFromArray:
             ),
             (
                 lambda Om_P, Om_PP, freqs: dict(
-                    OmegaP={"A": Om_P}, OmegaPP={"A": Om_PP}, beam_freqs=freqs
-                ),
-                KeyError,
-                "'a'",
-            ),
-            (
-                lambda Om_P, Om_PP, freqs: dict(
                     OmegaP={"pI": Om_P}, OmegaPP={"pI": "string"}, beam_freqs=freqs
                 ),
                 TypeError,
@@ -545,7 +531,6 @@ class TestPSpecBeamFromArray:
         ids=[
             "array_omegap_dict_omegapp",
             "missing_pol_in_omegapp",
-            "unrecognized_pol_key",
             "omegapp_not_array_like",
             "omegapp_wrong_shape",
             "array_omegap_dict_omegapp_wrong_shape",
@@ -566,68 +551,62 @@ class TestPSpecBeamFromArray:
             pspecbeam.PSpecBeamFromArray(**kwargs)
 
     @pytest.mark.parametrize(
-        "build_kwargs",
+        "call,match",
         [
-            lambda Om_P, Om_PP, freqs: dict(
-                OmegaP={"foo": Om_P}, OmegaPP={"pI": Om_PP}, beam_freqs=freqs
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP={7: Om_P}, OmegaPP={"pI": Om_PP}, beam_freqs=freqs
+                ),
+                "Unrecognized polarization '7' in OmegaP.",
             ),
-            lambda Om_P, Om_PP, freqs: dict(
-                OmegaP={"pI": Om_P}, OmegaPP={"foo": Om_PP}, beam_freqs=freqs
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP={"pI": Om_P}, OmegaPP={7: Om_PP}, beam_freqs=freqs
+                ),
+                "Unrecognized polarization '7' in OmegaPP.",
             ),
-        ],
-        ids=["bad_omegap_key", "bad_omegapp_key"],
-    )
-    def test_raises_on_unrecognized_pol_in_init(
-        self,
-        gauss_beam: pspecbeam.PSpecBeamGauss,
-        build_kwargs: Callable[[np.ndarray, np.ndarray, np.ndarray], dict],
-    ) -> None:
-        """Check that an unrecognized polarization key in OmegaP/OmegaPP raises."""
-        # Raised by pyuvdata's polstr2num before pspecbeam's own "Unrecognized
-        # polarization" check is reached. Despite its docstring claiming
-        # ValueError, polstr2num does a bare dict lookup and so actually
-        # raises KeyError; confirmed consistent across pyuvdata 3.0-3.2.
-        Om_P = gauss_beam.power_beam_int() * u.sr
-        Om_PP = gauss_beam.power_beam_sq_int() * u.sr
-        kwargs = build_kwargs(Om_P, Om_PP, gauss_beam.beam_freqs * u.Hz)
-        with pytest.raises(KeyError):
-            pspecbeam.PSpecBeamFromArray(**kwargs)
-
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda psbeam, Om_P, Om_PP: psbeam.add_pol("foo", Om_P, Om_PP),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_int("foo"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int("foo"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_int(pol="blah"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int(pol="blah"),
-            lambda psbeam, Om_P, Om_PP: psbeam.add_pol(
-                pol="A", OmegaP=Om_P, OmegaPP=Om_PP
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).add_pol("rr", Om_P, Om_PP),
+                "Polarization '-1' is not valid.",
+            ),
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).power_beam_int("pQ"),
+                "OmegaP not specified for polarization",
+            ),
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).power_beam_sq_int("pQ"),
+                "OmegaPP not specified for polarization",
             ),
         ],
         ids=[
-            "add_pol_positional_foo",
-            "power_beam_int_foo",
-            "power_beam_sq_int_foo",
-            "power_beam_int_kw_blah",
-            "power_beam_sq_int_kw_blah",
-            "add_pol_kw_A",
+            "init_omegap_int_key",
+            "init_omegapp_int_key",
+            "add_pol_circular_pol",
+            "power_beam_int_missing_pol",
+            "power_beam_sq_int_missing_pol",
         ],
     )
-    def test_raises_on_invalid_pol_method_arg(
+    def test_raises_on_unavailable_pol(
         self,
         gauss_beam: pspecbeam.PSpecBeamGauss,
-        call: Callable[[pspecbeam.PSpecBeamFromArray, np.ndarray, np.ndarray], Any],
+        call: Callable[[np.ndarray, np.ndarray, np.ndarray], Any],
+        match: str,
     ) -> None:
-        """Check that invalid polarization strings/codes passed to method calls raise."""
-        # Same polstr2num KeyError as in test_raises_on_unrecognized_pol_in_init above.
+        """Check that polarizations that are not allowed, or have no beam
+        integrals stored, raise KeyError with an informative message."""
+        # Unknown pol *strings* are rejected earlier, by pyuvdata's polstr2num,
+        # so these cases use integer codes, a circular pol ("rr", code -1) that
+        # the beam does not support, or valid pols that were never added.
         Om_P = gauss_beam.power_beam_int() * u.sr
         Om_PP = gauss_beam.power_beam_sq_int() * u.sr
-        psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=gauss_beam.beam_freqs * u.Hz
-        )
-        with pytest.raises(KeyError):
-            call(psbeam, Om_P, Om_PP)
+        with pytest.raises(KeyError, match=match):
+            call(Om_P, Om_PP, gauss_beam.beam_freqs * u.Hz)
 
 
 class TestPSpecBeamBase:

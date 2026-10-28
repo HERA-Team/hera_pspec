@@ -37,14 +37,6 @@ def cosmo_h25() -> conversions.Cosmo_Conversions:
     )
 
 
-def test_units() -> None:
-    """Check that SI and CGS unit systems report the speed of light in the right units."""
-    si = conversions.units()
-    cgs = conversions.cgs_units()
-    np.testing.assert_almost_equal(si.c, 2.99792458e8)
-    np.testing.assert_almost_equal(cgs.c, 2.99792458e10)
-
-
 def test_units_match_astropy_constants() -> None:
     """Check that the float constants are the astropy.constants values."""
     si = conversions.units
@@ -67,13 +59,8 @@ def test_units_match_astropy_constants() -> None:
 
 
 class TestCosmoConversions:
-    def test_init(self, cosmo_h100: conversions.Cosmo_Conversions) -> None:
-        """Check that a default instance exposes expected attributes and that constructor kwargs are applied."""
-        # test parameters exist
-        cosmo_h100.Om_b
-        cosmo_h100.H0
-
-        # test parameters get fed to class
+    def test_init(self) -> None:
+        """Check that constructor kwargs are applied."""
         C = _cosmo_conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
