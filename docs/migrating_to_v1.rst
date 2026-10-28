@@ -49,9 +49,10 @@ Breaking changes
   ``normalization``.
 * ``UVPSpec.set_stats`` converts a Quantity to ``uvp.units`` and raises
   ``ValueError`` if it cannot. It used to drop the unit silently.
-* ``UVWindow.kunits`` is ``littleh / Mpc``. In v0.x it was ``units.h / units.Mpc``,
-  which astropy reads as hour/Mpc. ``UVWindow.little_h`` is read-only, and
-  ``UVWindow.check_kunits`` returns the converted Quantity.
+* ``UVWindow.kunits`` is ``littleh / Mpc`` (with ``little_h=True``). In v0.x it
+  was ``units.h / units.Mpc``, which astropy reads as hour/Mpc.
+  ``UVWindow.kunits`` follows ``UVWindow.little_h`` and cannot be set itself,
+  and ``UVWindow.check_kunits`` returns the converted Quantity.
 * ``UVPSpec.get_param_unit`` returns ``None`` for ``window_function_kperp`` and
   ``window_function_kpara``; use ``UVPSpec.window_k_unit()`` for these.
 * Non-flat cosmologies work as before (the default is slightly open). What
@@ -72,8 +73,8 @@ Deprecations (removal planned for v2.0)
   ``UVPSpec.compute_scalar``, ``UVPSpec.generate_noise_spectra``,
   ``PSpecBeamBase.compute_pspec_scalar``, ``noise.Sensitivity.calc_scalar``,
   ``utils.uvp_noise_error``, ``grouping.spherical_average``,
-  ``grouping.spherical_wf_from_uvp``, ``UVWindow(little_h=...)`` (also a
-  positional bool in its third slot) and the ``UVWindow.little_h`` attribute.
+  and ``grouping.spherical_wf_from_uvp``. ``UVWindow(little_h=...)`` is not
+  deprecated: it keeps its v0.x name, position and meaning.
 * ``conversions.Cosmo_Conversions``: creating one, or passing one anywhere a
   cosmology is accepted.
 * Plain-number k bins in ``spherical_average`` (``kbins``, ``kbins_theory``)
@@ -206,8 +207,9 @@ littleh/Mpc, but are deprecated.
   sph = hp.grouping.spherical_average(uvp, kbins, bin_widths=0.2 * cu.littleh / u.Mpc,
                                       time_avg=True)
 
-``UVWindow`` takes a ``kunits`` argument in place of ``little_h``. In v0.x the
-tutorials built k bins with ``units.h / units.Mpc``. ``units.h`` is astropy's
+``UVWindow`` keeps its ``little_h`` flag: ``True`` (the default) gives k in
+``cu.littleh / u.Mpc``, ``False`` in ``1 / u.Mpc``, and ``uvw.kunits`` holds the
+unit. In v0.x the tutorials built k bins with ``units.h / units.Mpc``. ``units.h`` is astropy's
 hour, so those bins were in hour/Mpc. They still work, read as littleh/Mpc,
 with a ``DeprecationWarning``. Use ``cu.littleh`` instead.
 
@@ -223,7 +225,7 @@ with a ``DeprecationWarning``. Use ``cu.littleh`` instead.
   # v1.0
   ftfile = os.path.join(DATA_PATH, "FT_beam_HERA_dipole_test_xx.hdf5")
   ftbeam = hp.FTBeam.from_file(ftfile, freq_array=hp.FTBeam.get_bandwidth(ftfile)[5:25] * u.Hz)
-  uvw = hp.UVWindow(ftbeam, kunits=cu.littleh / u.Mpc)
+  uvw = hp.UVWindow(ftbeam, little_h=True)
   kbins = np.arange(0.1, 1.0, 0.05) * cu.littleh / u.Mpc
   sph_wf = uvw.get_spherical_wf(kbins, bl_lens=[14.6, 29.2] * u.m)
 

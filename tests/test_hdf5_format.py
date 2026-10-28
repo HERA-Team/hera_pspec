@@ -581,13 +581,13 @@ class TestUVWindowFiles:
         uvw = uvwindow.UVWindow(
             ftbeam_obj=lf.build_uvwindow().ftbeam_obj_pol[0],
             taper="blackman-harris",
-            kunits=kunit,
+            little_h=little_h,
         )
         path = tmp_path / "uvwindow.h5"
         uvw.run_and_write(path, bl_lens=lf.UVWINDOW_BL_LENS[:1] * units.m)
         with h5py.File(path, "r") as f:
             assert f.attrs["uvwindow_version"] == "2"
-            # kept for v0.x readers, derived from kunits
+            # kept for v0.x readers
             assert f.attrs["little_h"] == little_h
             assert f.attrs["avg_nu_unit"] == "Hz"
             assert f["kperp_bins"].attrs["unit"] == kunit
