@@ -11,13 +11,38 @@ from functools import lru_cache
 import hera_cal as hc
 import numpy as np
 import uvtools.dspec as dspec
+from astropy import units
+from astropy.cosmology import FLRW
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
 
-from . import __version__, container, pspecbeam, utils, uvpspec
+from . import (
+    __version__,
+    container,
+    conversions,
+    pspecbeam,
+    unit_helpers,
+    utils,
+    uvpspec,
+)
+from . import response as responses
 from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_length_unit(length_unit, little_h):
+    """
+    Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
+
+    Strings are parsed with :func:`unit_helpers.parse_unit_string` (so
+    ``"Mpc / littleh"`` works); the rest is
+    :func:`conversions.resolve_length_unit`, whose deprecation warning points
+    at the caller of the public method that called this helper.
+    """
+    if isinstance(length_unit, (str, bytes)):
+        length_unit = unit_helpers.parse_unit_string(length_unit)
+    return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
 
 class PSpecData:
@@ -462,6 +487,10 @@ class PSpecData:
         if keys is None:
             self._C, self._I, self._iC, self._Y, self._R = {}, {}, {}, {}, {}
             self._identity_G, self._identity_H, self._identity_Y = {}, {}, {}
+            # get_integral_beam results, keyed by spectral window and pol
+            self._integral_beam = {}
+            # response kernels / tensors, keyed by response, spw and pol
+            self._response_kernels = {}
         else:
             for k in keys:
                 try:
@@ -1479,7 +1508,9 @@ class PSpecData:
 
         return float(len(key1)) / output
 
-    def q_hat(self, key1, key2, allow_fft=False, exact_norm=False, pol=False):
+    def q_hat(
+        self, key1, key2, allow_fft=False, exact_norm=False, pol=False, q_matrices=None
+    ):
         r"""
 
         If exact_norm is False:
@@ -1530,11 +1561,23 @@ class PSpecData:
             to extract the requested beam polarization. Default is the first
             polarization passed to pspec.
 
+        q_matrices : array_like or callable, optional
+            User estimator matrices ``Q^est_a`` used instead of ``Q^alt_a``
+            (#328): a dimensionless ``(spw_Ndlys, spw_Nfreqs, spw_Nfreqs)``
+            array, or a callable ``q_matrices(freqs, delays)`` returning one
+            (see ``get_response``). Then
+            ``q_a = (1/2) (R_1 x_1)^dagger Q^est_a (R_2 x_2)``. Cannot be
+            combined with ``allow_fft`` or ``exact_norm``. Default: None.
+
         Returns
         -------
         q_hat : array_like
             Unnormalized/normalized bandpowers
         """
+        if q_matrices is not None and (allow_fft or exact_norm):
+            raise ValueError(
+                "q_matrices cannot be combined with allow_fft=True or exact_norm=True."
+            )
         Rx1, Rx2 = 0.0, 0.0
         R1, R2 = 0.0, 0.0
 
@@ -1556,6 +1599,12 @@ class PSpecData:
             Rx2 = np.dot(self.R(key2), self.x(key2))
             R2 = self.R(key2)
 
+        if q_matrices is not None:
+            # q_a = (1/2) (R_1 x_1)^dagger Q^est_a (R_2 x_2) (arXiv:1502.06016 Eq. 13)
+            q_est = self._resolve_q_matrices(q_matrices)
+            q = np.einsum("i...,ji...->j...", Rx1.conj(), np.dot(q_est, Rx2))
+            return 0.5 * np.array(q)
+
         # The set of operations for exact_norm == True are drawn from Equations
         # 11(a) and 11(b) from HERA memo #44. We are incorporating the
         # multiplicatives to the exponentials, and sticking to quantities in
@@ -1571,8 +1620,8 @@ class PSpecData:
 
         elif exact_norm and not (allow_fft):
             q = []
-            del_tau = (
-                np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(
+                np.diff(self._delays_s())
             )  # Get del_eta in Eq.11(a) (HERA memo #44) (seconds)
             integral_beam = self.get_integral_beam(
                 pol
@@ -1621,6 +1670,12 @@ class PSpecData:
 
             F_ab = 1/2 Tr [C^-1 Q^alt_a C^-1 Q^alt_b] (arXiv:1502.06016, Eq. 17)
 
+        This is the legacy special case ``C_{,b} = Q^alt_b`` of
+        ``get_response``: ``get_response(key1, key2,
+        DelayResponse(convention="legacy", sampling=True))`` gives the same
+        matrix (``convention="legacy-exact"`` for ``exact_norm=True``). It
+        is kept as is for the two-step normalization of ``pspec()``.
+
         Parameters
         ----------
         key1, key2 : tuples or lists of tuples
@@ -1654,7 +1709,7 @@ class PSpecData:
         iR1Q1, iR2Q2 = {}, {}
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         if exact_norm:
             qnorm = del_tau * integral_beam
         else:
@@ -1715,6 +1770,12 @@ class PSpecData:
 
             F_ab = 1/2 Tr [C^-1 Q_a C^-1 Q_b] (arXiv:1502.06016, Eq. 17)
 
+        This is the legacy special case ``C_{,b} = Q^alt_b ⊙ S`` of
+        ``get_response``: ``get_response(key1, key2,
+        DelayResponse(convention="legacy", sampling=sampling))`` gives the
+        same matrix (``convention="legacy-exact"`` for ``exact_norm=True``).
+        It is kept as is for the two-step normalization of ``pspec()``.
+
         This function uses the state of self.taper in constructing H.
         See PSpecData.pspec for details.
 
@@ -1762,7 +1823,7 @@ class PSpecData:
         iR1Q1, iR2Q2 = {}, {}
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         if exact_norm:
             qnorm = del_tau * integral_beam
         else:
@@ -1795,7 +1856,226 @@ class PSpecData:
 
         return H / 2.0
 
-    def get_unnormed_E(self, key1, key2, exact_norm=False, pol=False):
+    def get_response(
+        self,
+        key1,
+        key2,
+        response=None,
+        pol=False,
+        q_matrices=None,
+        length_unit=None,
+        max_tensor_bytes=2**30,
+    ):
+        r"""
+        Response matrix ``H`` of the unnormalized bandpowers to the bandpowers.
+
+        With ``<q_a> = sum_b H_ab p_b`` and ``q_a = x_1^dagger E_a x_2``
+        (``q_hat``),
+
+            H_ab = (1/2) tr[R_1^dagger Q^est_a R_2 C_{,b}]
+
+        (arXiv:1502.06016 Eqs. 13-17; HERA memo #44 Eq. 11), where
+        ``C_{,b} = dC/dp_b`` is given by ``response`` (#328). ``get_H`` and
+        ``get_G`` are the legacy special cases
+        ``DelayResponse(convention="legacy", sampling=False/True)``.
+
+        For a ``DelayResponse`` the kernel is built once per spectral window
+        and polarization and ``H`` is computed with the Toeplitz algorithm of
+        ``response.toeplitz_response`` (no ``(Ndlys, N', N')`` tensor). A user
+        response is a dense tensor; its size is checked against
+        ``max_tensor_bytes`` first.
+
+        Parameters
+        ----------
+        key1, key2 : tuples
+            Keys of the two data vectors (dataset, baseline, pol).
+
+        response : DelayResponse or object, optional
+            ``C_{,b}``: a ``DelayResponse``, or any object with a method
+            ``matrices(freqs, delays, beam, pol, cosmo, length_unit)``
+            returning an astropy Quantity of shape ``(Ndlys, N', N')`` in a
+            unit equivalent to ``vis_unit**2 / power_unit`` =
+            ``1 / length_unit**3``. ``freqs`` (Hz) are the ``N'`` channels of
+            the spectral window including filter extensions and ``delays``
+            (s) the delay-bin centres, both Quantities; ``beam`` is
+            ``self.primary_beam`` and ``cosmo`` its cosmology. Called once per
+            spectral window and polarization. Default: ``DelayResponse()``.
+
+        pol : str or int, optional
+            Polarization of the beam. Default: False.
+
+        q_matrices : array_like or callable, optional
+            Estimator matrices ``Q^est_a``; default ``Q^alt_a``. See
+            ``q_hat``. Must match what ``q_hat`` uses.
+
+        length_unit : astropy.units.Unit or str, optional
+            Length unit of the power spectrum. Default: ``u.Mpc / cu.littleh``.
+
+        max_tensor_bytes : int, optional
+            Largest memory, in bytes, the dense tensors of a user response
+            (``C_{,b}``, ``Q^est`` and ``R_1^dagger Q^est R_2``) may take.
+            Default: 2**30 (1 GiB).
+
+        Returns
+        -------
+        H : ndarray
+            Complex ``(Ndlys, Ndlys)`` float array: in ``1 / length_unit**3``
+            for a cosmological response, dimensionless for
+            ``convention="legacy"``.
+
+        Raises
+        ------
+        ValueError
+            If the delay bins are not set, if the response needs a beam and
+            there is none, if a user response has the wrong shape or unit, if
+            it would exceed ``max_tensor_bytes``, or if ``q_matrices`` is
+            given with ``convention="legacy-exact"`` (which defines its own
+            estimator).
+        """
+        if self.spw_Ndlys is None:
+            raise ValueError(
+                "Number of delay bins should have been set by now! Cannot be "
+                "equal to None."
+            )
+        if response is None:
+            response = responses.DelayResponse()
+        length_unit = _resolve_length_unit(length_unit, None)
+        q_est = None if q_matrices is None else self._resolve_q_matrices(q_matrices)
+        model = self._response_kernel(response, pol, length_unit, max_tensor_bytes)
+        R1 = self.R(key1)
+        R2 = self.R(key2)
+
+        if isinstance(response, responses.DelayResponse):
+            kernel, weight = model
+            if weight is not None:
+                if q_est is not None:
+                    raise ValueError(
+                        'DelayResponse(convention="legacy-exact") defines its '
+                        "own estimator; q_matrices cannot be given with it."
+                    )
+                # exact_norm estimator Q^est_a = Delta_tau Q^alt_a ⊙ B (q_hat)
+                q_est = self.get_Q_alt_tensor() * weight
+            H = responses.toeplitz_response(R1, R2, kernel, self.spw_Ndlys, q_est)
+            if response.is_legacy and np.count_nonzero(H) == 0:
+                # as get_G / get_H: fully flagged data give the identity / 2
+                H = 0.5 * np.eye(self.spw_Ndlys)
+            return H
+
+        if q_est is None:
+            # Q^alt_a = m_a^* m_a^T (HERA memo #44 Eq. 16)
+            m = responses.estimator_phases(self.spw_Ndlys, self.spw_Nfreqs)
+            q_est = np.conj(m)[:, :, None] * m[:, None, :]
+        return responses.tensor_response(R1, R2, model, q_est)
+
+    def _resolve_q_matrices(self, q_matrices):
+        """
+        Return user estimator matrices as a plain ``(Ndlys, N, N)`` array.
+
+        ``q_matrices`` is an array (or dimensionless Quantity) or a callable
+        ``q_matrices(freqs, delays)`` taking the spectral-window frequencies
+        (Quantity, Hz, without filter extensions) and the delay-bin centres
+        (Quantity, ns, as returned by delays()).
+        """
+        if callable(q_matrices):
+            freqs = self.freqs[self.spw_range[0] : self.spw_range[1]] * units.Hz
+            q_matrices = q_matrices(freqs, self.delays())
+        if isinstance(q_matrices, units.Quantity):
+            try:
+                q_matrices = q_matrices.to_value(units.dimensionless_unscaled)
+            except units.UnitConversionError as err:
+                raise ValueError(
+                    f"q_matrices must be dimensionless; got unit {q_matrices.unit}."
+                ) from err
+        q_matrices = np.asarray(q_matrices)
+        expected = (self.spw_Ndlys, self.spw_Nfreqs, self.spw_Nfreqs)
+        if q_matrices.shape != expected:
+            raise ValueError(
+                f"q_matrices must have shape (Ndlys, Nfreqs, Nfreqs) = {expected}; "
+                f"got {q_matrices.shape}."
+            )
+        return q_matrices
+
+    def _response_kernel(self, response, pol, length_unit, max_tensor_bytes=2**30):
+        """
+        Float response model for the current spectral window and ``pol``.
+
+        For a ``DelayResponse``: ``(kernel, estimator_weight)``; for a user
+        response: its ``(Ndlys, N', N')`` tensor in ``1 / length_unit**3``.
+        All astropy work happens here, once per spectral window, polarization,
+        response and beam (cached; ``clear_cache()`` empties the cache).
+        """
+        spw_ext = self.get_spw(include_extension=True)
+        freqs_ext = self.freqs[spw_ext[0] : spw_ext[1]]
+        # a DelayResponse is immutable and compared by value; user responses
+        # by identity
+        is_delay_response = isinstance(response, responses.DelayResponse)
+        try:
+            cache_key = (
+                response if is_delay_response else id(response),
+                tuple(spw_ext),
+                tuple(self.spw_range),
+                self.spw_Ndlys,
+                pol,
+                length_unit,
+                freqs_ext.tobytes(),
+            )
+            hash(cache_key)
+        except TypeError:
+            cache_key = None
+        if cache_key is not None:
+            cached = self._response_kernels.get(cache_key)
+            if (
+                cached is not None
+                and (is_delay_response or cached[0] is response)
+                and cached[1] is self.primary_beam
+            ):
+                return cached[2]
+
+        beam = self.primary_beam
+        cosmo = None if beam is None else beam.cosmo
+        delays_s = self._delays_s()
+        if is_delay_response:
+            kernel = response.kernel(freqs_ext, delays_s, beam, pol, cosmo, length_unit)
+            weight = response.estimator_weight(
+                self.freqs[self.spw_range[0] : self.spw_range[1]], delays_s, beam, pol
+            )
+            model = (kernel, weight)
+        else:
+            if not hasattr(response, "matrices"):
+                raise TypeError(
+                    "response must be a DelayResponse or have a "
+                    "matrices(freqs, delays, beam, pol, cosmo, length_unit) method."
+                )
+            if beam is None:
+                raise ValueError(
+                    "A user response needs a beam and its cosmology "
+                    "(PSpecData.primary_beam is None)."
+                )
+            n_ext = freqs_ext.size
+            # C_{,b}, R_1^dagger Q^est R_2 (complex, N' x N') and Q^est (N x N)
+            n_bytes = 16 * self.spw_Ndlys * (2 * n_ext**2 + self.spw_Nfreqs**2)
+            if n_bytes > max_tensor_bytes:
+                raise ValueError(
+                    f"A dense response for {self.spw_Ndlys} delays and {n_ext} "
+                    f"channels needs about {n_bytes / 2**20:.0f} MiB, more than "
+                    f"max_tensor_bytes={max_tensor_bytes}. Pass a larger "
+                    "max_tensor_bytes to allow it."
+                )
+            c_tensor = response.matrices(
+                freqs_ext * units.Hz, delays_s * units.s, beam, pol, cosmo, length_unit
+            )
+            model = responses.strip_response_unit(c_tensor, length_unit, cosmo)
+            expected = (self.spw_Ndlys, n_ext, n_ext)
+            if model.shape != expected:
+                raise ValueError(
+                    "A response's matrices() must have shape (Ndlys, N', N') = "
+                    f"{expected}; got {model.shape}."
+                )
+        if cache_key is not None:
+            self._response_kernels[cache_key] = (response, beam, model)
+        return model
+
+    def get_unnormed_E(self, key1, key2, exact_norm=False, pol=False, q_matrices=None):
         """
         Calculates a series of unnormalized E matrices, such that
 
@@ -1830,6 +2110,10 @@ class PSpecData:
             Polarization parameter to be used for extracting the correct beam.
             Used only if exact_norm is True.
 
+        q_matrices : array_like or callable, optional
+            User estimator matrices used instead of ``Q^alt`` (see
+            ``q_hat``). Cannot be combined with ``exact_norm``. Default: None.
+
         Returns
         -------
         E : array_like, complex
@@ -1845,11 +2129,18 @@ class PSpecData:
         E_matrices = np.zeros((self.spw_Ndlys, nfreq, nfreq), dtype=complex)
         R1 = self.R(key1)
         R2 = self.R(key2)
+        q_est = None
+        if q_matrices is not None:
+            if exact_norm:
+                raise ValueError("q_matrices cannot be combined with exact_norm=True.")
+            q_est = self._resolve_q_matrices(q_matrices)
         if exact_norm:
             integral_beam = self.get_integral_beam(pol)
-            del_tau = np.median(np.diff(self.delays())) * 1e-9
+            del_tau = np.median(np.diff(self._delays_s()))
         for dly_idx in range(self.spw_Ndlys):
-            if exact_norm:
+            if q_est is not None:
+                QR2 = np.dot(q_est[dly_idx], R2)
+            elif exact_norm:
                 QR2 = del_tau * integral_beam * np.dot(self.get_Q_alt(dly_idx), R2)
             else:
                 QR2 = np.dot(self.get_Q_alt(dly_idx), R2)
@@ -1865,6 +2156,7 @@ class PSpecData:
         exact_norm=False,
         pol=False,
         time_index=None,
+        q_matrices=None,
     ):
         r"""
         Calculates the covariance matrix for unnormed bandpowers (i.e., the q
@@ -1949,13 +2241,19 @@ class PSpecData:
         time_index : int, optional
             Compute covariance at specific time-step. Default: None.
 
+        q_matrices : array_like or callable, optional
+            User estimator matrices used instead of ``Q^alt`` (see
+            ``q_hat``). Default: None.
+
         Returns
         -------
         V : array_like, complex
             Bandpower covariance matrix, with dimensions (Ndlys, Ndlys).
         """
         # Collect all the relevant pieces
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
+        E_matrices = self.get_unnormed_E(
+            key1, key2, exact_norm=exact_norm, pol=pol, q_matrices=q_matrices
+        )
         C1 = self.C_model(key1, model=model, time_index=time_index)
         C2 = self.C_model(key2, model=model, time_index=time_index)
         P21 = self.cross_covar_model(
@@ -1983,6 +2281,7 @@ class PSpecData:
         pol=False,
         model="empirical",
         known_cov=None,
+        q_matrices=None,
     ):
         r"""
         Calculates the auto-covariance matrix for both the real and imaginary
@@ -2134,6 +2433,10 @@ class PSpecData:
         known_cov : dicts of covariance matrices
             Covariance matrices that are not calculated internally from data.
 
+        q_matrices : array_like or callable, optional
+            User estimator matrices used instead of ``Q^alt`` (see
+            ``q_hat``). Default: None.
+
         Returns
         -------
         V : array_like, complex
@@ -2143,7 +2446,9 @@ class PSpecData:
         if M.ndim == 2:
             M = np.asarray([M for time in range(self.Ntimes)])
         # M has a shape of (Ntimes, spw_Ndlys,spw_Ndlys)
-        E_matrices = self.get_unnormed_E(key1, key2, exact_norm=exact_norm, pol=pol)
+        E_matrices = self.get_unnormed_E(
+            key1, key2, exact_norm=exact_norm, pol=pol, q_matrices=q_matrices
+        )
         # E_matrices has a shape of (spw_Ndlys, spw_Nfreqs, spw_Nfreqs)
 
         # using numpy.einsum_path to speed up the array products with numpy.einsum
@@ -2748,22 +3053,41 @@ class PSpecData:
         -------
         integral_beam : array_like
             integral containing the spectral beam and tapering.
+
+        Notes
+        -----
+        The result is cached per spectral window, polarization and beam
+        object, so the many calls made on the ``exact_norm`` path (one per
+        q_hat, get_G, get_H and get_unnormed_E) compute it once. The cache
+        is emptied by ``clear_cache()`` (called by ``pspec()`` for every
+        spectral window); call it after changing a beam in place. A copy is
+        returned, so callers may modify it.
         """
         nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
 
+        # The integral depends only on the frequencies, the polarization and
+        # the beam, so cache it (keyed on the frequencies themselves, since
+        # add() can change self.freqs) and check the beam by identity.
         try:
-            # Get beam response in (frequency, pixel), beam area(freq) and
-            # Nside, used in computing dtheta
-            beam_res, beam_omega, N = self.primary_beam.beam_normalized_response(
-                pol, nu
-            )
-            prod = 1.0 / beam_omega
-            beam_prod = beam_res * prod[:, np.newaxis]
+            cache_key = (tuple(self.spw_range), pol, nu.tobytes())
+            hash(cache_key)
+        except TypeError:
+            cache_key = None
+        if cache_key is not None:
+            cached = self._integral_beam.get(cache_key)
+            if cached is not None and cached[0] is self.primary_beam:
+                return cached[1].copy()
 
-            # beam_prod has omega subsumed, but taper is still part of R matrix
-            # The nside term is dtheta^2, where dtheta is the resolution in
-            # healpix map
-            integral_beam = np.pi / (3.0 * N * N) * np.dot(beam_prod, beam_prod.T)
+        try:
+            # Beam response in (frequency, pixel) divided by the beam area,
+            # summed over HEALPix pixels; the taper is still part of R
+            integral_beam = responses.healpix_integral_beam(self.primary_beam, pol, nu)
+
+            # the uniform-beam fallback below is not cached, so it keeps
+            # warning on every call
+            if cache_key is not None:
+                self._integral_beam[cache_key] = (self.primary_beam, integral_beam)
+                integral_beam = integral_beam.copy()
 
         except AttributeError:
             warnings.warn(
@@ -2802,7 +3126,7 @@ class PSpecData:
                 "of allowed range of delay modes."
             )
 
-        tau = self.delays()[int(mode)] * 1.0e-9  # delay in seconds
+        tau = self._delays_s()[int(mode)]  # delay in seconds
         nu = self.freqs[self.spw_range[0] : self.spw_range[1]]  # in Hz
 
         eta_int = np.exp(-2j * np.pi * tau * nu)  # exponential part
@@ -2940,7 +3264,7 @@ class PSpecData:
                             bl_inds[flag_ints], self.spw_range[0] : self.spw_range[1], i
                         ] = True
 
-    def units(self, little_h=True):
+    def units(self, little_h=None, length_unit=None):
         r"""
         Return the units of the power spectrum. These are inferred from the
         units reported by the input visibilities (UVData objects).
@@ -2948,14 +3272,39 @@ class PSpecData:
         Parameters
         ----------
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+                Deprecated, use ``length_unit``. ``little_h=True`` is
+                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
+
+        length_unit : astropy.units.Unit or str, optional
+                Cosmological length unit, e.g. ``u.Mpc / cu.littleh``
+                (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"``
+                are accepted. Default: None, which means
+                ``u.Mpc / cu.littleh``.
 
         Returns
         -------
-        pspec_units : str
-            Units of the power spectrum that is returned by pspec().
+        vis_units : str
+            Unit of the visibilities of the first dataset, as a canonical
+            astropy unit string (see ``unit_helpers.parse_pspec_unit``):
+            e.g. ``"mK"``, ``"Jy"``, ``"K sr"`` or ``"uncalib"``.
+        norm_units : str
+            Unit of the power spectrum normalisation, as a canonical astropy
+            unit string: ``length_unit**3`` when a beam is set (e.g.
+            ``"Mpc3 / littleh3"`` by default or ``"Mpc3"`` for
+            ``length_unit=u.Mpc``), else ``"Hz sr"`` (no beam normalisation
+            is applied). The power spectrum returned by pspec() is in
+            ``vis_units**2 * norm_units``.
+
+        Raises
+        ------
+        ValueError
+            If the visibility unit of the first dataset is not understood, if
+            ``length_unit`` is not a length, or if ``little_h`` and
+            ``length_unit`` disagree.
         """
+        length_unit = _resolve_length_unit(length_unit, little_h)
+
         # Work out the power spectrum units
         if len(self.dsets) == 0:
             raise IndexError(
@@ -2964,17 +3313,14 @@ class PSpecData:
             )
 
         # get visibility units
-        vis_units = self.dsets[0].vis_units
+        vis_units = unit_helpers.canonical_unit_string(self.dsets[0].vis_units)
 
         # set pspec norm units
         if self.primary_beam is None:
-            norm_units = "Hz str [beam normalization not specified]"
+            norm_unit = units.Hz * units.sr
         else:
-            if little_h:
-                h_unit = "h^-3 "
-            else:
-                h_unit = ""
-            norm_units = f"{h_unit}Mpc^3"
+            norm_unit = length_unit**3
+        norm_units = unit_helpers.unit_to_string(norm_unit)
 
         return vis_units, norm_units
 
@@ -2986,31 +3332,37 @@ class PSpecData:
 
         Returns
         -------
-        delays : array_like
-            Delays, tau. Units: ns.
+        delays : astropy.units.Quantity
+            Delays, tau, in ns (the same numbers as the float array returned
+            before v1.0). ``UVPSpec.dly_array`` stores delays in seconds;
+            convert with ``.to(u.s)`` where needed.
         """
-        # Calculate the delays
+        return units.Quantity(self._delays_s() * 1e9, units.ns)
+
+    def _delays_s(self):
+        """
+        Delays of the current spectral window as a float array in seconds.
+
+        Used internally (including inside per-baseline loops) instead of
+        delays(), so no Quantity is created there.
+        """
         if len(self.dsets) == 0:
             raise IndexError(
                 "No datasets have been added yet; cannot calculate delays."
             )
-        else:
-            return (
-                utils.get_delays(
-                    self.freqs[self.spw_range[0] : self.spw_range[1]],
-                    n_dlys=self.spw_Ndlys,
-                )
-                * 1e9
-            )  # convert to ns
+        return utils.get_delays(
+            self.freqs[self.spw_range[0] : self.spw_range[1]], n_dlys=self.spw_Ndlys
+        )
 
     def scalar(
         self,
         polpair,
-        little_h=True,
+        little_h=None,
         num_steps=2000,
         beam=None,
         taper_override="no_override",
         exact_norm=False,
+        length_unit=None,
     ):
         r"""
         Computes the scalar function to convert a power spectrum estimate
@@ -3031,8 +3383,9 @@ class PSpecData:
                 itself, e.g. 'XX' implies ('XX', 'XX').
 
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+                Deprecated, use ``length_unit``. ``little_h=True`` is
+                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
 
         num_steps : int, optional
                 Number of steps to use when interpolating primary beams for
@@ -3053,12 +3406,29 @@ class PSpecData:
                 spectral terms are taken into account while constructing
                 power spectrum.
 
+        length_unit : astropy.units.Unit or str, optional
+                Cosmological length unit, e.g. ``u.Mpc / cu.littleh``
+                (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"``
+                are accepted. Default: None, which means
+                ``u.Mpc / cu.littleh``.
+
         Returns
         -------
-        scalar: float
+        scalar: astropy.units.Quantity
                 [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-                in h^-3 Mpc^3 or Mpc^3.
+                in ``length_unit**3 / (u.Hz * u.sr)``: the factor taking a
+                power spectrum in vis^2 Hz sr to vis^2 ``length_unit**3``.
+                Before v1.0 this was a float;
+                ``.to_value(length_unit**3 / (u.Hz * u.sr))`` gives it.
+
+        Raises
+        ------
+        ValueError
+            If ``length_unit`` is not a length, or if ``little_h`` and
+            ``length_unit`` disagree.
         """
+        length_unit = _resolve_length_unit(length_unit, little_h)
+
         # make sure polarizations are the same
         if isinstance(polpair, (int, np.integer)):
             polpair = uvputils.polpair_int2tuple(polpair)
@@ -3085,27 +3455,27 @@ class PSpecData:
         # calculate scalar
         if beam is None:
             scalar = self.primary_beam.compute_pspec_scalar(
-                start,
-                end,
+                start * units.Hz,
+                end * units.Hz,
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                little_h=little_h,
+                length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )
         else:
             scalar = beam.compute_pspec_scalar(
-                start,
-                end,
+                start * units.Hz,
+                end * units.Hz,
                 len(freqs),
                 pol=pol,
                 taper=self.taper,
-                little_h=little_h,
+                length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
             )
-        return scalar
+        return scalar * (length_unit**3 / (units.Hz * units.sr))
 
     def scalar_delay_adjustment(
         self, key1=None, key2=None, sampling=False, Gv=None, Hv=None
@@ -3277,7 +3647,7 @@ class PSpecData:
         norm="I",
         taper="none",
         sampling=False,
-        little_h=True,
+        little_h=None,
         spw_ranges=None,
         symmetric_taper=True,
         baseline_tol=1.0,
@@ -3295,6 +3665,10 @@ class PSpecData:
         cov_model="empirical",
         known_cov=None,
         allow_fft=False,
+        length_unit=None,
+        normalization="two-step",
+        response=None,
+        q_matrices=None,
     ):
         r"""
         Estimate the delay power spectrum from a pair of datasets contained in
@@ -3360,11 +3734,16 @@ class PSpecData:
 
         sampling : boolean, optional
             Whether output pspec values are samples at various delay bins
-            or are integrated bandpowers over delay bins. Default: False
+            or are integrated bandpowers over delay bins. With
+            ``normalization="one-step"`` and ``response=None`` it selects
+            ``DelayResponse(sampling=sampling)``; it is ignored when a
+            ``response`` is given. Default: False
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. ``little_h=True`` is
+            ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
+            ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``; raises
+            ValueError if it disagrees with ``length_unit``.
 
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total
@@ -3492,6 +3871,56 @@ class PSpecData:
             Use an fft to compute q-hat.
             Default is False.
 
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit of the output, e.g. ``u.Mpc / cu.littleh``
+            (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"`` are
+            accepted. With a beam, the power spectra are normalised in
+            ``length_unit**3`` (``uvp.norm_units``) and ``uvp.scalar_array``
+            is in ``length_unit**3 / (Hz sr)``. Default: None, which means
+            ``u.Mpc / cu.littleh``.
+
+        normalization : {"two-step", "one-step"}, optional
+            ``"two-step"`` (default): ``M`` from ``get_G`` / ``get_H``, then
+            the power spectrum scalar (and ``scalar_delay_adjustment`` for
+            ``norm="I"``); recorded as ``uvp.normalization = "two-step"``, or
+            ``"two-step-exact"`` with ``exact_norm=True``.
+
+            ``"one-step"`` (#329): ``M`` from the response matrix
+            ``H = get_response(...)`` in cosmological units
+            (``M = diag(1/sum_b H_ab)``, ``H^-1`` or ``V^-1/2`` as for
+            ``norm``), so ``p = M q`` is in vis^2 ``length_unit**3`` directly,
+            ``cov_p = M V_q M^T`` and the window functions are ``W = M H``.
+            No scalar and no ``scalar_delay_adjustment`` are applied. Needs a
+            beam (``primary_beam``). ``uvp.scalar_array`` still holds the
+            reference scalar, computed as for ``"two-step"``: the
+            band-averaged conversion ``set_cosmology`` uses to rescale between
+            cosmologies, not a factor that was applied. The normalisation
+            uses the flagged channels' weights (``T^2 Y`` for identity
+            weighting), whereas the two-step scalar ignores flags. With
+            ``response=DelayResponse(convention="legacy")`` the output is not
+            in cosmological units: it is labelled ``Hz sr``, like a spectrum
+            without a beam, and ``scalar_array`` is 1.
+
+            For ``norm="I"``, ``Ndlys = Nfreqs`` and identity weighting
+            without flags, one-step equals two-step times ``s_disc / s``, the
+            scalar's integral evaluated as a sum over channels divided by the
+            integral (typically a few 0.01% above 1). With a taper and
+            ``norm="H^-1"`` / ``"V^-1/2"``, or with ``Ndlys < Nfreqs``, the
+            two-step normalisation is biased and the one-step one is not.
+
+        response : DelayResponse or object, optional
+            Response ``dC/dp`` for ``normalization="one-step"``; see
+            ``get_response``. A ``DelayResponse`` with
+            ``convention="cosmological"`` (the default
+            ``DelayResponse(sampling=sampling)``) or ``"legacy"``, or a user
+            object with a ``matrices()`` method. Its provenance is stored in
+            ``uvp.response_model``. Raises with ``"two-step"``. Default: None.
+
+        q_matrices : array_like or callable, optional
+            Estimator matrices used instead of ``Q^alt`` for
+            ``normalization="one-step"``; see ``q_hat``. Raises with
+            ``"two-step"`` or ``allow_fft=True``. Default: None.
+
         Returns
         -------
         uvp : UVPSpec object
@@ -3537,6 +3966,58 @@ class PSpecData:
 
         """
         # set taper and data weighting
+        length_unit = _resolve_length_unit(length_unit, little_h)
+        # unit of self.scalar(); stripped once per spw/pol below
+        scalar_unit = length_unit**3 / (units.Hz * units.sr)
+
+        if normalization not in ("two-step", "one-step"):
+            raise ValueError(
+                'normalization must be "two-step" or "one-step"; got '
+                f"{normalization!r}."
+            )
+        one_step = normalization == "one-step"
+        if not one_step and (response is not None or q_matrices is not None):
+            raise ValueError(
+                'response and q_matrices need normalization="one-step"; the '
+                "two-step normalization uses get_G and get_H."
+            )
+        if one_step:
+            if exact_norm:
+                raise ValueError(
+                    'exact_norm=True applies to normalization="two-step" only.'
+                )
+            if q_matrices is not None and allow_fft:
+                raise ValueError("q_matrices cannot be combined with allow_fft=True.")
+            if response is None:
+                response = responses.DelayResponse(sampling=sampling)
+            is_delay_response = isinstance(response, responses.DelayResponse)
+            if is_delay_response and response.convention == "legacy-exact":
+                # its estimator Delta_tau Q^alt ⊙ B is not the one q_hat uses
+                raise ValueError(
+                    'DelayResponse(convention="legacy-exact") reproduces '
+                    "get_G / get_H with exact_norm=True; use "
+                    'normalization="two-step" with exact_norm=True instead.'
+                )
+            if not is_delay_response and not hasattr(response, "matrices"):
+                raise TypeError(
+                    "response must be a DelayResponse or have a "
+                    "matrices(freqs, delays, beam, pol, cosmo, length_unit) method."
+                )
+        # one-step in cosmological units: H is built from dC/dp in
+        # 1 / length_unit**3, so p = M q comes out in vis^2 length_unit^3;
+        # the legacy one-step response is dimensionless
+        one_step_cosmo = one_step and not (
+            isinstance(response, responses.DelayResponse) and response.is_legacy
+        )
+        if one_step_cosmo and self.primary_beam is None:
+            # open question 5: no observer-unit one-step output for now
+            raise ValueError(
+                'normalization="one-step" needs a beam: the response matrix is '
+                "in cosmological units, built from the beam's Omega_p, "
+                "Omega_pp and cosmology. Set PSpecData.primary_beam (or use "
+                'normalization="two-step").'
+            )
+
         self.set_taper(taper)
         self.set_symmetric_taper(symmetric_taper)
         self.set_weighting(input_data_weight)
@@ -3721,7 +4202,10 @@ class PSpecData:
             spw_stats_array_cov_model = []
             spw_window_function = []
 
-            d = self.delays() * 1e-9
+            # user estimator matrices, resolved once per spectral window
+            q_est = None if q_matrices is None else self._resolve_q_matrices(q_matrices)
+
+            d = self._delays_s()
             f = dset1.freq_array.flatten()[spw_ranges[i][0] : spw_ranges[i][1]]
             dlys.extend(d)
             dly_spws.extend(np.ones_like(d, np.int16) * i)
@@ -3752,7 +4236,11 @@ class PSpecData:
                 pol_window_function = []
 
                 # Compute scalar to convert "telescope units" to "cosmo units"
-                if self.primary_beam is not None:
+                if one_step and not one_step_cosmo:
+                    # the legacy one-step response is not in cosmological
+                    # units, so nothing converts it
+                    scalar = 1.0
+                elif self.primary_beam is not None:
                     # Raise error if cross-pol is requested
                     if p[0] != p[1]:
                         raise NotImplementedError(
@@ -3763,20 +4251,31 @@ class PSpecData:
 
                     # using zero'th indexed polarization, as cross-polarized
                     # beams are not yet implemented
-                    if norm == "H^-1":
+                    if one_step:
+                        # reference scalar, kept so set_cosmology can rescale
+                        # one-step spectra between cosmologies: computed
+                        # as the two-step path does (scalar() ignores the
+                        # H^-1 taper override), stored in scalar_array but
+                        # never multiplied into p or cov
+                        scalar = self.scalar(
+                            p,
+                            num_steps=uvpspec.ONE_STEP_SCALAR_NUM_STEPS,
+                            length_unit=length_unit,
+                        ).to_value(scalar_unit)
+                    elif norm == "H^-1":
                         # If using decorrelation, the H^-1 normalization
                         # already deals with the taper, so we need to override
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
-                            little_h=little_h,
                             taper_override="none",
                             exact_norm=exact_norm,
-                        )
+                            length_unit=length_unit,
+                        ).to_value(scalar_unit)
                     else:
                         scalar = self.scalar(
-                            p, little_h=little_h, exact_norm=exact_norm
-                        )
+                            p, exact_norm=exact_norm, length_unit=length_unit
+                        ).to_value(scalar_unit)
                 else:
                     raise_warning(
                         "Warning: self.primary_beam is not defined, "
@@ -3789,6 +4288,10 @@ class PSpecData:
                     0
                 ]  # used in get_integral_beam function to specify the correct polarization for the beam
                 spw_scalar.append(scalar)
+                if one_step:
+                    # build the response kernel (astropy work) before the
+                    # baseline-pair loop
+                    self._response_kernel(response, pol, length_unit)
 
                 # Loop over baseline pairs
                 for k, blp in enumerate(bl_pairs):
@@ -3848,7 +4351,45 @@ class PSpecData:
                         self.set_r_param(key2, r_params[key2])
 
                     # Build Fisher matrix
-                    if input_data_weight == "identity":
+                    if one_step:
+                        # one-step: M comes from the response H alone (design
+                        # note section 3.1), so G is H
+                        if input_data_weight == "identity":
+                            # H differs only by flagging pattern, as below
+                            Y = np.vstack(
+                                [self.Y(key1).diagonal(), self.Y(key2).diagonal()]
+                            )
+                            matches = [
+                                np.isclose(Y, y).all()
+                                for y in self._identity_Y.values()
+                            ]
+                            if any(matches):
+                                match = list(self._identity_Y.keys())[
+                                    matches.index(True)
+                                ]
+                                Hv = self._identity_H[match]
+                            else:
+                                Hv = self.get_response(
+                                    key1,
+                                    key2,
+                                    response,
+                                    pol=pol,
+                                    q_matrices=q_est,
+                                    length_unit=length_unit,
+                                )
+                                self._identity_Y[(key1, key2)] = Y
+                                self._identity_H[(key1, key2)] = Hv
+                        else:
+                            Hv = self.get_response(
+                                key1,
+                                key2,
+                                response,
+                                pol=pol,
+                                q_matrices=q_est,
+                                length_unit=length_unit,
+                            )
+                        Gv = Hv
+                    elif input_data_weight == "identity":
                         # in this case, all Gv and Hv differ only by flagging pattern
                         # so check if we've already computed this
                         # First: get flag weighting matrices given key1 & key2
@@ -3860,7 +4401,7 @@ class PSpecData:
                         matches = [
                             np.isclose(Y, y).all() for y in self._identity_Y.values()
                         ]
-                        if True in matches:
+                        if any(matches):
                             # This Y exists, so pick appropriate G and H and continue
                             match = list(self._identity_Y.keys())[matches.index(True)]
                             Gv = self._identity_G[match]
@@ -3899,14 +4440,19 @@ class PSpecData:
                     if nper_chunk == 1:
                         logger.info("  Building q_hat...")
                     qv = self.q_hat(
-                        key1, key2, exact_norm=exact_norm, pol=pol, allow_fft=allow_fft
+                        key1,
+                        key2,
+                        exact_norm=exact_norm,
+                        pol=pol,
+                        allow_fft=allow_fft,
+                        q_matrices=q_est,
                     )
 
                     if nper_chunk == 1:
                         logger.info("  Normalizing power spectrum...")
                     if norm == "V^-1/2":
                         V_mat = self.get_unnormed_V(
-                            key1, key2, exact_norm=exact_norm, pol=pol
+                            key1, key2, exact_norm=exact_norm, pol=pol, q_matrices=q_est
                         )
                         Mv, Wv = self.get_MW(
                             Gv, Hv, mode=norm, band_covar=V_mat, exact_norm=exact_norm
@@ -3915,15 +4461,17 @@ class PSpecData:
                         Mv, Wv = self.get_MW(Gv, Hv, mode=norm, exact_norm=exact_norm)
                     pv = self.p_hat(Mv, qv)
 
-                    # Multiply by scalar
-                    if self.primary_beam is not None:
+                    # Multiply by scalar (two-step only: a one-step p = M q is
+                    # already in vis^2 length_unit^3)
+                    if self.primary_beam is not None and not one_step:
                         if nper_chunk == 1:
                             logger.info("  Computing and multiplying scalar...")
                         pv *= scalar
 
                     # Wide bin adjustment of scalar, which is only needed for
-                    # the diagonal norm matrix mode (i.e., norm = 'I')
-                    if norm == "I" and not (exact_norm):
+                    # the diagonal norm matrix mode (i.e., norm = 'I') of the
+                    # two-step normalization
+                    if norm == "I" and not (exact_norm) and not one_step:
                         sa = self.scalar_delay_adjustment(Gv=Gv, Hv=Hv)
                         if isinstance(sa, float):
                             pv *= sa
@@ -3943,14 +4491,16 @@ class PSpecData:
                                 pol=pol,
                                 model=cov_model,
                                 known_cov=known_cov,
+                                q_matrices=q_est,
                             )
                         )
 
-                        if self.primary_beam is not None:
+                        # one-step: cov_p = M V_q M^T as returned
+                        if self.primary_beam is not None and not one_step:
                             cov_real = cov_real * (scalar) ** 2.0
                             cov_imag = cov_imag * (scalar) ** 2.0
 
-                        if norm == "I" and not (exact_norm):
+                        if norm == "I" and not (exact_norm) and not one_step:
                             if isinstance(sa, float):
                                 cov_real = cov_real * (sa) ** 2.0
                                 cov_imag = cov_imag * (sa) ** 2.0
@@ -4186,7 +4736,18 @@ class PSpecData:
         )  # all dsets validated to agree
         uvp.exact_windows = False
         uvp.weighting = input_data_weight
-        uvp.vis_units, uvp.norm_units = self.units(little_h=little_h)
+        uvp.vis_units, uvp.norm_units = self.units(length_unit=length_unit)
+        if one_step:
+            uvp.normalization = "one-step"
+            uvp.response_model = _response_model_string(response)
+            if not one_step_cosmo:
+                # legacy one-step output: no cosmological normalisation,
+                # labelled like a spectrum without a beam
+                uvp.norm_units = unit_helpers.unit_to_string(units.Hz * units.sr)
+        elif exact_norm:
+            uvp.normalization = "two-step-exact"
+        else:
+            uvp.normalization = "two-step"
         # SGM: I've kept the same API in hera_pspec for now, but we should
         # probably move to having a `.telescope` attribute on the UVP.
         uvp.telescope_location = np.array(
@@ -4438,7 +4999,7 @@ class PSpecData:
         # iterate over all pols and get conversion factors
         factors = {}
         for p in pols:
-            factors[p] = beam.Jy_to_mK(self.freqs, pol=p)
+            factors[p] = beam.Jy_to_mK(self.freqs << units.Hz, pol=p)
 
         # iterate over datasets and apply factor
         for i, dset in enumerate(self.dsets):
@@ -4496,6 +5057,19 @@ class PSpecData:
                 self.dsets[i].select(times=dset.time_array[~trim_inds])
 
 
+def _response_model_string(response):
+    """
+    Provenance string of a one-step response, stored as
+    ``UVPSpec.response_model``: the repr of a ``DelayResponse`` (or of any
+    class defining its own ``__repr__``), else the qualified class name, so
+    the string does not depend on the object's memory address.
+    """
+    cls = type(response)
+    if cls.__repr__ is not object.__repr__:
+        return repr(response)
+    return f"{cls.__module__}.{cls.__qualname__}"
+
+
 def pspec_run(
     dsets,
     filename,
@@ -4551,6 +5125,9 @@ def pspec_run(
     include_crosscorrs=True,
     xant_flag_thresh=0.95,
     allow_fft=False,
+    length_unit=None,
+    normalization="two-step",
+    response=None,
 ):
     """
     Create a PSpecData object, run OQE delay spectrum estimation and write
@@ -4657,8 +5234,9 @@ def pspec_run(
         of this size. See utils.calc_blpair_reds() for details. Default: None
 
     bl_len_range : len-2 float tuple
-        A tuple containing the minimum and maximum baseline length to use
-        in utils.calc_blpair_reds call. Only used if blpairs is None.
+        A tuple containing the minimum and maximum baseline length, in
+        metres, to use in utils.calc_blpair_reds call. Only used if blpairs
+        is None.
 
     bl_deg_range : len-2 float tuple
         A tuple containing the min and max baseline angle (ENU frame in degrees)
@@ -4666,8 +5244,8 @@ def pspec_run(
         degrees.
 
     bl_error_tol : float, optional
-        Baseline vector error tolerance when constructing redundant groups.
-        Default: 1.0.
+        Baseline vector error tolerance, in metres, when constructing
+        redundant groups. Default: 1.0.
 
     store_window : bool
         If True, store computed window functions (warning, these can be large!)
@@ -4690,10 +5268,11 @@ def pspec_run(
         Beam model to use in OQE. Can be a PSpecBeam object or a filepath
         to a beamfits healpix map (see UVBeam)
 
-    cosmo : conversions.Cosmo_Conversions object
-        A Cosmo_Conversions object to use as the cosmology when normalizing
-        the power spectra. Default is a Planck cosmology.
-        See conversions.Cosmo_Conversions for details.
+    cosmo : astropy.cosmology.FLRW, optional
+        Cosmology to use when normalizing the power spectra. Default is None,
+        which keeps the beam's own cosmology (conversions.DEFAULT_COSMOLOGY
+        unless the beam sets one). A ``Cosmo_Conversions`` object is still
+        accepted but deprecated.
 
     interleave_times : bool
         Only applicable if Ndsets == 1. If True, copy dset[0] into
@@ -4836,6 +5415,22 @@ def pspec_run(
         Use an fft to compute q-hat.
         Default is False.
 
+    length_unit : str or astropy.units.Unit, optional
+        Cosmological length unit of the power spectra: "Mpc / littleh"
+        (h^-1 Mpc) or "Mpc". The power spectra are normalised in
+        length_unit^3 and their k values are in 1 / length_unit. See
+        PSpecData.pspec(). Default: None, which means "Mpc / littleh".
+
+    normalization : str, optional
+        "two-step" (default) or "one-step" (normalization by a response
+        matrix in cosmological units, #329; needs a beam). See
+        PSpecData.pspec().
+
+    response : DelayResponse or object, optional
+        Response matrix model for normalization="one-step", e.g.
+        hera_pspec.DelayResponse(x2y="midpoint"). See PSpecData.pspec().
+        Default: None, which means DelayResponse(sampling=sampling).
+
     Returns
     -------
     ds : PSpecData object
@@ -4851,6 +5446,25 @@ def pspec_run(
     assert isinstance(dsets, (list, tuple, np.ndarray)), (
         "dsets must be fed as a list of dataset string paths or UVData objects."
     )
+
+    # validate length_unit and normalization before any data is read
+    length_unit = _resolve_length_unit(length_unit, None)
+    if normalization not in ("two-step", "one-step"):
+        raise ValueError(
+            f'normalization must be "two-step" or "one-step"; got {normalization!r}.'
+        )
+
+    # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
+    accepted_cosmo_types = (FLRW,)
+    if isinstance(cosmo, conversions.Cosmo_Conversions):
+        # deprecated: converted with a DeprecationWarning
+        cosmo = conversions.as_astropy_cosmology(cosmo)
+    if cosmo is not None and not isinstance(cosmo, accepted_cosmo_types):
+        accepted_names = ", ".join(t.__name__ for t in accepted_cosmo_types)
+        raise TypeError(
+            f"cosmo must be one of ({accepted_names}) or None, "
+            f"got {type(cosmo).__name__}."
+        )
 
     # parse psname
     if psname_ext is not None:
@@ -5168,6 +5782,9 @@ def pspec_run(
             store_window=store_window,
             exact_windows=exact_windows,
             ftbeam=ftbeam,
+            length_unit=length_unit,
+            normalization=normalization,
+            response=response,
         )
 
         # Store output

@@ -5,28 +5,30 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import numpy.typing as npt
+from astropy import units as u
+from astropy.cosmology import FLRW
 from scipy.linalg import circulant
 from uvtools import dspec
 
-from . import conversions
+from . import conversions, utils
 
 if TYPE_CHECKING:
     from .pspecbeam import PSpecBeamBase
 
 PowerSpectrum = float | npt.NDArray[np.floating[Any]]
-CosmologyInput = str | dict[str, Any] | conversions.Cosmo_Conversions
+CosmologyInput = FLRW | str | dict[str, Any] | conversions.Cosmo_Conversions
 
 
 def calc_P_N(
-    scalar: float,
-    Tsys: float,
-    t_int: float,
+    scalar: float | u.Quantity,
+    Tsys: float | u.Quantity,
+    t_int: float | u.Quantity,
     Ncoherent: int = 1,
     Nincoherent: int | None = None,
     form: Literal["Pk", "DelSq"] = "Pk",
-    k: npt.NDArray[np.floating[Any]] | None = None,
+    k: npt.NDArray[np.floating[Any]] | u.Quantity | None = None,
     component: Literal["abs", "real", "imag"] = "real",
-) -> PowerSpectrum:
+) -> PowerSpectrum | u.Quantity:
     """
     Calculate the noise power spectrum via Eqn. (22) of Cheng et al. 2018 for a specified
     component of the power spectrum.
@@ -44,21 +46,96 @@ def calc_P_N(
 
     Parameters
     ----------
-    scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
-    Tsys : float, System temperature in Kelvin
-    t_int : float, integration time of power spectra in seconds
+    scalar : float or astropy.units.Quantity, Power spectrum normalization factor:
+        X2Y(z) * Omega_P^2 / Omega_PP, in L^3 / (Hz sr) for a cosmological length
+        unit L. A Quantity (as returned by UVPSpec.compute_scalar or
+        PSpecData.scalar) sets L; a plain float is taken to be in L^3 / (Hz sr)
+        for the L the caller has in mind (not deprecated: it is a computed
+        conversion factor, not a physical input).
+    Tsys : astropy.units.Quantity, System temperature in any temperature unit
+        (e.g. ``300 * u.K``). A plain number is read as K (deprecated).
+    t_int : astropy.units.Quantity, integration time of power spectra in any time
+        unit. A plain number is read as seconds (deprecated).
     Ncoherent : int, number of coherent averages of visibility data with integration time t_int
         Total integration time is t_int * Ncoherent
     Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
     form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-    k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+    k : float ndarray or astropy.units.Quantity, cosmological wave-vectors, only
+        needed if form == 'DelSq'. A Quantity needs a Quantity scalar and is
+        converted to 1 / L, with L the length unit of scalar (littleh / Mpc and
+        1 / Mpc do not convert into each other here, since that needs a
+        cosmology). A plain array is read as 1 / L (h Mpc^-1 for the default
+        h^-1 Mpc).
     component : str, options=['real', 'imag', 'abs']
         If component is real or imag, divide by an extra factor of sqrt(2)
 
     Returns (P_N)
     -------
-    P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-    if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+    P_N : estimated noise power spectrum in mK^2 * L^3. If form == 'DelSq', P_N is
+        multiplied by k^3 / (2pi^2) and is in mK^2 (k in 1 / L). For a Quantity
+        scalar, P_N is a Quantity in those units; for a plain float scalar it is
+        a float (or float array).
+    """
+    if isinstance(scalar, u.Quantity):
+        length_unit = _length_unit_of_scalar(scalar)
+        scalar = scalar.to_value(length_unit**3 / (u.Hz * u.sr))
+        P_N_unit = u.mK**2 if form == "DelSq" else u.mK**2 * length_unit**3
+    else:
+        length_unit = None
+        if isinstance(k, u.Quantity):
+            raise TypeError(
+                "k is a Quantity but scalar is a plain float, so the length unit "
+                "of k is unknown; pass scalar as a Quantity in L^3 / (Hz sr)."
+            )
+    Tsys = utils.to_value_in(Tsys, u.K, "Tsys", example="300 * u.K")
+    t_int = utils.to_value_in(t_int, u.s, "t_int", example="10.7 * u.s")
+    if isinstance(k, u.Quantity):
+        k = utils.to_value_in(k, 1 / length_unit, "k")
+    P_N = _calc_P_N(
+        scalar,
+        Tsys,
+        t_int,
+        Ncoherent=Ncoherent,
+        Nincoherent=Nincoherent,
+        form=form,
+        k=k,
+        component=component,
+    )
+    if length_unit is None:
+        return P_N
+    return P_N << P_N_unit
+
+
+def _length_unit_of_scalar(scalar):
+    """Return the length unit L of a scalar Quantity in L^3 / (Hz sr)."""
+    length_unit = (scalar.unit * u.Hz * u.sr) ** (1 / 3)
+    if not (
+        length_unit.is_equivalent(u.Mpc)
+        or length_unit.is_equivalent(conversions._LITTLEH_LENGTH)
+    ):
+        raise u.UnitConversionError(
+            f"scalar must be in L^3 / (Hz sr) for a length unit L, got '{scalar.unit}'."
+        )
+    return length_unit
+
+
+def _calc_P_N(
+    scalar: float,
+    Tsys: float,
+    t_int: float,
+    Ncoherent: int = 1,
+    Nincoherent: int | None = None,
+    form: Literal["Pk", "DelSq"] = "Pk",
+    k: npt.NDArray[np.floating[Any]] | None = None,
+    component: Literal["abs", "real", "imag"] = "real",
+) -> PowerSpectrum:
+    """
+    :func:`calc_P_N` on plain floats: scalar in L^3 / (Hz sr), Tsys in K,
+    t_int in s and k in 1 / L; returns mK^2 L^3 (mK^2 for DelSq).
+
+    Kept separate for speed: ``UVPSpec.generate_noise_spectra`` calls it for
+    every time and baseline pair with plain arrays, which skips the unit
+    conversions that :func:`calc_P_N` does on its Quantity inputs.
     """
     # assert form
     assert form in ("Pk", "DelSq"), (
@@ -101,7 +178,8 @@ class Sensitivity:
 
         Parameters
         ----------
-        cosmo : hera_pspec.conversions.Cosmo_Conversions instance
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology; see :meth:`set_cosmology` for the accepted forms.
 
         beam : hera_pspec.pspecbeam.PSpecBeam instance
         """
@@ -113,18 +191,20 @@ class Sensitivity:
 
     def set_cosmology(self, cosmo: CosmologyInput) -> None:
         """
-        Set a cosmological model to self.cosmo via an instance of hera_pspec.conversions.Cosmo_Conversions
+        Set a cosmological model to self.cosmo, an astropy.cosmology object.
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions instance, or self.cosmo_params string, or dictionary
+        cosmo : astropy.cosmology.FLRW, self.cosmo_params string, or dictionary
+            The cosmology, or its parameter dictionary (see
+            ``conversions.cosmology_from_params``) or that dictionary's
+            ``str()``. A ``Cosmo_Conversions`` object is still accepted but
+            deprecated.
         """
         if isinstance(cosmo, str):
             cosmo = ast.literal_eval(cosmo)
-        if isinstance(cosmo, dict):
-            cosmo = conversions.Cosmo_Conversions(**cosmo)
-        self.cosmo = cosmo
-        self.cosmo_params = str(self.cosmo.get_params())
+        self.cosmo = conversions.as_astropy_cosmology(cosmo)
+        self.cosmo_params = str(conversions.params_from_cosmology(self.cosmo))
 
     def set_beam(self, beam: PSpecBeamBase) -> None:
         """
@@ -149,7 +229,7 @@ class Sensitivity:
             else:
                 # neither beam nor self have cosmo, raise AssertionError
                 raise AssertionError(
-                    "neither self nor beam have a Cosmo_Conversions instance attached. "
+                    "neither self nor beam have a cosmology attached. "
                     "See self.set_cosmology()."
                 )
 
@@ -160,7 +240,8 @@ class Sensitivity:
         freqs: npt.NDArray[np.floating[Any]],
         pol: str,
         num_steps: int = 5000,
-        little_h: bool = True,
+        little_h: bool | None = None,
+        length_unit: u.UnitBase | str | None = None,
     ) -> None:
         """
         Calculate noise power spectrum prefactor from Eqn. (1) of Pober et al. 2014, ApJ 782, 66,
@@ -170,7 +251,8 @@ class Sensitivity:
 
         Parameters
         ----------
-        freqs : float ndarray, holds frequency bins of spectral window in Hz
+        freqs : astropy.units.Quantity, frequency bins of the spectral window in any
+            frequency unit. A plain array is read as Hz (deprecated).
 
         pol : str, specification of polarization to calculate scalar for
             See pyuvdata.utils.polstr2num for options.
@@ -178,38 +260,52 @@ class Sensitivity:
         num_steps : number of frequency bins to use in numerical integration of scalar
 
         little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
+            Raises ValueError if it disagrees with ``length_unit``.
+
+        length_unit : astropy.units.Unit or str, optional
+            Cosmological length unit L of the scalar, e.g. ``u.Mpc / cu.littleh``
+            (h^-1 Mpc) or ``u.Mpc``. Default: ``u.Mpc / cu.littleh``.
 
         Result
         ------
-        self.scalar : float, cosmological and beam scalar prefactor
+        self.scalar : float, cosmological and beam scalar prefactor in
+            L^3 / (Hz sr), with L = ``length_unit``
 
-        self.subband : float ndarray, frequencies in spectral window used to calculate self.scalar
+        self.length_unit : astropy.units.Unit, the length unit L of self.scalar
+
+        self.subband : float ndarray, frequencies in spectral window used to calculate
+            self.scalar, in Hz
 
         self.pol : str, polarization used to calculate self.scalar
         """
+        # stacklevel 3: the deprecation warning points at the caller of calc_scalar
+        length_unit = conversions.resolve_length_unit(
+            length_unit, little_h, stacklevel=3
+        )
+        freqs = np.atleast_1d(utils.to_value_in(freqs, u.Hz, "freqs"))
         # compute scalar
         self.scalar = self.beam.compute_pspec_scalar(
-            freqs.min(),
-            freqs.max(),
+            freqs.min() * u.Hz,
+            freqs.max() * u.Hz,
             len(freqs),
             num_steps=num_steps,
             pol=pol,
-            little_h=little_h,
+            length_unit=length_unit,
             noise_scalar=True,
         )
+        self.length_unit = length_unit
         self.subband = freqs
         self.pol = pol
 
     def calc_P_N(
         self,
-        Tsys: float,
-        t_int: float,
+        Tsys: float | u.Quantity,
+        t_int: float | u.Quantity,
         Ncoherent: int = 1,
         Nincoherent: int | None = None,
         form: Literal["Pk", "DelSq"] = "Pk",
-        k: npt.NDArray[np.floating[Any]] | None = None,
+        k: npt.NDArray[np.floating[Any]] | u.Quantity | None = None,
         component: Literal["abs", "real", "imag"] = "real",
     ) -> PowerSpectrum:
         """
@@ -228,21 +324,25 @@ class Sensitivity:
 
         Parameters
         ----------
-        scalar : float, Power spectrum normalization factor: X2Y(z) * Omega_P^2 / Omega_PP
-        Tsys : float, System temperature in Kelvin
-        t_int : float, integration time of power spectra in seconds
+        Tsys : astropy.units.Quantity, System temperature in any temperature unit.
+            A plain number is read as K (deprecated).
+        t_int : astropy.units.Quantity, integration time of power spectra in any time
+            unit. A plain number is read as seconds (deprecated).
         Ncoherent : int, number of coherent averages of visibility data with integration time t_int
             Total integration time is t_int * Ncoherent
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
         form : str, power spectra form 'Pk' for P(k) and 'DelSq' for Delta^2(k)
-        k : float ndarray, cosmological wave-vectors in h Mpc^-1, only needed if form == 'DelSq'
+        k : float ndarray or astropy.units.Quantity, cosmological wave-vectors, only
+            needed if form == 'DelSq'. A Quantity is converted to 1 / L, where L is
+            self.length_unit; a plain array is read as 1 / L.
         component : str, options=['real', 'imag', 'abs']
             If component is real or imag, divide by an extra factor of sqrt(2)
 
         Returns (P_N)
         -------
-        P_N : estimated noise power spectrum in units of mK^2 * h^-3 Mpc^3
-        if form == 'DelSq', then units include a factor of h^3 k^3 / (2pi^2)
+        P_N : estimated noise power spectrum (float or array) in mK^2 * L^3, where L is
+            self.length_unit, the length unit of self.scalar (see calc_scalar). If
+            form == 'DelSq', P_N is multiplied by k^3 / (2pi^2) and is in mK^2.
         """
         # assert scalar exists
         assert hasattr(self, "scalar"), (
@@ -254,8 +354,14 @@ class Sensitivity:
             "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
         )
 
+        Tsys = utils.to_value_in(Tsys, u.K, "Tsys", example="300 * u.K")
+        t_int = utils.to_value_in(t_int, u.s, "t_int", example="10.7 * u.s")
+        if isinstance(k, u.Quantity):
+            length_unit = getattr(self, "length_unit", conversions._LITTLEH_LENGTH)
+            k = utils.to_value_in(k, 1 / length_unit, "k")
+
         # calculate P_N
-        P_N = calc_P_N(
+        P_N = _calc_P_N(
             self.scalar,
             Tsys,
             t_int,

@@ -34,11 +34,11 @@ def uvd_dual_pol(uvd_zen_even_xx: UVData) -> UVData:
 
 class TestBuildVanillaUvpspec:
     def test_default(self) -> None:
-        """Check that build_vanilla_uvpspec returns a UVPSpec/Cosmo_Conversions pair with the cosmology attached."""
+        """Check that build_vanilla_uvpspec returns a UVPSpec/cosmology pair with the cosmology attached."""
         uvp, cosmo = testing.build_vanilla_uvpspec()
         assert isinstance(uvp, uvpspec.UVPSpec)
-        assert isinstance(cosmo, conversions.Cosmo_Conversions)
-        assert uvp.cosmo == cosmo
+        assert cosmo is conversions.DEFAULT_COSMOLOGY
+        assert uvp.cosmo is cosmo
 
     def test_with_beam(self, beam_nf_dipole: PSpecBeamUV) -> None:
         """Check that the OmegaP array on the output UVPSpec matches the supplied beam's Omegas."""

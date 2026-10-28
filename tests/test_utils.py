@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy import units as u
 from hera_cal import redcal
 from pyuvdata import UVData
 
@@ -149,19 +150,19 @@ class TestSpwRange:
             (
                 utils.spw_range_from_freqs,
                 "freq_range",
-                (98e6, 110e6),
+                (98e6, 110e6) * u.Hz,
                 "Lower bound of spectral window is below",
             ),
             (
                 utils.spw_range_from_freqs,
                 "freq_range",
-                (190e6, 202e6),
+                (190e6, 202e6) * u.Hz,
                 "Upper bound of spectral window is above",
             ),
             (
                 utils.spw_range_from_freqs,
                 "freq_range",
-                (190e6, 180e6),
+                (190e6, 180e6) * u.Hz,
                 "Upper bound of spectral window is less than the lower bound",
             ),
             (
@@ -212,10 +213,10 @@ class TestSpwRange:
             (
                 utils.spw_range_from_freqs,
                 "freq_range",
-                (110e6, 130e6),
-                [(100e6, 120e6), (120e6, 140e6), (140e6, 160e6)],
-                (98e6, 120e6),
-                (100e6, 120e6),
+                (110 * u.MHz, 130 * u.MHz),
+                [(100e6, 120e6), (120e6, 140e6), (140e6, 160e6)] * u.Hz,
+                (98e6, 120e6) * u.Hz,
+                (0.1 * u.GHz, 120 * u.MHz),
             ),
             (
                 utils.spw_range_from_redshifts,
@@ -257,7 +258,7 @@ class TestSpwRange:
     @pytest.mark.parametrize(
         "func,kwarg,range_value",
         [
-            (utils.spw_range_from_freqs, "freq_range", (100.1e6, 100.74e6)),
+            (utils.spw_range_from_freqs, "freq_range", (100.1e6, 100.74e6) * u.Hz),
             (utils.spw_range_from_redshifts, "z_range", (13.1, 13.2)),
         ],
         ids=["freqs", "redshifts"],
