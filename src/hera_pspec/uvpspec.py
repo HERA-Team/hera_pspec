@@ -47,10 +47,6 @@ ONE_STEP_SCALAR_NUM_STEPS = 2000
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
 
-# k units of the exact window function grids (see UVPSpec.window_k_unit)
-_LITTLEH_K_UNIT = cu.littleh / units.Mpc
-_MPC_K_UNIT = units.Mpc ** (-1)
-
 
 def _normalize_nested_sequence(value, arg_name, group_description):
     if not isinstance(value, (list, tuple, np.ndarray)):
@@ -1221,8 +1217,8 @@ class UVPSpec:
         astropy.units.UnitBase
         """
         if unit_helpers.is_littleh(self.norm_units):
-            return _LITTLEH_K_UNIT
-        return _MPC_K_UNIT
+            return cu.littleh / units.Mpc
+        return units.Mpc**-1
 
     def get_window_function_kgrid(self, spw):
         """
