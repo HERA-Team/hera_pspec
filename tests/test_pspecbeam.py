@@ -131,15 +131,6 @@ class TestPSpecBeamUV:
         )
         np.testing.assert_almost_equal(sclr, 71.105979715733)
 
-    def test_unrecognised_pol_raises(
-        self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
-    ) -> None:
-        """Check that a completely unrecognised pol string raises KeyError from pyuvdata."""
-        with pytest.raises(KeyError):
-            beam_nf_pstokes.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pZ"
-            )
-
     def test_wrong_basis_pol_raises(
         self, beam_nf_pstokes: pspecbeam.PSpecBeamUV
     ) -> None:
@@ -506,13 +497,6 @@ class TestPSpecBeamFromArray:
             ),
             (
                 lambda Om_P, Om_PP, freqs: dict(
-                    OmegaP={"A": Om_P}, OmegaPP={"A": Om_PP}, beam_freqs=freqs
-                ),
-                KeyError,
-                "'a'",
-            ),
-            (
-                lambda Om_P, Om_PP, freqs: dict(
                     OmegaP={"pI": Om_P}, OmegaPP={"pI": "string"}, beam_freqs=freqs
                 ),
                 TypeError,
@@ -536,7 +520,6 @@ class TestPSpecBeamFromArray:
         ids=[
             "array_omegap_dict_omegapp",
             "missing_pol_in_omegapp",
-            "unrecognized_pol_key",
             "omegapp_not_array_like",
             "omegapp_wrong_shape",
             "array_omegap_dict_omegapp_wrong_shape",
@@ -557,68 +540,62 @@ class TestPSpecBeamFromArray:
             pspecbeam.PSpecBeamFromArray(**kwargs)
 
     @pytest.mark.parametrize(
-        "build_kwargs",
+        "call,match",
         [
-            lambda Om_P, Om_PP, freqs: dict(
-                OmegaP={"foo": Om_P}, OmegaPP={"pI": Om_PP}, beam_freqs=freqs
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP={7: Om_P}, OmegaPP={"pI": Om_PP}, beam_freqs=freqs
+                ),
+                "Unrecognized polarization '7' in OmegaP.",
             ),
-            lambda Om_P, Om_PP, freqs: dict(
-                OmegaP={"pI": Om_P}, OmegaPP={"foo": Om_PP}, beam_freqs=freqs
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP={"pI": Om_P}, OmegaPP={7: Om_PP}, beam_freqs=freqs
+                ),
+                "Unrecognized polarization '7' in OmegaPP.",
             ),
-        ],
-        ids=["bad_omegap_key", "bad_omegapp_key"],
-    )
-    def test_raises_on_unrecognized_pol_in_init(
-        self,
-        gauss_beam: pspecbeam.PSpecBeamGauss,
-        build_kwargs: Callable[[np.ndarray, np.ndarray, np.ndarray], dict],
-    ) -> None:
-        """Check that an unrecognized polarization key in OmegaP/OmegaPP raises."""
-        # Raised by pyuvdata's polstr2num before pspecbeam's own "Unrecognized
-        # polarization" check is reached. Despite its docstring claiming
-        # ValueError, polstr2num does a bare dict lookup and so actually
-        # raises KeyError; confirmed consistent across pyuvdata 3.0-3.2.
-        Om_P = gauss_beam.power_beam_int()
-        Om_PP = gauss_beam.power_beam_sq_int()
-        kwargs = build_kwargs(Om_P, Om_PP, gauss_beam.beam_freqs)
-        with pytest.raises(KeyError):
-            pspecbeam.PSpecBeamFromArray(**kwargs)
-
-    @pytest.mark.parametrize(
-        "call",
-        [
-            lambda psbeam, Om_P, Om_PP: psbeam.add_pol("foo", Om_P, Om_PP),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_int("foo"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int("foo"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_int(pol="blah"),
-            lambda psbeam, Om_P, Om_PP: psbeam.power_beam_sq_int(pol="blah"),
-            lambda psbeam, Om_P, Om_PP: psbeam.add_pol(
-                pol="A", OmegaP=Om_P, OmegaPP=Om_PP
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).add_pol("rr", Om_P, Om_PP),
+                "Polarization '-1' is not valid.",
+            ),
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).power_beam_int("pQ"),
+                "OmegaP not specified for polarization",
+            ),
+            (
+                lambda Om_P, Om_PP, freqs: pspecbeam.PSpecBeamFromArray(
+                    OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=freqs
+                ).power_beam_sq_int("pQ"),
+                "OmegaPP not specified for polarization",
             ),
         ],
         ids=[
-            "add_pol_positional_foo",
-            "power_beam_int_foo",
-            "power_beam_sq_int_foo",
-            "power_beam_int_kw_blah",
-            "power_beam_sq_int_kw_blah",
-            "add_pol_kw_A",
+            "init_omegap_int_key",
+            "init_omegapp_int_key",
+            "add_pol_circular_pol",
+            "power_beam_int_missing_pol",
+            "power_beam_sq_int_missing_pol",
         ],
     )
-    def test_raises_on_invalid_pol_method_arg(
+    def test_raises_on_unavailable_pol(
         self,
         gauss_beam: pspecbeam.PSpecBeamGauss,
-        call: Callable[[pspecbeam.PSpecBeamFromArray, np.ndarray, np.ndarray], Any],
+        call: Callable[[np.ndarray, np.ndarray, np.ndarray], Any],
+        match: str,
     ) -> None:
-        """Check that invalid polarization strings/codes passed to method calls raise."""
-        # Same polstr2num KeyError as in test_raises_on_unrecognized_pol_in_init above.
+        """Check that polarizations that are not allowed, or have no beam
+        integrals stored, raise KeyError with an informative message."""
+        # Unknown pol *strings* are rejected earlier, by pyuvdata's polstr2num,
+        # so these cases use integer codes, a circular pol ("rr", code -1) that
+        # the beam does not support, or valid pols that were never added.
         Om_P = gauss_beam.power_beam_int()
         Om_PP = gauss_beam.power_beam_sq_int()
-        psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=gauss_beam.beam_freqs
-        )
-        with pytest.raises(KeyError):
-            call(psbeam, Om_P, Om_PP)
+        with pytest.raises(KeyError, match=match):
+            call(Om_P, Om_PP, gauss_beam.beam_freqs)
 
 
 class TestPSpecBeamBase:

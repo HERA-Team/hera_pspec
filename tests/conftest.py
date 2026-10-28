@@ -154,12 +154,9 @@ def uvp_exact_wfs_wbeam(
         taper="bh",
         verbose=False,
     )
-    # uvp.cosmo = conversions.Cosmo_Conversions()
     ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
 
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
-    # uvp.beam_freqs = beam_nf_dipole_wcosmo.beam_freqs
-    # uvp.OmegaP, uvp.OmegaPP = beam_nf_dipole_wcosmo.get_Omegas(uvp.polpair_array)
     uvp.check()
     return uvp
 
