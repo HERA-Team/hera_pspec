@@ -768,13 +768,14 @@ class TestSymmetricTaper:
         assert uvp2 == mutable_uvp
 
     def test_pspec_output_round_trips_through_hdf5(
-        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
+        self, synthetic_uvd: Callable[..., UVData], tmp_path: Path
     ) -> None:
+        uvd = synthetic_uvd(nfreq=16, ntimes=2, antpairs=[(0, 1), (1, 2)])
         uvp = testing.uvpspec_from_data(
-            uvd_zen_even_xx,
-            [(37, 38), (38, 39)],
-            spw_ranges=[(20, 30)],
-            beam=beam_nf_dipole,
+            uvd,
+            [(0, 1), (1, 2)],
+            spw_ranges=[(4, 14)],
+            beam=pspecbeam.PSpecBeamGauss(fwhm=0.2, beam_freqs=uvd.freq_array),
             symmetric_taper=False,
         )
         assert uvp.symmetric_taper is False

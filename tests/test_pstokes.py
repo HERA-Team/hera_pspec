@@ -1,4 +1,3 @@
-import copy
 from pathlib import Path
 
 import numpy as np
@@ -11,26 +10,58 @@ from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 
-dset1 = str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA")
-dset2 = str(DATA_PATH / "zen.all.yy.LST.1.06964.uvA")
 multipol_dset = DATA_PATH / "zen.2458116.31193.HH.uvh5"
 multipol_dset_cal = DATA_PATH / "zen.2458116.31193.HH.flagged_abs.calfits"
 
 
-@pytest.fixture()
-def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
-    uvd = copy.deepcopy(uvd_zen_all_xx)
-    uvd.vis_units = "Jy"
+@pytest.fixture(scope="module")
+def stokes_vis(synthetic_uvd) -> tuple[pyuvdata.UVData, dict[str, np.ndarray]]:
+    """Linear-polarization visibilities of a known random pseudo-Stokes sky.
+
+    Returns a 4-pol (xx, yy, xy, yx) UVData and the pseudo-Stokes data it was
+    built from. I, Q, U and V are independent random complex arrays, and
+
+        XX = I + Q,  YY = I - Q,  XY = U + iV,  YX = U - iV,
+
+    which is the inverse of the "avg" convention used in pstokes, e.g.
+    pI = (XX + YY) / 2 and pV = (-i XY + i YX) / 2. Nsamples are random and
+    differ between polarizations, and the xx and yy flags differ.
+    """
+    uvd = synthetic_uvd(
+        nfreq=24,
+        ntimes=6,
+        antpairs=[(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)],
+        pols=("xx", "yy", "xy", "yx"),
+        seed=7,
+    )
+    stokes = {
+        ps: uvd.data_array[..., k].copy()
+        for k, ps in enumerate(["pI", "pQ", "pU", "pV"])
+    }
+    i_, q_, u_, v_ = (stokes[ps] for ps in ["pI", "pQ", "pU", "pV"])
+    uvd.data_array = np.stack([i_ + q_, i_ - q_, u_ + 1j * v_, u_ - 1j * v_], axis=-1)
+    rng = np.random.default_rng(8)
+    uvd.nsample_array = rng.uniform(0.5, 3.0, size=uvd.nsample_array.shape)
+    uvd.flag_array[:, 3, 0] = True  # xx
+    uvd.flag_array[:, 7, 1] = True  # yy
     uvd.pol_convention = "avg"
-    return uvd
+    return uvd, stokes
+
+
+def _single_pol(uvd: pyuvdata.UVData, pol: str) -> pyuvdata.UVData:
+    return uvd.select(polarizations=[pol], inplace=False)
 
 
 @pytest.fixture()
-def uvd2(uvd_zen_all_yy: pyuvdata.UVData) -> pyuvdata.UVData:
-    uvd = copy.deepcopy(uvd_zen_all_yy)
-    uvd.vis_units = "Jy"
-    uvd.pol_convention = "avg"
-    return uvd
+def uvd1(stokes_vis) -> pyuvdata.UVData:
+    """The XX visibilities of stokes_vis."""
+    return _single_pol(stokes_vis[0], "xx")
+
+
+@pytest.fixture()
+def uvd2(stokes_vis) -> pyuvdata.UVData:
+    """The YY visibilities of stokes_vis."""
+    return _single_pol(stokes_vis[0], "yy")
 
 
 @pytest.fixture(scope="module")
@@ -71,7 +102,7 @@ class TestCombinePol:
         with pytest.raises(
             AssertionError, match="uvd1 must be a pyuvdata.UVData instance"
         ):
-            pstokes._combine_pol(dset1, dset2, "XX", "YY")
+            pstokes._combine_pol("xx.uvh5", "yy.uvh5", "XX", "YY")
 
     def test_raises_on_invalid_pol2(
         self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
@@ -208,6 +239,21 @@ class TestConstructPstokes:
         assert uvdS.polarization_array[0] == pstokes_num
         expected_data = 0.5 * (uvd1.data_array + weight2 * uvd2.data_array)
         assert np.allclose(uvdS.data_array, expected_data)
+
+    @pytest.mark.parametrize(
+        "pstokes_str,pstokes_num", [("pI", 1), ("pQ", 2), ("pU", 3), ("pV", 4)]
+    )
+    def test_recovers_known_stokes(
+        self, stokes_vis, pstokes_str: str, pstokes_num: int
+    ) -> None:
+        """Pseudo-Stokes visibilities formed from XX/YY/XY/YX recover the Stokes
+        parameters the linear polarizations were built from."""
+        uvd, stokes = stokes_vis
+        uvdS = pstokes.construct_pstokes(dset1=uvd, dset2=uvd, pstokes=pstokes_str)
+        np.testing.assert_array_equal(uvdS.polarization_array, [pstokes_num])
+        np.testing.assert_allclose(
+            uvdS.data_array[..., 0], stokes[pstokes_str], rtol=1e-12
+        )
 
     def test_raises_on_invalid_dset2_type(self, uvd1: pyuvdata.UVData) -> None:
         """Check that a non-UVData, non-string dset2 raises an AssertionError."""

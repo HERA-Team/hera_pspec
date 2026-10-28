@@ -89,8 +89,8 @@ class FTBeam:
                 dimensions (Nfreqs, N, N).
             - pol contains the polarisation of the beam used.
             - freq_array gives the frequency coordinates of data.
-            - mapsize is the size of the flat map the beam was projected
-                onto (in deg).
+            - mapsize is the half-width of the flat map the beam was
+                projected onto (in rad).
 
         Parameters
         ----------
@@ -107,7 +107,11 @@ class FTBeam:
             Array or list of the frequencies over which the Fourier
             transform of the beam has been computed (in Hz).
         mapsize : float
-            Size of the flat map the beam was projected onto (in deg).
+            Half-width, in radians, of the flat (square) map whose Fourier
+            transform ``data`` is, i.e. the map spans [-mapsize, mapsize]
+            along each direction (in :meth:`from_beam`, the projected beam
+            zero-padded or cropped to that size). The Fourier-space grid of
+            ``data`` then has a spacing of 1 / (2 * mapsize).
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
@@ -404,14 +408,7 @@ class FTBeam:
 
     @classmethod
     def gaussian(
-        cls,
-        freq_array,
-        widths,
-        pol,
-        mapsize=1.0,
-        npix=301,
-        cosmo=conversions.Cosmo_Conversions(),
-        **kwargs,
+        cls, freq_array, widths, pol, mapsize=1.0, npix=301, cosmo=None, **kwargs
     ):
         """
         Initiliase a Gaussian beam on a range of frequencies,
@@ -436,9 +433,17 @@ class FTBeam:
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
         cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+            Deprecated and unused: the Fourier transform of the beam does not
+            depend on cosmology. Passing a value emits a DeprecationWarning;
+            the argument will be removed in a future version.
         """
+        if cosmo is not None:
+            warnings.warn(
+                "The cosmo argument of FTBeam.gaussian is unused and will be "
+                "removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Frequency-related parameters
         freq_array = np.array(freq_array)
