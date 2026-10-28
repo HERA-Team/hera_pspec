@@ -47,7 +47,11 @@ def cosmo_attrs_for_writing(cosmo):
     -------
     cosmo_params : str
         ``str(conversions.params_from_cosmology(cosmo))``, the v0.x dict
-        string of the ``cosmo`` attribute.
+        string of the ``cosmo`` attribute. It has no radiation term, so for
+        a cosmology with radiation (such as the default ``Planck18``) v0.x
+        readers get an approximation of it (see
+        ``conversions.params_from_cosmology``); readers of this version use
+        ``cosmo_yaml``.
     cosmo_yaml : str
         ``cosmo.to_format("yaml")``.
     """

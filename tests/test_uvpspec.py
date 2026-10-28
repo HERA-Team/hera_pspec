@@ -839,12 +839,15 @@ class TestSelect:
             "filter_factors": [1e-9],
         }
         r_params = {bl + ("xx",): rp for bl in bls}
+        # the data value checked below is from v0.x, with its default cosmology
+        beam = copy.deepcopy(beam_nf_dipole)
+        beam.cosmo = conversions.LEGACY_COSMOLOGY
 
         uvp1 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
             bls,
             spw_ranges=[(20, 30), (60, 90)],
-            beam=beam_nf_dipole,
+            beam=beam,
             r_params=r_params,
         )
         uvp2 = uvp1.select(spws=0, inplace=False)
@@ -1797,6 +1800,8 @@ def test_compute_scalar(
     vanilla_uvp: uvpspec.UVPSpec, vanilla_uvp_with_beam: uvpspec.UVPSpec
 ) -> None:
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    # the reference value is from v0.x, with its default cosmology
+    uvp.cosmo = conversions.LEGACY_COSMOLOGY
     # test basic execution
     s = uvp.compute_scalar(0, ("xx", "xx"), num_steps=1000, noise_scalar=False)
     assert s.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
@@ -1958,15 +1963,18 @@ def test_cosmo_conversions_attribute_deprecated(vanilla_uvp: uvpspec.UVPSpec) ->
     """A Cosmo_Conversions assigned to uvp.cosmo still works, with a warning,
     and check() converts it to astropy."""
     uvp = copy.deepcopy(vanilla_uvp)
+    # Cosmo_Conversions() is the v0.x default cosmology
+    expected = copy.deepcopy(vanilla_uvp)
+    expected.cosmo = conversions.LEGACY_COSMOLOGY
     with pytest.warns(DeprecationWarning):
         uvp.cosmo = conversions.Cosmo_Conversions()
     with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
         kperps = uvp.get_kperps(0)
-    np.testing.assert_allclose(kperps, vanilla_uvp.get_kperps(0), rtol=1e-15)
+    np.testing.assert_allclose(kperps, expected.get_kperps(0), rtol=1e-15)
     with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
         uvp.check()
     assert isinstance(uvp.cosmo, FLRW)
-    assert uvp == vanilla_uvp
+    assert uvp == expected
     uvp.cosmo = [1.0]
     with pytest.raises(AssertionError, match="cosmo"):
         uvp.check()
@@ -1974,14 +1982,17 @@ def test_cosmo_conversions_attribute_deprecated(vanilla_uvp: uvpspec.UVPSpec) ->
 
 def test_eq_compares_cosmology_parameters(vanilla_uvp: uvpspec.UVPSpec) -> None:
     """UVPSpec equality compares the cosmological parameters, not the name."""
-    uvp = copy.deepcopy(vanilla_uvp)
+    # a cosmology without radiation, which its params dict represents exactly
+    legacy = copy.deepcopy(vanilla_uvp)
+    legacy.cosmo = conversions.LEGACY_COSMOLOGY
+    uvp = copy.deepcopy(legacy)
     uvp.cosmo = conversions.cosmology_from_params(
-        conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+        conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
     )
-    assert uvp.cosmo.name != conversions.DEFAULT_COSMOLOGY.name
-    assert uvp == vanilla_uvp
+    assert uvp.cosmo.name != conversions.LEGACY_COSMOLOGY.name
+    assert uvp == legacy
     uvp.cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7)
-    assert uvp != vanilla_uvp
+    assert uvp != legacy
 
 
 @pytest.fixture

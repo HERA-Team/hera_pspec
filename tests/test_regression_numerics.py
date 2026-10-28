@@ -79,7 +79,8 @@ def test_legacy_uvp_file_metadata() -> None:
     assert uvp.vis_unit == unit_helpers.uncalib
     assert uvp.units == unit_helpers.uncalib**2 * units.Mpc**3 / cu.littleh**3
     assert isinstance(uvp.cosmo, FLRW)
-    assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+    # the file stores the v0.x default cosmology
+    assert uvp.cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
     params = conversions.params_from_cosmology(uvp.cosmo)
     assert sorted(params) == ["H0", "Om_L", "Om_M", "Om_b", "Om_c", "Om_k"]
     np.testing.assert_allclose(

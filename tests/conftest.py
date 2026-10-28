@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from astropy.cosmology import FLRW, LambdaCDM
+from astropy.cosmology import FLRW
 from astropy.utils import iers
 from pyuvdata import UVData
 
@@ -31,8 +31,8 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session")
 def cosmo() -> FLRW:
-    """The default cosmology, as a separate (equal) astropy object."""
-    return LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.6844, Ob0=0.04911)
+    """The default cosmology (Planck18), as a separate (equal) astropy object."""
+    return copy.deepcopy(conversions.DEFAULT_COSMOLOGY)
 
 
 @pytest.fixture(scope="session")

@@ -11,7 +11,8 @@ h\ :sup:`-1` Mpc (``u.Mpc / cu.littleh``, with
 from v0.x.
 
 Cosmologies are ``astropy.cosmology`` objects. The default is
-:data:`hera_pspec.conversions.DEFAULT_COSMOLOGY`.
+:data:`hera_pspec.conversions.DEFAULT_COSMOLOGY`, astropy's ``Planck18``;
+:data:`hera_pspec.conversions.LEGACY_COSMOLOGY` is the default of v0.x.
 
 .. code-block:: python
 
@@ -44,6 +45,9 @@ The ``conversions`` module
 --------------------------
 
 .. autodata:: hera_pspec.conversions.DEFAULT_COSMOLOGY
+  :no-value:
+
+.. autodata:: hera_pspec.conversions.LEGACY_COSMOLOGY
   :no-value:
 
 .. autodata:: hera_pspec.conversions.F21

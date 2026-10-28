@@ -27,7 +27,8 @@ class TestSensitivity:
     def test_set_cosmology(self) -> None:
         """Check that set_cosmology accepts an astropy cosmology, its params dict and its stringified params."""
         sense = noise.Sensitivity()
-        C = conversions.DEFAULT_COSMOLOGY
+        # a cosmology without radiation, which its params dict represents exactly
+        C = conversions.LEGACY_COSMOLOGY
         sense.set_cosmology(C)
         assert sense.cosmo is C
         params = conversions.params_from_cosmology(C)
@@ -81,8 +82,12 @@ class TestSensitivity:
         assert np.isclose(freqs, sense.subband).all()
         assert sense.pol == "pI"
 
-    def test_calc_p_n(self, sense: noise.Sensitivity) -> None:
+    def test_calc_p_n(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that calc_P_N returns a scalar P_N in Pk form and a properly shaped, smaller DelSq array."""
+        # the reference P_N is from v0.x, with its default cosmology
+        sense = noise.Sensitivity(
+            beam=copy.deepcopy(beam_nf_pstokes), cosmo=conversions.LEGACY_COSMOLOGY
+        )
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
         sense.calc_scalar(
             freqs * u.Hz, "pI", num_steps=5000, length_unit=u.Mpc / cu.littleh

@@ -22,6 +22,16 @@ UPPER_FREQ = 128.0 * 10**6 * u.Hz
 NUM_FREQS = 20
 
 
+@pytest.fixture(scope="module")
+def beam_nf_pstokes_legacy(
+    beam_nf_pstokes: pspecbeam.PSpecBeamUV,
+) -> pspecbeam.PSpecBeamUV:
+    """beam_nf_pstokes with the v0.x default cosmology, for the v0.x reference scalars."""
+    beam = copy.deepcopy(beam_nf_pstokes)
+    beam.cosmo = conversions.LEGACY_COSMOLOGY
+    return beam
+
+
 @pytest.fixture
 def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     """An efield-type beam with beam_type force-set to 'power' so later validation steps in beam_normalized_response can be reached."""
@@ -59,9 +69,9 @@ class TestPSpecBeamUV:
         assert Om_p.ndim == 1
         assert Om_pp.ndim == 1
 
-    def test_scalar_pI(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_scalar_pI(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar for pI against a precomputed reference value."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
+        scalar = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 568847837.72586381 - 1.0) <= 1e-4
@@ -97,9 +107,9 @@ class TestPSpecBeamUV:
         assert np.isfinite(scalar) and scalar > 0
         assert not np.isclose(scalar, scalar_pI, rtol=1e-3)
 
-    def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_taper(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
+        scalar = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
@@ -127,9 +137,9 @@ class TestPSpecBeamUV:
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
             beam_nf_pstokes.Jy_to_mK(np.array([1]))
 
-    def test_noise_scalar(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_noise_scalar(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with noise_scalar=True against a precomputed reference value."""
-        sclr = beam_nf_pstokes.compute_pspec_scalar(
+        sclr = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ,
             UPPER_FREQ,
             NUM_FREQS,
@@ -284,6 +294,16 @@ def gauss_beam() -> pspecbeam.PSpecBeamGauss:
     )
 
 
+@pytest.fixture(scope="module")
+def gauss_beam_legacy() -> pspecbeam.PSpecBeamGauss:
+    """gauss_beam with the v0.x default cosmology, for the v0.x reference scalars."""
+    return pspecbeam.PSpecBeamGauss(
+        0.8 * u.rad,
+        np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz,
+        cosmo=conversions.LEGACY_COSMOLOGY,
+    )
+
+
 class TestPSpecBeamGauss:
     def test_omegas(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check power_beam_int/power_beam_sq_int against reference values and that they're frequency-independent."""
@@ -296,9 +316,9 @@ class TestPSpecBeamGauss:
         assert Om_pp[4] == 0.36258881134617554
         assert Om_pp[4] == Om_pp[0]
 
-    def test_scalar(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+    def test_scalar(self, gauss_beam_legacy: pspecbeam.PSpecBeamGauss) -> None:
         """Check compute_pspec_scalar against a precomputed reference value."""
-        scalar = gauss_beam.compute_pspec_scalar(
+        scalar = gauss_beam_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 6392750120.8657961 - 1.0) <= 1e-4
@@ -322,9 +342,9 @@ class TestPSpecBeamGauss:
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
-    def test_taper(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+    def test_taper(self, gauss_beam_legacy: pspecbeam.PSpecBeamGauss) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = gauss_beam.compute_pspec_scalar(
+        scalar = gauss_beam_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
@@ -442,6 +462,8 @@ class TestPSpecBeamFromArray:
             OmegaP={"pI": Om_P, "pQ": Om_P},
             OmegaPP={"pI": Om_PP, "pQ": Om_PP},
             beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            # the reference scalar below is from v0.x, with its default cosmology
+            cosmo=conversions.LEGACY_COSMOLOGY,
         )
         assert len(str(psbeam)) > 0
         # polarizations are recognized for the dict-specified beam
@@ -481,6 +503,7 @@ class TestPSpecBeamFromArray:
             OmegaP=gauss_beam.power_beam_int() * u.sr,
             OmegaPP=gauss_beam.power_beam_sq_int() * u.sr,
             beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            cosmo=conversions.LEGACY_COSMOLOGY,
         )
         scalar = psbeam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
@@ -685,7 +708,7 @@ def test_vectorised_x2y_matches_loop() -> None:
     for little_h in (True, False):
         length_unit = conversions.length_unit_from_little_h(little_h)
         new = conversions.X2Y(
-            redshifts, conversions.DEFAULT_COSMOLOGY, length_unit
+            redshifts, conversions.LEGACY_COSMOLOGY, length_unit
         ).to_value(length_unit**3 / (u.sr * u.Hz))
         loop = np.array([old.X2Y(z, little_h=little_h) for z in redshifts])
         np.testing.assert_allclose(new, loop, rtol=1e-14)

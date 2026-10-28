@@ -165,7 +165,7 @@ COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
 
 
 # Defaults of the --cosmo values, in COSMO_PARAM_ORDER (the defaults of the
-# former Cosmo_Conversions constructor; they give conversions.DEFAULT_COSMOLOGY).
+# former Cosmo_Conversions constructor; they give conversions.LEGACY_COSMOLOGY).
 _COSMO_PARAM_DEFAULTS = {
     "Om_L": 0.68440,
     "Om_b": 0.04911,
@@ -201,12 +201,13 @@ def _cosmology_from_values(values):
     return conversions.cosmology_from_params(params)
 
 
-DEFAULT_COSMOLOGY_NAME = "hera_pspec_default"
+# Name of conversions.LEGACY_COSMOLOGY, the default cosmology of hera_pspec v0.x
+LEGACY_COSMOLOGY_NAME = "hera_pspec_default"
 
 
 def _cosmology_names() -> tuple[str, ...]:
     """Names accepted by ``pspec run --cosmology``."""
-    return (DEFAULT_COSMOLOGY_NAME, *realizations.available)
+    return (LEGACY_COSMOLOGY_NAME, *realizations.available)
 
 
 def _validate_cosmology_name(type_, value) -> None:
@@ -219,8 +220,8 @@ def _validate_cosmology_name(type_, value) -> None:
 
 def _cosmology_from_name(name: str):
     """Return the astropy cosmology named by ``pspec run --cosmology``."""
-    if name == DEFAULT_COSMOLOGY_NAME:
-        return conversions.DEFAULT_COSMOLOGY
+    if name == LEGACY_COSMOLOGY_NAME:
+        return conversions.LEGACY_COSMOLOGY
     return getattr(realizations, name)
 
 
@@ -267,7 +268,8 @@ def _cosmology_from_parameters(H0, Om0, Ode0=None, Ob0=None, Tcmb0=None):
     Build the astropy cosmology given by the --h0/--om0/... options.
 
     ``LambdaCDM`` when ``Ode0`` is given, else ``FlatLambdaCDM``. ``Tcmb0``
-    defaults to 0 (no radiation), as in hera_pspec's default cosmology.
+    defaults to 0 (no radiation), as in the v0.x default cosmology
+    (``conversions.LEGACY_COSMOLOGY``).
     """
     kwargs = {"H0": H0, "Om0": Om0, "Tcmb0": 0.0 if Tcmb0 is None else Tcmb0}
     if Ob0 is not None:
@@ -324,8 +326,9 @@ def run(
             help=(
                 "Named cosmology: an astropy realization "
                 f"({', '.join(realizations.available)}) or "
-                f"{DEFAULT_COSMOLOGY_NAME} (hera_pspec's default LambdaCDM). "
-                "Default is the beam's own cosmology."
+                f"{LEGACY_COSMOLOGY_NAME} (the LambdaCDM default of hera_pspec "
+                "v0.x). Default is the beam's own cosmology (Planck18 unless "
+                "the beam sets another)."
             ),
             validator=_validate_cosmology_name,
         ),

@@ -8,7 +8,9 @@ tapers, `little_h`, Jy -> mK, `exact_norm`, exact windows and stored
 covariances; the beam scalars and `Jy_to_mK` for each beam class; `UVWindow`
 cylindrical and spherical window functions; `grouping.spherical_average` and
 `grouping.spherical_wf_from_uvp`; the noise helpers; and a read of the 2019
-file `src/hera_pspec/data/test_uvp.h5`.
+file `src/hera_pspec/data/test_uvp.h5`. The cases that use the default
+cosmology (all but `legacy_test_uvp_h5` and `noise_calc_P_N`) were
+regenerated when the default became `astropy.cosmology.Planck18`.
 
 The inputs for every case are built in `tests/regression_cases.py`. The tests
 and the regeneration script both import it, so a fixture is always produced by

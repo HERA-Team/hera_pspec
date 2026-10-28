@@ -14,7 +14,7 @@ import astropy.units as u
 import numpy as np
 import scipy.integrate as integrate
 from astropy import constants
-from astropy.cosmology import FLRW, LambdaCDM
+from astropy.cosmology import FLRW, LambdaCDM, Planck18
 
 
 class units:
@@ -65,17 +65,30 @@ F21 = units.f21 * u.Hz
 """Rest frequency of the 21cm line, as an ``astropy.units.Quantity`` in Hz."""
 
 
-DEFAULT_COSMOLOGY = LambdaCDM(
+DEFAULT_COSMOLOGY = Planck18
+"""
+Default cosmology of hera_pspec: ``astropy.cosmology.Planck18``.
+
+A flat ``FlatLambdaCDM`` with H0 = 67.66 km/s/Mpc, Om0 = 0.30966 and
+Ob0 = 0.04897 (Planck 2018 TT,TE,EE+lowE+lensing+BAO, Table 2 of
+https://doi.org/10.1051/0004-6361/201833910), with radiation
+(Tcmb0 = 2.7255 K, Neff = 3.046) and one massive neutrino of 0.06 eV.
+The default of hera_pspec v0.x is :data:`LEGACY_COSMOLOGY`.
+"""
+
+LEGACY_COSMOLOGY = LambdaCDM(
     H0=67.27, Om0=0.31353, Ode0=0.6844, Ob0=0.04911, name="hera_pspec_default"
 )
 """
-Default cosmology of hera_pspec, as an ``astropy.cosmology.LambdaCDM``.
+Default cosmology of hera_pspec v0.x, as an ``astropy.cosmology.LambdaCDM``.
 
 Same parameters as ``Cosmo_Conversions()``: Planck 2015 TT,TE,EE+lowP
 (Table 4 of https://doi.org/10.1051/0004-6361/201525830) with
 H0 = 67.27 km/s/Mpc, Om0 = 0.31353, Ode0 = 0.6844 and Ob0 = 0.04911.
 ``Tcmb0`` is 0, so there is no radiation term, and the model is slightly
-open (Ok0 = 1 - Om0 - Ode0 = 0.00207). This is not ``Planck18``.
+open (Ok0 = 1 - Om0 - Ode0 = 0.00207). Pass it as ``cosmo`` (or
+``pspec run --cosmology hera_pspec_default``) to reproduce results of
+hera_pspec v0.x.
 """
 
 _LITTLEH_LENGTH = u.Mpc / cu.littleh
@@ -152,6 +165,12 @@ def params_from_cosmology(cosmo):
     cosmo : astropy.cosmology.FLRW
         Cosmology. Only ``H0``, ``Om0``, ``Ode0`` and ``Ob0`` are read, so the
         dark energy equation of state and any radiation are not represented.
+        For a cosmology with radiation, such as ``Planck18`` (the default),
+        ``Om_k`` then holds the radiation density (0.0015 for ``Planck18``),
+        and the ``LambdaCDM`` rebuilt from the dictionary
+        (:func:`cosmology_from_params`, or hera_pspec v0.x) treats it as
+        curvature: for ``Planck18`` its distances differ by 0.2-0.4% and
+        ``X2Y`` by 0.7-1% at z = 5-25.
 
     Returns
     -------

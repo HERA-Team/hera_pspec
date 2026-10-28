@@ -347,7 +347,7 @@ def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
 
 
 def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
-    """Omitted trailing --cosmo values give the default cosmology's parameters."""
+    """Omitted trailing --cosmo values give the v0.x default cosmology's parameters."""
     captured = {}
 
     def fake_pspec_run(dsets, filename, **kwargs):
@@ -360,9 +360,9 @@ def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
         )
     assert result.exit_code == 0, result.output
     cosmo = captured["cosmo"]
-    assert cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+    assert cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
     assert conversions.params_from_cosmology(cosmo) == (
-        conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+        conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
     )
 
 
@@ -438,7 +438,7 @@ def test_run_cosmology_hera_pspec_default(monkeypatch, tmp_path):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert captured["cosmo"] is conversions.DEFAULT_COSMOLOGY
+    assert captured["cosmo"] is conversions.LEGACY_COSMOLOGY
 
 
 def test_run_cosmology_unknown_name_lists_available(monkeypatch, tmp_path):
@@ -489,9 +489,9 @@ def test_run_cosmology_parameters_without_ode0_are_flat(monkeypatch, tmp_path):
 
 
 def test_run_cosmology_parameters_match_default(monkeypatch, tmp_path):
-    """The default cosmology's parameters rebuild the default cosmology."""
+    """The v0.x default cosmology's parameters rebuild it."""
     captured = _capture_pspec_run(monkeypatch)
-    default = conversions.DEFAULT_COSMOLOGY
+    default = conversions.LEGACY_COSMOLOGY
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
         + ["--h0", str(default.H0.to_value(units.km / units.s / units.Mpc))]

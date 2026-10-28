@@ -6,6 +6,9 @@ read them with the current code and compare against the same objects rebuilt
 in memory with the builders below, so a reader change that breaks old files is
 caught. ``tests/data/regenerate_legacy_fixtures.py`` uses the same builders;
 see ``tests/data/legacy/README.md`` before running it.
+
+The builders use ``conversions.LEGACY_COSMOLOGY``, the default cosmology of
+hera_pspec v0.x that the files were written with.
 """
 
 import copy
@@ -14,7 +17,15 @@ from pathlib import Path
 import numpy as np
 from astropy import units
 
-from hera_pspec import PSpecContainer, PSpecData, UVPSpec, testing, utils, uvwindow
+from hera_pspec import (
+    PSpecContainer,
+    PSpecData,
+    UVPSpec,
+    conversions,
+    testing,
+    utils,
+    uvwindow,
+)
 from tests.regression_cases import FT_BEAM_FILE, FT_BEAM_ROOT, _read_uvh5, dipole_beam
 
 LEGACY_DIR = Path(__file__).parent / "data" / "legacy"
@@ -41,9 +52,9 @@ def build_uvp_exact_windows_cov() -> UVPSpec:
     """pspec() with exact window functions and an empirical covariance."""
     uvd = copy.deepcopy(_read_uvh5("zen.2458116.31939.HH.uvh5"))
     uvd.select(times=np.unique(uvd.time_array)[:1])
-    ds = PSpecData(
-        dsets=[uvd, copy.deepcopy(uvd)], wgts=[None, None], beam=dipole_beam()
-    )
+    beam = dipole_beam()
+    beam.cosmo = conversions.LEGACY_COSMOLOGY
+    ds = PSpecData(dsets=[uvd, copy.deepcopy(uvd)], wgts=[None, None], beam=beam)
     bls1, bls2, _ = utils.construct_blpairs(
         uvd.get_antpairs()[1:], exclude_permutations=False, exclude_auto_bls=True
     )
@@ -65,6 +76,7 @@ def build_uvp_exact_windows_cov() -> UVPSpec:
 def build_uvp_plain() -> UVPSpec:
     """The vanilla UVPSpec (with beam metadata) without covariance or windows."""
     uvp, _ = testing.build_vanilla_uvpspec(beam=dipole_beam(), Ndlys=10)
+    uvp.cosmo = conversions.LEGACY_COSMOLOGY
     del uvp.cov_array_real
     del uvp.cov_array_imag
     del uvp.window_function_array
@@ -95,8 +107,13 @@ def build_uvwindow() -> uvwindow.UVWindow:
     ftbeam = uvwindow.FTBeam.from_file(
         ftfile=FT_BEAM_FILE, freq_array=bandwidth[UVWINDOW_CHANNELS] * units.Hz
     )
-    # no k unit argument, so v0.x code (little_h=True default) builds the same
-    return uvwindow.UVWindow(ftbeam_obj=ftbeam, taper="blackman-harris", verbose=False)
+    # default little_h=True, as in v0.x
+    return uvwindow.UVWindow(
+        ftbeam_obj=ftbeam,
+        taper="blackman-harris",
+        cosmo=conversions.LEGACY_COSMOLOGY,
+        verbose=False,
+    )
 
 
 def write_container(path: Path = CONTAINER_FILE) -> None:

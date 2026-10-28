@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import scipy.integrate as integrate
 from astropy import constants
-from astropy.cosmology import FlatLambdaCDM, LambdaCDM, wCDM
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM, Planck18, wCDM
 
 from hera_pspec import conversions
 
@@ -294,9 +294,13 @@ class TestAstropyBackend:
         with pytest.raises(ValueError, match="Om_k"):
             cosmo.to_astropy()
 
-    def test_default_cosmology(self) -> None:
-        """Check DEFAULT_COSMOLOGY matches Cosmo_Conversions() defaults."""
-        default = conversions.DEFAULT_COSMOLOGY
+    def test_default_cosmology_is_planck18(self) -> None:
+        """Check DEFAULT_COSMOLOGY is astropy's Planck18 itself."""
+        assert conversions.DEFAULT_COSMOLOGY is Planck18
+
+    def test_legacy_cosmology(self) -> None:
+        """Check LEGACY_COSMOLOGY matches Cosmo_Conversions() defaults."""
+        default = conversions.LEGACY_COSMOLOGY
         cosmo = _cosmo_conversions()
         assert default.Tcmb0.value == 0
         np.testing.assert_allclose(default.Ok0, 0.00207, rtol=1e-10)
@@ -312,7 +316,9 @@ class TestAstropyBackend:
                 getattr(cosmo, method)(z, little_h=False),
                 rtol=1e-12,
             )
-        np.testing.assert_allclose(conversions.X2Y(z).value, cosmo.X2Y(z), rtol=1e-12)
+        np.testing.assert_allclose(
+            conversions.X2Y(z, default).value, cosmo.X2Y(z), rtol=1e-12
+        )
 
     @pytest.mark.parametrize("name", list(ASTROPY_COSMO_PARAMS))
     def test_astropy_round_trip(self, name) -> None:
@@ -329,9 +335,9 @@ class TestAstropyBackend:
         for key, value in original.items():
             np.testing.assert_allclose(params[key], value, rtol=1e-12, atol=1e-15)
 
-    def test_from_astropy_default(self) -> None:
-        """Check DEFAULT_COSMOLOGY converts to Cosmo_Conversions()."""
-        new = _from_astropy(conversions.DEFAULT_COSMOLOGY)
+    def test_from_astropy_legacy(self) -> None:
+        """Check LEGACY_COSMOLOGY converts to Cosmo_Conversions()."""
+        new = _from_astropy(conversions.LEGACY_COSMOLOGY)
         for key, value in _cosmo_conversions().get_params().items():
             np.testing.assert_allclose(new.get_params()[key], value, rtol=1e-12)
 
@@ -412,9 +418,9 @@ class TestAstropyCosmologyObjects:
         assert "astropy.cosmology" in message
         assert "DEFAULT_COSMOLOGY" in message
 
-    def test_params_from_default_cosmology(self) -> None:
-        """params_from_cosmology(DEFAULT_COSMOLOGY) is the old default dict."""
-        params = conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+    def test_params_from_legacy_cosmology(self) -> None:
+        """params_from_cosmology(LEGACY_COSMOLOGY) is the old default dict."""
+        params = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
         old = _cosmo_conversions().get_params()
         assert params == old
         assert list(params) == list(old)
@@ -450,12 +456,33 @@ class TestAstropyCosmologyObjects:
 
     def test_as_astropy_cosmology_dict(self) -> None:
         """A parameter dict gives one shared, equivalent astropy object."""
-        params = conversions.params_from_cosmology(conversions.DEFAULT_COSMOLOGY)
+        params = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
         first = conversions.as_astropy_cosmology(params)
         second = conversions.as_astropy_cosmology(dict(params))
         assert isinstance(first, LambdaCDM)
         assert first is second
-        assert first.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert first.is_equivalent(conversions.LEGACY_COSMOLOGY)
+
+    def test_params_from_planck18_have_no_radiation(self) -> None:
+        """The dict of Planck18 keeps its parameters but not its radiation."""
+        params = conversions.params_from_cosmology(Planck18)
+        assert params["H0"] == 67.66
+        assert params["Om_M"] == Planck18.Om0
+        assert params["Om_L"] == Planck18.Ode0
+        assert params["Om_b"] == Planck18.Ob0
+        # the radiation density ends up in Om_k
+        np.testing.assert_allclose(
+            params["Om_k"], Planck18.Ogamma0 + Planck18.Onu0, rtol=1e-12
+        )
+        rebuilt = conversions.cosmology_from_params(params)
+        assert rebuilt.Tcmb0.value == 0
+        assert not rebuilt.is_equivalent(Planck18)
+        # the approximation documented in params_from_cosmology
+        z = np.linspace(5.0, 25.0, 41)
+        ratio = rebuilt.comoving_transverse_distance(z) / (
+            Planck18.comoving_transverse_distance(z)
+        )
+        assert np.all(np.abs(ratio.value - 1) < 4e-3)
 
     def test_as_astropy_cosmology_cosmo_conversions(self) -> None:
         """A Cosmo_Conversions is converted with a DeprecationWarning."""
@@ -536,7 +563,7 @@ class TestRedshiftCache:
 
     def test_equal_cosmologies_share_entries(self) -> None:
         conversions.bl_to_kperp.cache_clear()
-        first = conversions.bl_to_kperp(8.0, conversions.DEFAULT_COSMOLOGY)
+        first = conversions.bl_to_kperp(8.0, conversions.LEGACY_COSMOLOGY)
         same = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.6844, Ob0=0.04911, name="x")
         assert conversions.bl_to_kperp(8.0, same) == first
         other = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7)

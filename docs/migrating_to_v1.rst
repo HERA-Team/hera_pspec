@@ -55,8 +55,15 @@ Breaking changes
   and ``UVWindow.check_kunits`` returns the converted Quantity.
 * ``UVPSpec.get_param_unit`` returns ``None`` for ``window_function_kperp`` and
   ``window_function_kpara``; use ``UVPSpec.window_k_unit()`` for these.
-* Non-flat cosmologies work as before (the default is slightly open). What
-  no longer works is giving ``Om_k`` separately with a value that differs from
+* The default cosmology is ``astropy.cosmology.Planck18`` (see `Cosmology`_).
+  In v0.x it was a Planck 2015 ``LambdaCDM`` without radiation, now
+  ``conversions.LEGACY_COSMOLOGY``. Results computed with the default move
+  by about a per cent: at z = 8, ``X2Y`` and the power spectra change by about
+  +0.65% in h⁻¹ Mpc units and -1.1% in Mpc units, and k by 0.1-0.5%. Pass
+  ``cosmo=hp.conversions.LEGACY_COSMOLOGY`` (or
+  ``pspec run --cosmology hera_pspec_default``) to reproduce v0.x numbers.
+* Non-flat cosmologies work as before (``LEGACY_COSMOLOGY`` is slightly
+  open). What no longer works is giving ``Om_k`` separately with a value that differs from
   ``1 - Om_L - Om_M``, which ``Cosmo_Conversions`` allowed. Astropy derives the
   curvature from ``Om0`` and ``Ode0``, so it cannot represent such a model.
 * Physical constants come from ``astropy.constants`` (CODATA 2018, was 2014).
@@ -239,11 +246,15 @@ Cosmology
 ---------
 
 Cosmologies are ``astropy.cosmology`` objects. Pass any of them (for example
-``astropy.cosmology.Planck18``) wherever a ``cosmo`` argument is taken. The
-default is ``hera_pspec.conversions.DEFAULT_COSMOLOGY``: the same model as the
-old ``Cosmo_Conversions()``, a ``LambdaCDM`` with H0 = 67.27, Om0 = 0.31353,
-Ode0 = 0.6844 and Tcmb0 = 0 (no radiation). It is slightly open
-(Ok0 = 0.00207) and it is **not** Planck18.
+``astropy.cosmology.WMAP9``) wherever a ``cosmo`` argument is taken. The
+default, ``hera_pspec.conversions.DEFAULT_COSMOLOGY``, is
+``astropy.cosmology.Planck18``: a flat ``FlatLambdaCDM`` with H0 = 67.66,
+Om0 = 0.30966, radiation (Tcmb0 = 2.7255 K) and a massive neutrino.
+
+The v0.x default, the model of ``Cosmo_Conversions()``, is
+``hera_pspec.conversions.LEGACY_COSMOLOGY``: a ``LambdaCDM`` with H0 = 67.27,
+Om0 = 0.31353, Ode0 = 0.6844 and Tcmb0 = 0 (no radiation), slightly open
+(Ok0 = 0.00207). Use it to reproduce results of v0.x.
 
 .. code-block:: python
 
@@ -256,15 +267,14 @@ Ode0 = 0.6844 and Tcmb0 = 0 (no radiation). It is slightly open
 .. code-block:: python
 
   # v1.0
-  cosmo = hp.conversions.DEFAULT_COSMOLOGY.clone(H0=70.0)
+  cosmo = hp.conversions.LEGACY_COSMOLOGY.clone(H0=70.0)
   z = hp.conversions.f2z(150 * u.MHz)
   x2y = hp.conversions.X2Y(z, cosmo, u.Mpc / cu.littleh)   # Mpc3 / (Hz sr littleh3)
   dc = cosmo.comoving_distance(z)                           # Mpc
 
-  from astropy.cosmology import Planck18
-
-  beam_planck = hp.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"),
-                               cosmo=Planck18)
+  # the v0.x default cosmology
+  beam_v0 = hp.PSpecBeamUV(os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits"),
+                           cosmo=hp.conversions.LEGACY_COSMOLOGY)
 
 The 21 cm helpers are module functions of ``hera_pspec.conversions`` that take
 a cosmology and a length unit and return Quantities: ``f2z``, ``z2f``,
@@ -503,6 +513,11 @@ astropy object.
 Files written by v1.0 carry a format version (``uvpspec_version = "2"``),
 units on each dataset and the cosmology as astropy YAML (``cosmo_yaml``).
 They also keep the old ``cosmo`` dictionary, so v0.x can still read them.
+The dictionary has no radiation term, so v0.x reads a cosmology with
+radiation, such as the default Planck18, as a ``LambdaCDM`` with the
+radiation density taken as curvature (Om_k = 0.0015 for Planck18): its
+distances are 0.2-0.4% off and ``X2Y`` 0.7-1% off at z = 5-25. v1.0 reads
+``cosmo_yaml`` and gets the cosmology exactly.
 
 
 The ``pspec run`` command
@@ -513,7 +528,7 @@ normalization:
 
 .. code-block:: console
 
-  # a named astropy cosmology (or hera_pspec_default)
+  # a named astropy cosmology, or hera_pspec_default for the v0.x default
   pspec run even.uvh5 odd.uvh5 -o planck18.h5 --beam beam.beamfits --cosmology Planck18
 
   # parameters: --ode0 gives a LambdaCDM, without it the model is flat

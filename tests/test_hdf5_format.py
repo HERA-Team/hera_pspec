@@ -21,7 +21,7 @@ from tests import legacy_fixtures as lf
 DATA_PATH = Path(DATA_PATH)
 
 # Cosmo_Conversions().get_params() of hera_pspec v0.x, i.e. the "cosmo"
-# attribute of files written with the default cosmology.
+# attribute of files written with its default cosmology (LEGACY_COSMOLOGY).
 OLD_DEFAULT_COSMO_PARAMS = {
     "Om_L": 0.6844,
     "Om_b": 0.04911,
@@ -161,17 +161,29 @@ class TestWriteVersion2:
         with h5py.File(path, "r") as f:
             cosmo_params = f.attrs["cosmo"]
             cosmo_yaml = f.attrs["cosmo_yaml"]
-        # the dict string v0.x reads with ast.literal_eval is unchanged
-        assert cosmo_params == str(OLD_DEFAULT_COSMO_PARAMS)
+        # the dict string v0.x reads with ast.literal_eval
         assert ast.literal_eval(cosmo_params) == conversions.params_from_cosmology(
             vanilla_uvp.cosmo
         )
         cosmology = Cosmology.from_format(cosmo_yaml, format="yaml")
         assert cosmology == vanilla_uvp.cosmo
         assert cosmology == conversions.DEFAULT_COSMOLOGY
+        # read from cosmo_yaml: Planck18 exactly, with its radiation, and the
+        # dict (which has none) still passes the consistency check
         read_cosmo = _read(path).cosmo
         assert isinstance(read_cosmo, FLRW)
         assert read_cosmo == conversions.DEFAULT_COSMOLOGY
+
+    def test_legacy_cosmo_attr_unchanged(
+        self, vanilla_uvp: UVPSpec, tmp_path: Path
+    ) -> None:
+        # files written with the v0.x default keep its exact "cosmo" string
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.cosmo = conversions.LEGACY_COSMOLOGY
+        path = _write(uvp, tmp_path / "uvp.h5")
+        with h5py.File(path, "r") as f:
+            assert f.attrs["cosmo"] == str(OLD_DEFAULT_COSMO_PARAMS)
+        assert _read(path).cosmo == conversions.LEGACY_COSMOLOGY
 
     def test_quantity_attribute_written_plain(
         self, vanilla_uvp: UVPSpec, tmp_path: Path
@@ -437,7 +449,7 @@ class TestLegacyFiles:
             assert "uvpspec_version" not in f.attrs
         uvp = _read(DATA_PATH / "test_uvp.h5")
         assert isinstance(uvp.cosmo, FLRW)
-        assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert uvp.cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
         assert conversions.params_from_cosmology(uvp.cosmo) == OLD_DEFAULT_COSMO_PARAMS
         # repeated reads of the same legacy dict reuse one cosmology object
         assert _read(DATA_PATH / "test_uvp.h5").cosmo is uvp.cosmo
@@ -462,7 +474,7 @@ class TestLegacyFiles:
         assert uvp.__eq__(expected, params=params)
         # the v0.x cosmology dict is read as an astropy cosmology
         assert isinstance(uvp.cosmo, FLRW)
-        assert uvp.cosmo.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert uvp.cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
 
     def test_container_rewritten_as_v2(self, tmp_path: Path) -> None:
         psc = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)
@@ -663,9 +675,9 @@ class TestNormUnitsFromLegacyString:
 
 
 class TestCosmologyFromParams:
-    def test_matches_default(self) -> None:
+    def test_matches_legacy(self) -> None:
         lcdm = conversions.cosmology_from_params(OLD_DEFAULT_COSMO_PARAMS)
-        assert lcdm.is_equivalent(conversions.DEFAULT_COSMOLOGY)
+        assert lcdm.is_equivalent(conversions.LEGACY_COSMOLOGY)
         assert lcdm.H0.value == OLD_DEFAULT_COSMO_PARAMS["H0"]
         assert lcdm.Om0 == OLD_DEFAULT_COSMO_PARAMS["Om_M"]
         assert lcdm.Ode0 == OLD_DEFAULT_COSMO_PARAMS["Om_L"]

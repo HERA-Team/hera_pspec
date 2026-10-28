@@ -572,13 +572,17 @@ def diagonal_errors(uvp):
     return np.sqrt(np.moveaxis(variance, -1, 1)).astype(complex)
 
 
-NEW_COSMOLOGIES = [Planck18, LambdaCDM(H0=70.0, Om0=0.25, Ode0=0.75, Tcmb0=0.0)]
+# cosmologies other than the default (Planck18)
+NEW_COSMOLOGIES = [
+    conversions.LEGACY_COSMOLOGY,
+    LambdaCDM(H0=70.0, Om0=0.25, Ode0=0.75, Tcmb0=0.0),
+]
 
 
 class TestSetCosmology:
     """set_cosmology dispatches on normalization."""
 
-    @pytest.mark.parametrize("new_cosmo", NEW_COSMOLOGIES, ids=["Planck18", "H0_70"])
+    @pytest.mark.parametrize("new_cosmo", NEW_COSMOLOGIES, ids=["legacy", "H0_70"])
     @pytest.mark.parametrize("taper", TAPERS)
     @pytest.mark.parametrize("length_unit", [LITTLEH, u.Mpc], ids=["littleh", "Mpc"])
     def test_one_step_rescale_matches_rebuild(

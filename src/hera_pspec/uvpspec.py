@@ -2512,6 +2512,9 @@ class UVPSpec:
         twice: ``cosmo`` holds the ``str()`` of the parameter dict
         (``conversions.params_from_cosmology``), as in v0.x (which can still
         read these files), and ``cosmo_yaml`` the astropy cosmology in YAML.
+        The dict has no radiation term, so v0.x reads a cosmology with
+        radiation, such as the default ``Planck18``, approximately; this
+        version reads ``cosmo_yaml`` exactly.
 
         The power spectrum datasets carry the unit implied by ``vis_units``
         and ``norm_units`` in a ``unit`` attribute too: ``self.units`` on
