@@ -8,6 +8,7 @@ from hera_cal import redcal
 from pyuvdata import UVData
 
 from hera_pspec import (
+    PSpecBeamGauss,
     PSpecBeamUV,
     UVPSpec,
     container,
@@ -446,6 +447,94 @@ class TestAverageSpectra:
                 rtol=1e-10,
             )
 
+    @pytest.mark.parametrize(
+        "weights", [[1, 1], [3, 1], [1, 2], [0.4, 0.6], [2, 0]], ids=str
+    )
+    def test_blpair_weights(self, weights: list) -> None:
+        """Baseline-pair weights act as (possibly fractional) multiplicities.
+
+        After normalisation to sum to the number of baseline pairs N, a pair
+        with weight m counts as m copies of itself: the average is the
+        m-weighted mean, nsamples add up with weights m, and squared errors
+        and covariances add up as sum(m * sigma^2) / N^2 (all pairs here have
+        the same integration time, so no other weights enter).
+        """
+        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=2)
+        rng = np.random.default_rng(3)
+        uvp.stats_array = {
+            "err": {0: (1 + rng.random(uvp.data_array[0].shape)).astype(complex)}
+        }
+        uvp.cov_array_real[0] = rng.random(uvp.cov_array_real[0].shape)
+        assert np.unique(uvp.integration_array[0]).size == 1
+        blps = [101102101102, 102103102103]
+        keys = [(0, blp, ("xx", "xx")) for blp in blps]
+        m = np.array(weights, dtype=float)
+        m *= len(m) / m.sum()
+
+        avg = grouping.average_spectra(
+            uvp,
+            blpair_groups=[blps],
+            blpair_weights=[weights],
+            error_field="err",
+            inplace=False,
+        )
+        key = (0, blps[0], ("xx", "xx"))
+        np.testing.assert_allclose(
+            avg.get_data(key),
+            sum(mi * uvp.get_data(k) for mi, k in zip(m, keys)) / m.sum(),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_nsamples(key),
+            sum(mi * uvp.get_nsamples(k) for mi, k in zip(m, keys)),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_stats("err", key).real,
+            np.sqrt(
+                sum(mi * uvp.get_stats("err", k).real ** 2 for mi, k in zip(m, keys))
+            )
+            / m.sum(),
+            rtol=1e-12,
+        )
+        np.testing.assert_allclose(
+            avg.get_cov(key),
+            sum(mi * uvp.get_cov(k) for mi, k in zip(m, keys)) / m.sum() ** 2,
+            rtol=1e-12,
+        )
+
+    @pytest.mark.parametrize("time_avg", [False, True])
+    @pytest.mark.parametrize("group_blpairs", [False, True])
+    def test_exact_window_functions_stay_normalised(
+        self, delay_bins_exact_wf_uvp: UVPSpec, time_avg: bool, group_blpairs: bool
+    ) -> None:
+        """Averaged exact window functions are the weighted mean of the inputs.
+
+        Exact window functions are normalised to unit sum over (k_perp, k_para)
+        for every delay, and averaging spectra must preserve that.
+        """
+        uvp = delay_bins_exact_wf_uvp
+        assert uvp.exact_windows
+        np.testing.assert_allclose(
+            uvp.window_function_array[0].sum(axis=(2, 3)), 1.0, rtol=1e-10
+        )
+        blpair_groups = [list(np.unique(uvp.blpair_array))] if group_blpairs else None
+        avg = grouping.average_spectra(
+            uvp, blpair_groups=blpair_groups, time_avg=time_avg, inplace=False
+        )
+        np.testing.assert_allclose(
+            avg.window_function_array[0].sum(axis=(2, 3)), 1.0, rtol=1e-10
+        )
+
+    def test_negative_blpair_weights_raise(self, vanilla_uvp: UVPSpec) -> None:
+        with pytest.raises(ValueError, match="must not be negative"):
+            grouping.average_spectra(
+                vanilla_uvp,
+                blpair_groups=[[101102101102, 102103102103]],
+                blpair_weights=[[-1.0, 2.0]],
+                inplace=False,
+            )
+
 
 class TestSampleBaselines:
     @pytest.mark.parametrize("n", [1, 2, 4, 5, 13, 521])
@@ -524,6 +613,47 @@ def test_bootstrap_average_blpairs(
             raise
         ps_boot = uvp4[0].get_data((0, blpair, ("xx", "xx")))
         np.testing.assert_array_almost_equal(ps_avg, ps_boot)
+
+
+def test_bootstrap_average_blpairs_multiple_uvps() -> None:
+    """Bootstrap draws are made across the baseline pairs of several UVPSpecs.
+
+    Each UVPSpec is averaged over its own drawn baseline pairs, weighted by the
+    number of times each was drawn.
+    """
+    uvp, _ = testing.build_vanilla_uvpspec(data="random")
+    uvp1 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
+    uvp2 = uvp.select(blpairs=[101103101103], inplace=False)
+    group = [101102101102, 102103102103, 101103101103]
+    # with this seed, both UVPSpec objects get draws
+    avgs, wgts = grouping.bootstrap_average_blpairs([uvp1, uvp2], [group], seed=4)
+    assert wgts == [[[0.0, 1.0]], [[2.0]]]
+    key = (0, 101102101102, ("xx", "xx"))
+    np.testing.assert_allclose(
+        avgs[0].get_data(key), uvp.get_data((0, 102103102103, ("xx", "xx")))
+    )
+    key = (0, 101103101103, ("xx", "xx"))
+    np.testing.assert_allclose(avgs[1].get_data(key), uvp.get_data(key))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=ValueError,
+    reason=(
+        "a UVPSpec that receives no draws in a group has zero total weight and "
+        "average_spectra raises, see #570"
+    ),
+)
+def test_bootstrap_average_blpairs_object_without_draws() -> None:
+    """When the draws of a group all fall on the baseline pairs of some of the
+    UVPSpecs, bootstrapping must still succeed for the others."""
+    uvp, _ = testing.build_vanilla_uvpspec(data="random")
+    uvp1 = uvp.select(blpairs=[101102101102, 102103102103], inplace=False)
+    uvp2 = uvp.select(blpairs=[101103101103], inplace=False)
+    group = [101102101102, 102103102103, 101103101103]
+    # with this seed, all three draws fall on the baseline pairs of uvp1
+    avgs, _ = grouping.bootstrap_average_blpairs([uvp1, uvp2], [group], seed=0)
+    assert len(avgs) == 2
 
 
 class TestBootstrapResampledError:
@@ -971,6 +1101,37 @@ class TestSpherical:
         with pytest.raises(AssertionError, match="kbins must not overlap"):
             grouping.spherical_average(uvp_spherical, self.KBINS, 1.0)
 
+    def test_average_recovers_power_law(self) -> None:
+        """The spherical average of a power spectrum P(k) = A k^n, set from the
+        k_perp and k_para of each baseline pair and delay, is the mean of P over
+        the |k| of the (baseline pair, delay) cells in each bin, and so lies
+        between the power law at the two edges of the bin."""
+        beam = PSpecBeamGauss(0.2, np.linspace(90e6, 115e6, 30))
+        uvp, _ = testing.build_vanilla_uvpspec(beam=beam)
+        kpara, kperp = uvp.get_kparas(0), uvp.get_kperps(0)
+        kmag = np.sqrt(kperp[:, None] ** 2 + kpara[None, :] ** 2)
+        amplitude, slope = 1e6, -2.7
+        uvp.data_array[0] = (amplitude * kmag**slope)[:, :, None].astype(complex)
+
+        dk = 0.25
+        kbins = np.arange(dk / 2, np.abs(kpara).max(), dk)
+        sph = grouping.spherical_average(uvp, kbins, dk)
+        power = sph.data_array[0][:, :, 0]
+        assert np.all(power == power[:1])  # the same at every time
+        power = power[0].real
+
+        # the mean over the cells of one time (all times are the same)
+        t0 = uvp.time_avg_array == uvp.time_avg_array[0]
+        for i, k in enumerate(kbins):
+            in_bin = (kmag[t0] >= k - dk / 2) & (kmag[t0] < k + dk / 2)
+            np.testing.assert_allclose(
+                power[i], np.mean(amplitude * kmag[t0][in_bin] ** slope), rtol=1e-10
+            )
+        # skip the bin containing k = 0, where the power law diverges
+        k = kbins[1:]
+        assert np.all(power[1:] <= amplitude * (k - dk / 2) ** slope)
+        assert np.all(power[1:] >= amplitude * (k + dk / 2) ** slope)
+
     def test_average_kbins_theory(self, uvp_spherical: UVPSpec) -> None:
         """Check that kbins_theory subsets the window function array to the given theory bins."""
         sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
@@ -1309,3 +1470,83 @@ class TestAverageInDelayBins:
         newshape[1] = len(new.get_dlys(0))
 
         assert new.window_function_array[0].shape == tuple(newshape)
+
+
+class TestFoldSpectra:
+    def test_folded_identity_window_functions_sum_to_one(
+        self, vanilla_uvp: UVPSpec
+    ) -> None:
+        """Folding identity window functions gives identity window functions.
+
+        The folded spectrum at delay tau is the mean of the spectra at +tau and
+        -tau, so if each of those only responds to its own delay, the folded
+        one responds with unit weight to |tau|.
+        """
+        uvp = copy.deepcopy(vanilla_uvp)
+        Ndlys = uvp.Ndlys
+        assert np.all(uvp.window_function_array[0][..., 0] == np.eye(Ndlys))
+        grouping.fold_spectra(uvp)
+        wf = uvp.window_function_array[0][:, Ndlys // 2 + 1 :, :, 0]
+        np.testing.assert_array_equal(wf.sum(axis=-1), 1.0)
+
+    @pytest.mark.parametrize("nfreq", [16, 15])
+    @pytest.mark.parametrize("taper", ["none", "bh"])
+    def test_folded_window_functions_stay_normalised(
+        self, synthetic_uvd, nfreq: int, taper: str
+    ) -> None:
+        """Folded window functions keep unit row sums, up to the Nyquist column.
+
+        Each row of the unfolded window functions sums to one. After folding,
+        the row for |tau| is the mean of the rows for +tau and -tau, mapped
+        onto non-negative delays. The only weight that is lost is the leakage
+        of those two rows into the Nyquist column (present for an even number
+        of delays), which has no positive-delay counterpart.
+        """
+        uvd = synthetic_uvd(nfreq=nfreq, ntimes=2, antpairs=[(0, 1)])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        uvp = ds.pspec(
+            [(0, 1)],
+            [(0, 1)],
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            taper=taper,
+            verbose=False,
+        )
+        wf = uvp.window_function_array[0][..., 0].copy()
+        np.testing.assert_allclose(wf.sum(axis=-1), 1.0, rtol=1e-10)
+
+        grouping.fold_spectra(uvp)
+        mid = nfreq // 2  # index of zero delay
+        pos = np.arange(mid + 1, nfreq)  # positive delays ...
+        neg = 2 * mid - pos  # ... and their negative counterparts
+        # the zero-delay column of the folded rows keeps the +tau weight,
+        # which is the mean of the +tau and -tau weights for these symmetric
+        # window functions
+        np.testing.assert_allclose(wf[:, pos, mid], wf[:, neg, mid], rtol=0, atol=1e-12)
+        lost = 0.0 if nfreq % 2 else 0.5 * (wf[:, pos, 0] + wf[:, neg, 0])
+        folded = uvp.window_function_array[0][..., 0][:, pos]
+        np.testing.assert_allclose(folded.sum(axis=-1), 1.0 - lost, rtol=1e-10)
+
+    @pytest.mark.parametrize("with_stats", [False, True])
+    @pytest.mark.parametrize("Ndlys", [50, 49])
+    def test_negative_delays_are_emptied(self, with_stats: bool, Ndlys: int) -> None:
+        """After folding, negative delays hold zero power and zero-weight stats.
+
+        Whether or not a stats_array is present, the negative-delay power must
+        be zero (not NaN), and every stat there must be infinite, i.e. carry
+        no weight in error-weighted averages.
+        """
+        uvp, _ = testing.build_vanilla_uvpspec(Ndlys=Ndlys, data="random", seed=1)
+        if with_stats:
+            uvp.stats_array = {"err": {0: np.ones_like(uvp.data_array[0])}}
+        original = uvp.data_array[0].copy()
+        grouping.fold_spectra(uvp)
+        mid = Ndlys // 2
+        assert np.all(uvp.data_array[0][:, :mid] == 0)
+        np.testing.assert_array_equal(uvp.data_array[0][:, mid], original[:, mid])
+        assert np.all(np.isfinite(uvp.data_array[0]))
+        if with_stats:
+            assert np.all(np.isinf(uvp.stats_array["err"][0][:, :mid]))
+            np.testing.assert_allclose(
+                uvp.stats_array["err"][0][:, mid + 1 :], 1 / np.sqrt(2)
+            )

@@ -106,7 +106,7 @@ class Cosmo_Conversions:
         """
         # Setup parameters
         if Om_M is not None:
-            if np.isclose(Om_b + Om_c, Om_M, atol=1e-5) is False:
+            if not np.isclose(Om_b + Om_c, Om_M, atol=1e-5):
                 Om_b = Om_M * 0.156635
                 Om_c = Om_M * 0.843364
         else:

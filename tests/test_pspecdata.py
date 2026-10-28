@@ -1318,6 +1318,22 @@ class TestScalar:
         with pytest.raises(NotImplementedError, match="Polarizations don't match"):
             ds.scalar(("xx", "yy"))
 
+    def test_scalar_taper_override(self, synth_d, beam_nf_dipole) -> None:
+        """taper_override replaces self.taper in the scalar, without changing it."""
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
+        untapered = ds.scalar(("xx", "xx"))
+
+        ds.set_taper("bh")
+        tapered = ds.scalar(("xx", "xx"))
+        # a Blackman-Harris taper keeps ~1/4 of the noise-equivalent bandwidth,
+        # so the scalar grows by ~4
+        assert 3.5 < tapered / untapered < 4.5
+        assert ds.scalar(("xx", "xx"), taper_override="none") == untapered
+        assert ds.taper == "bh"
+
+        ds.set_taper("none")
+        assert ds.scalar(("xx", "xx"), taper_override="bh") == tapered
+
         # Precomputed results in the following test were done "by hand"
         # using iPython notebook "Scalar_dev2.ipynb" in the tests/ directory
         # FIXME: Uncomment when pyuvdata support for this is ready
@@ -2195,6 +2211,27 @@ class TestPspec:
         beam.filename = "my_beam.beamfits"
         uvp = ds.pspec(*args, verbose=False)
         assert uvp.beamfile == "my_beam.beamfits"
+
+    def test_pspec_blackman_taper_does_not_warn(self, synthetic_uvd) -> None:
+        """Tapers whose end samples round to tiny negative values are handled.
+
+        The Blackman window is zero at its ends, but evaluates to about -1e-17
+        there; the square root taken to build R must not produce a warning
+        or NaN.
+        """
+        uvd = synthetic_uvd(nfreq=32, ntimes=2, antpairs=[(0, 1)])
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            uvp = ds.pspec(
+                [(0, 1)],
+                [(0, 1)],
+                (0, 1),
+                [("xx", "xx")],
+                taper="blackman",
+                verbose=False,
+            )
+        assert np.all(np.isfinite(uvp.data_array[0]))
 
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed
