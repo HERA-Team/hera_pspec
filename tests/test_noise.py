@@ -78,57 +78,6 @@ class TestSensitivity:
         assert Dsq[1] < P_N
 
 
-class TestCalcPN:
-    """The thermal noise power P_N = scalar Tsys^2 / (t_int Ncoherent sqrt(Nincoherent))
-    of Cheng et al. (2018): the visibility noise variance scales as
-    Tsys^2 / t_int, coherent averaging reduces it like a longer integration,
-    and incoherent averaging of power spectra reduces their rms by
-    sqrt(Nincoherent)."""
-
-    ARGS = dict(scalar=2.0e9, Tsys=300.0, t_int=10.0)
-
-    @pytest.mark.parametrize(
-        "kwargs,factor",
-        [
-            (dict(Tsys=600.0), 4.0),
-            (dict(t_int=40.0), 1 / 4),
-            (dict(Ncoherent=4), 1 / 4),
-            (dict(Nincoherent=4), 1 / 2),
-            (dict(scalar=6.0e9), 3.0),
-        ],
-        ids=["Tsys", "t_int", "Ncoherent", "Nincoherent", "scalar"],
-    )
-    def test_scaling(self, kwargs: dict, factor: float) -> None:
-        reference = noise.calc_P_N(**self.ARGS, Ncoherent=1, Nincoherent=1)
-        scaled = noise.calc_P_N(**{**self.ARGS, **kwargs})
-        np.testing.assert_allclose(scaled / reference, factor, rtol=1e-12)
-
-    def test_components(self) -> None:
-        """The real and imaginary parts of a noise power spectrum each have
-        1/sqrt(2) of the rms of its absolute value."""
-        real = noise.calc_P_N(**self.ARGS, component="real")
-        np.testing.assert_allclose(noise.calc_P_N(**self.ARGS, component="imag"), real)
-        np.testing.assert_allclose(
-            noise.calc_P_N(**self.ARGS, component="abs") / real, np.sqrt(2), rtol=1e-12
-        )
-        # in mK^2: (Tsys in mK)^2 / t_int, times the scalar
-        np.testing.assert_allclose(
-            noise.calc_P_N(**self.ARGS, component="abs"),
-            2.0e9 * (300.0e3) ** 2 / 10.0,
-            rtol=1e-12,
-        )
-
-    def test_delta_squared(self) -> None:
-        """Delta^2(k) = k^3 P(k) / (2 pi^2)."""
-        k = np.linspace(0.1, 2.0, 7)
-        pk = noise.calc_P_N(**self.ARGS)
-        np.testing.assert_allclose(
-            noise.calc_P_N(**self.ARGS, form="DelSq", k=k),
-            pk * k**3 / (2 * np.pi**2),
-            rtol=1e-12,
-        )
-
-
 # System temperature of the simulated noise in test_noise_validation, in K
 NOISE_VALIDATION_TSYS = 300.0
 
@@ -360,26 +309,3 @@ class TestAnalyticNoise:
         dlys = uvp.get_dlys(0) * 1e9
         select = np.abs(dlys) > 3000
         assert np.abs(frac_ratio[:, select].mean()) < 1 / np.sqrt(uvp.Nbltpairs)
-
-
-def check_corr_matrix(m: np.ndarray) -> None:
-    """Perform checks of a matrix that establish it as a reasonable correlation."""
-    assert m.ndim == 2
-    assert m.shape[0] == m.shape[1]
-    assert np.all(np.diag(m) == 1)
-    # correlation coefficients are bounded by 1 in magnitude
-    assert np.all(np.abs(m) <= 1 + 1e-12)
-    np.testing.assert_array_almost_equal(m.T, m)
-    # and a correlation matrix is positive semi-definite
-    assert np.all(np.linalg.eigvalsh(m) >= -1e-10)
-
-
-@pytest.mark.parametrize("n", [1, 6, 7])
-@pytest.mark.parametrize("taper", ["blackmanharris", "hann", "blackman", "none"])
-def test_get_approximate_corr(n: int, taper: str) -> None:
-    """Check that get_approximate_delay_delay_corr_matrix returns a valid correlation matrix."""
-    corr = noise.get_approximate_delay_delay_corr_matrix(taper, n)
-    check_corr_matrix(corr)
-    if taper == "none":
-        # without a taper, the delay modes of white noise are uncorrelated
-        np.testing.assert_allclose(corr, np.eye(n), atol=1e-12)

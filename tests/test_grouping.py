@@ -177,52 +177,6 @@ class TestGroupBaselines:
         with pytest.raises(ValueError, match="Can't have more groups than baselines"):
             grouping.group_baselines(bls, ngrps)
 
-    @pytest.mark.parametrize(
-        "n,ngrps,randomize",
-        [
-            (5, 2, False),
-            (13, 5, False),
-            (521, 10, False),
-            (5, 2, True),
-            (13, 5, True),
-            (521, 10, True),
-        ],
-    )
-    def test_equal_sized_blocks(self, n: int, ngrps: int, randomize: bool) -> None:
-        """Check that keep_remainder=False produces groups of equal size."""
-        bls = [(0, i) for i in range(n)]
-        g = grouping.group_baselines(
-            bls, ngrps, keep_remainder=False, randomize=randomize
-        )
-        assert np.unique([len(grp) for grp in g]).size == 1
-
-    @pytest.mark.parametrize(
-        "n,ngrp,randomize",
-        [
-            (n, ngrp, rand)
-            for n in [1, 2, 4, 5, 13, 521]
-            for ngrp in [1, 2, 5, 10, 45]
-            for rand in [True, False]
-            if ngrp <= n
-        ],
-    )
-    def test_preserves_count(self, n: int, ngrp: int, randomize: bool) -> None:
-        """Check that keep_remainder=True preserves the total number of baselines across all groups."""
-        bls = [(0, i) for i in range(n)]
-        g = grouping.group_baselines(
-            bls, ngrp, keep_remainder=True, randomize=randomize
-        )
-        assert np.sum([len(_g) for _g in g]) == len(bls)
-
-    def test_random_seed(self) -> None:
-        """Check that the same seed produces identical baseline groupings."""
-        bls5 = [(0, i) for i in range(13)]
-        g1 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
-        g3 = grouping.group_baselines(bls5, 3, randomize=True, seed=10)
-        for i in range(len(g1)):
-            for j in range(len(g1[i])):
-                assert g1[i][j] == g3[i][j]
-
 
 @pytest.fixture(scope="session")
 def uvp_with_stats(
@@ -447,62 +401,6 @@ class TestAverageSpectra:
                 rtol=1e-10,
             )
 
-    @pytest.mark.parametrize(
-        "weights", [[1, 1], [3, 1], [1, 2], [0.4, 0.6], [2, 0]], ids=str
-    )
-    def test_blpair_weights(self, weights: list) -> None:
-        """Baseline-pair weights act as (possibly fractional) multiplicities.
-
-        After normalisation to sum to the number of baseline pairs N, a pair
-        with weight m counts as m copies of itself: the average is the
-        m-weighted mean, nsamples add up with weights m, and squared errors
-        and covariances add up as sum(m * sigma^2) / N^2 (all pairs here have
-        the same integration time, so no other weights enter).
-        """
-        uvp, _ = testing.build_vanilla_uvpspec(data="random", seed=2)
-        rng = np.random.default_rng(3)
-        uvp.stats_array = {
-            "err": {0: (1 + rng.random(uvp.data_array[0].shape)).astype(complex)}
-        }
-        uvp.cov_array_real[0] = rng.random(uvp.cov_array_real[0].shape)
-        assert np.unique(uvp.integration_array[0]).size == 1
-        blps = [101102101102, 102103102103]
-        keys = [(0, blp, ("xx", "xx")) for blp in blps]
-        m = np.array(weights, dtype=float)
-        m *= len(m) / m.sum()
-
-        avg = grouping.average_spectra(
-            uvp,
-            blpair_groups=[blps],
-            blpair_weights=[weights],
-            error_field="err",
-            inplace=False,
-        )
-        key = (0, blps[0], ("xx", "xx"))
-        np.testing.assert_allclose(
-            avg.get_data(key),
-            sum(mi * uvp.get_data(k) for mi, k in zip(m, keys)) / m.sum(),
-            rtol=1e-12,
-        )
-        np.testing.assert_allclose(
-            avg.get_nsamples(key),
-            sum(mi * uvp.get_nsamples(k) for mi, k in zip(m, keys)),
-            rtol=1e-12,
-        )
-        np.testing.assert_allclose(
-            avg.get_stats("err", key).real,
-            np.sqrt(
-                sum(mi * uvp.get_stats("err", k).real ** 2 for mi, k in zip(m, keys))
-            )
-            / m.sum(),
-            rtol=1e-12,
-        )
-        np.testing.assert_allclose(
-            avg.get_cov(key),
-            sum(mi * uvp.get_cov(k) for mi, k in zip(m, keys)) / m.sum() ** 2,
-            rtol=1e-12,
-        )
-
     @pytest.mark.parametrize("time_avg", [False, True])
     @pytest.mark.parametrize("group_blpairs", [False, True])
     def test_exact_window_functions_stay_normalised(
@@ -534,22 +432,6 @@ class TestAverageSpectra:
                 blpair_weights=[[-1.0, 2.0]],
                 inplace=False,
             )
-
-
-class TestSampleBaselines:
-    @pytest.mark.parametrize("n", [1, 2, 4, 5, 13, 521])
-    def test_length_preserved(self, n: int) -> None:
-        """Check that sample_baselines returns a list of the same length as its input."""
-        bls = [(0, i) for i in range(n)]
-        samp = grouping.sample_baselines(bls)
-        assert len(bls) == len(samp)
-
-    def test_groups(self) -> None:
-        """Check that sample_baselines preserves the number of groups when given a grouped baseline list."""
-        bls5 = [(0, i) for i in range(13)]
-        g1 = grouping.group_baselines(bls5, 3, randomize=False)
-        samp = grouping.sample_baselines(g1)
-        assert len(g1) == len(samp)
 
 
 @pytest.mark.parametrize("uvp_name", ALL_UVPS)

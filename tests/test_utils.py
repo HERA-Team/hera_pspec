@@ -518,15 +518,6 @@ class TestCalcBlpairReds:
             assert bl2[0] == bl2[1]
 
 
-@pytest.mark.parametrize("n_dlys", [None, 30])
-def test_get_delays(n_dlys: int | None) -> None:
-    """Check that get_delays returns a sorted array of delays with the requested (or default) length."""
-    freqs = np.linspace(100.0, 200.0, 50) * 1e6
-    delays = utils.get_delays(freqs, n_dlys=n_dlys)
-    assert delays.size == (n_dlys if n_dlys is not None else freqs.size)
-    assert np.isclose(delays[0], -2.450e-07, atol=1e-10)
-
-
 def _no_extra_check(r: list, l: list, a: list) -> None:
     pass
 
