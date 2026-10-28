@@ -2043,12 +2043,12 @@ class TestGetWfForTauKnownExamples:
     @staticmethod
     def _kpar_norm(uvw: uvwindow.UVWindow, tau: float) -> np.ndarray:
         length_unit = 1 / uvw.kunits
-        alpha = conversions.dRpara_df(uvw.avg_z, uvw.cosmo, length_unit).to_value(
+        dRpara_df = conversions.dRpara_df(uvw.avg_z, uvw.cosmo, length_unit).to_value(
             length_unit / units.Hz
         )
         delta_nu = np.median(np.diff(uvw.freq_array))
         eta = np.fft.fftshift(np.fft.fftfreq(uvw.Nfreqs)) / delta_nu
-        return np.abs(2.0 * np.pi / alpha * (eta + tau))
+        return np.abs(2.0 * np.pi / dRpara_df * (eta + tau))
 
     def test_single_bin_gets_row_means(self, uvwindow_obj: uvwindow.UVWindow) -> None:
         # coarsest extreme: one bin holds every kpar value (flanked by

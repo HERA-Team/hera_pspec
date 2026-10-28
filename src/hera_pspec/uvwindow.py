@@ -1269,7 +1269,7 @@ class UVWindow:
 
         return fnu
 
-    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins, alpha=None):
+    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins, dRpara_df=None):
         """
         Get the cylindrical window function for a given delay.
 
@@ -1289,8 +1289,9 @@ class UVWindow:
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1
             units.
             Used for cylindrical binning. Must be linearly spaced.
-        alpha : float, optional
-            ``dRpara_df`` at :attr:`avg_z`, in ``1 / kunits`` per Hz.
+        dRpara_df : float, optional
+            :func:`conversions.dRpara_df` at :attr:`avg_z`, in ``1 / kunits``
+            per Hz.
             Computed if not given; get_cylindrical_wf passes it once for all
             delays.
 
@@ -1322,14 +1323,14 @@ class UVWindow:
 
         # get kparallel grid
         # conversion factor to cosmological units
-        if alpha is None:
-            alpha = self._cosmo_factor("dRpara_df", self.avg_z)
+        if dRpara_df is None:
+            dRpara_df = self._cosmo_factor("dRpara_df", self.avg_z)
         # frequency resolution
         delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
         eta = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs), axes=-1) / delta_nu
         # construct array of |kpara| values for given delay tau
-        kpar_norm = np.abs(2.0 * np.pi / alpha * (eta + tau))
+        kpar_norm = np.abs(2.0 * np.pi / dRpara_df * (eta + tau))
 
         # perform binning along k_parallel (vectorized: bin index of each
         # kpar_norm element such that edges[m] <= kpar_norm < edges[m+1])
@@ -1589,10 +1590,10 @@ class UVWindow:
 
         # in frequency direction
         cyl_wf = np.zeros((self.Nfreqs, nbins_kperp, nbins_kpara))
-        alpha = self._cosmo_factor("dRpara_df", self.avg_z)
+        dRpara_df = self._cosmo_factor("dRpara_df", self.avg_z)
         for it, tau in enumerate(self.dly_array[: self.Nfreqs // 2 + 1]):
             kpara, cyl_wf[it, :, :] = self._get_wf_for_tau(
-                tau, wf_array1, kperp_bins, kpara_bins, alpha=alpha
+                tau, wf_array1, kperp_bins, kpara_bins, dRpara_df=dRpara_df
             )
         # fill by symmetry for tau = -tau
         if self.Nfreqs % 2 == 0:
@@ -1609,7 +1610,7 @@ class UVWindow:
             wf_array1,
             kperp_bins,
             kpara_bins,
-            alpha=alpha,
+            dRpara_df=dRpara_df,
         )
 
         # normalisation of window functions
