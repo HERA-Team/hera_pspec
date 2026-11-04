@@ -5,6 +5,7 @@ import sys
 import warnings
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 import uvtools.dspec as dspec
@@ -13,7 +14,7 @@ from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from scipy.interpolate import RegularGridInterpolator
 
-from . import conversions, utils
+from . import conversions, unit_helpers, utils
 from . import uvpspec_utils as uvputils
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,30 @@ logger = logging.getLogger(__name__)
 # is, while mapsize > _MAX_R zero-pads the map, extending coverage to
 # smaller kperp.
 _MAX_R = 0.7
+
+# Versions of the HDF5 files written by FTBeam.write_hdf5 ("ftbeam_version")
+# and UVWindow.run_and_write ("uvwindow_version"). Files without the attribute
+# are version 1 (hera_pspec v0.x); version 2 adds "unit" attributes.
+FTBEAM_HDF5_VERSION = "2"
+UVWINDOW_HDF5_VERSION = "2"
+
+# Units FTBeam files are read into: frequencies in Hz, and mapsize in radians
+# (the flat-sky coordinates of FTBeam.from_beam are zenith angles in radians,
+# and UVWindow divides 2 pi / (2 mapsize) by dRperp_dtheta in Mpc / rad).
+_FTBEAM_FREQ_UNIT = units.Hz
+_FTBEAM_MAPSIZE_UNIT = units.rad
+
+
+def _check_ftbeam_version(f, ftfile):
+    """Raise if an FTBeam file has a format version this code cannot read."""
+    version = f.attrs.get("ftbeam_version", None)
+    if isinstance(version, bytes):
+        version = version.decode()
+    if version is not None and version != FTBEAM_HDF5_VERSION:
+        raise ValueError(
+            f"{ftfile} has FTBeam format version {version!r}; this version of "
+            f"hera_pspec reads versions 1 and {FTBEAM_HDF5_VERSION}."
+        )
 
 
 def _cartesian_to_spherical(x, y):
@@ -90,7 +115,7 @@ class FTBeam:
             - pol contains the polarisation of the beam used.
             - freq_array gives the frequency coordinates of data.
             - mapsize is the size of the flat map the beam was projected
-                onto (in deg).
+                onto (in rad).
 
         Parameters
         ----------
@@ -103,11 +128,14 @@ class FTBeam:
             Can be pseudo-Stokes or power:
             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
             in number form: 1, 2, 4, 3, -5, -6, -7, -8
-        freq_array : 1D array or list of floats
-            Array or list of the frequencies over which the Fourier
-            transform of the beam has been computed (in Hz).
-        mapsize : float
-            Size of the flat map the beam was projected onto (in deg).
+        freq_array : astropy.units.Quantity
+            Frequencies over which the Fourier transform of the beam has
+            been computed, in any frequency unit. A plain array or list is
+            read as Hz (deprecated). Stored in :attr:`freq_array` in Hz.
+        mapsize : astropy.units.Quantity
+            Size of the flat map the beam was projected onto, in any angle
+            unit. A plain float is read as rad (deprecated). Stored in
+            :attr:`mapsize` in rad.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
@@ -115,6 +143,11 @@ class FTBeam:
             Default keeps polarization in X and Y basis.
             Used to convert polstr to polnum and conversely.
         """
+        freq_array = utils.to_value_in(freq_array, _FTBEAM_FREQ_UNIT, "freq_array")
+        mapsize = utils.to_value_in(
+            mapsize, _FTBEAM_MAPSIZE_UNIT, "mapsize", example="1.0 * u.rad"
+        )
+
         # initialise basic attributes
         self.verbose = bool(verbose)
         self.x_orientation = x_orientation
@@ -163,7 +196,7 @@ class FTBeam:
         beamfile,
         pol,
         freq_array,
-        mapsize=1.0,
+        mapsize=1.0 * units.rad,
         npix=301,
         verbose=False,
         x_orientation=None,
@@ -192,16 +225,19 @@ class FTBeam:
             Polarization, can be pseudo-Stokes or power:
             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
             in number form: 1, 2, 4, 3, -5, -6, -7, -8.
-        freq_array : 1D array or list of floats
-            Frequencies (in Hz) to compute the Fourier transform of the
-            beam on. Should match the frequency channels of the data.
-        mapsize : float, optional
+        freq_array : astropy.units.Quantity
+            Frequencies to compute the Fourier transform of the beam on, in
+            any frequency unit. Should match the frequency channels of the
+            data. A plain array or list is read as Hz (deprecated).
+        mapsize : astropy.units.Quantity, optional
             Half-extent of the FT grid, in the same (direction-cosine-like)
             units as the Cartesian beam projection, whose own half-width is
             `_MAX_R` = 0.7 (i.e. the projected map is sqrt(2)*`_MAX_R` =
-            1 rad wide). mapsize = `_MAX_R` uses the beam simulation as is;
-            larger values zero-pad the map, extending coverage to smaller
-            k_perp. Default: 1.0 (the value used for the H6C products).
+            1 rad wide), given as an angle (e.g. ``1.0 * u.rad``; a plain
+            float is read as rad, deprecated). mapsize = `_MAX_R` rad uses
+            the beam simulation as is; larger values zero-pad the map,
+            extending coverage to smaller k_perp. Default: 1 rad (the value
+            used for the H6C products).
         npix : int, optional
             Number of pixels per side used for the Cartesian projection
             of the beam. Preferably odd (even values are decremented).
@@ -213,7 +249,12 @@ class FTBeam:
             Default keeps polarization in X and Y basis.
             Used to convert polstr to polnum and conversely.
         """
-        freq_array = np.asarray(freq_array, dtype=float)
+        freq_array = np.asarray(
+            utils.to_value_in(freq_array, _FTBEAM_FREQ_UNIT, "freq_array"), dtype=float
+        )
+        mapsize = utils.to_value_in(
+            mapsize, _FTBEAM_MAPSIZE_UNIT, "mapsize", example="1.0 * u.rad"
+        )
         if freq_array.ndim != 1 or freq_array.size < 3:
             raise ValueError(
                 "freq_array must be a 1D array with at least three frequencies."
@@ -305,8 +346,8 @@ class FTBeam:
         return cls(
             data=data,
             pol=pol,
-            freq_array=freq_array,
-            mapsize=mapsize,
+            freq_array=freq_array * _FTBEAM_FREQ_UNIT,
+            mapsize=mapsize * _FTBEAM_MAPSIZE_UNIT,
             verbose=verbose,
             x_orientation=x_orientation,
         )
@@ -335,8 +376,9 @@ class FTBeam:
             .. deprecated::
                 Use `freq_array` instead: channel indices are ambiguous
                 across FT-beam files, frequencies are not.
-        freq_array : 1D array or list of floats, optional
-            If given, restrict the FTBeam to these frequencies (in Hz)
+        freq_array : astropy.units.Quantity, optional
+            If given, restrict the FTBeam to these frequencies (any
+            frequency unit; a plain array is read as Hz, deprecated)
             via :meth:`select_freqs`. Only the relevant channel range is
             read from disk, which considerably reduces the memory
             footprint for wide-band FT-beam files. Cannot be used
@@ -348,6 +390,7 @@ class FTBeam:
             raise ValueError("Wrong ftfile input. See docstring.")
         if spw_range is not None and freq_array is not None:
             raise ValueError("Cannot feed both spw_range and freq_array.")
+        freq_array = utils.to_value_in(freq_array, _FTBEAM_FREQ_UNIT, "freq_array")
         if spw_range is not None:
             warnings.warn(
                 "The spw_range parameter of FTBeam.from_file is deprecated; "
@@ -358,8 +401,19 @@ class FTBeam:
 
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
-            mapsize = f["mapsize"][0]
-            bandwidth = np.array(f["freq"][...])
+            _check_ftbeam_version(f, ftfile)
+            mapsize = unit_helpers.convert_from_stored_unit(
+                f["mapsize"][0],
+                f["mapsize"].attrs.get("unit", None),
+                _FTBEAM_MAPSIZE_UNIT,
+                "mapsize",
+            )
+            bandwidth = unit_helpers.convert_from_stored_unit(
+                np.array(f["freq"][...]),
+                f["freq"].attrs.get("unit", None),
+                _FTBEAM_FREQ_UNIT,
+                "freq",
+            )
             # polarisation: prefer the attribute written by write_hdf5,
             # fall back to extracting it from the filename
             pol = f.attrs.get("pol", None)
@@ -395,11 +449,15 @@ class FTBeam:
             pol = str(pol)
 
         obj = cls(
-            data=ft_beam, pol=pol, freq_array=read_freqs, mapsize=mapsize, **kwargs
+            data=ft_beam,
+            pol=pol,
+            freq_array=read_freqs * _FTBEAM_FREQ_UNIT,
+            mapsize=mapsize * _FTBEAM_MAPSIZE_UNIT,
+            **kwargs,
         )
         if freq_array is not None:
             # extract (or interpolate onto) the exact requested frequencies
-            obj.select_freqs(freq_array)
+            obj.select_freqs(freq_array * _FTBEAM_FREQ_UNIT)
         return obj
 
     @classmethod
@@ -408,9 +466,9 @@ class FTBeam:
         freq_array,
         widths,
         pol,
-        mapsize=1.0,
+        mapsize=1.0 * units.rad,
         npix=301,
-        cosmo=conversions.Cosmo_Conversions(),
+        cosmo=None,
         **kwargs,
     ):
         """
@@ -419,40 +477,57 @@ class FTBeam:
 
         Parameters
         ----------
-        freq_array : list or array of floats
-            List of frequencies (in Hz) to define the object on.
-        widths : list or array of floats
-            List of widths, in deg, to use for the Gaussian beam in the sky
-            plane. Can be length 1 if the same value is used for all the frequencies.
-            Otherwise, must have same length as freq_array
+        freq_array : astropy.units.Quantity
+            Frequencies to define the object on, in any frequency unit. A
+            plain list or array is read as Hz (deprecated).
+        widths : astropy.units.Quantity
+            Widths to use for the Gaussian beam in the sky plane, in any
+            angle unit (e.g. ``5 * u.deg``). Plain numbers are read as deg
+            (deprecated). Can be a scalar if the same value is used for all
+            the frequencies. Otherwise, must have same length as freq_array
         pol : str or int
             Can be pseudo-Stokes or power:
             in str form: 'pI', 'pQ', 'pV', 'pU', 'xx', 'yy', 'xy', 'yx'
             in number form: 1, 2, 4, 3, -5, -6, -7, -8
-        mapsize : float
-            Half width of the map the beam is calculated on, in rad. Increase
-            if you want better k_perp resolution.
+        mapsize : astropy.units.Quantity, optional
+            Half width of the map the beam is calculated on, in any angle
+            unit (a plain float is read as rad, deprecated). Increase if you
+            want better k_perp resolution. Default: 1 rad.
         npix : int
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+        cosmo : astropy.cosmology.FLRW, optional
+            Not used: the Fourier-space beam does not depend on the cosmology.
+            Kept for backwards compatibility. Default: None.
         """
 
         # Frequency-related parameters
-        freq_array = np.array(freq_array)
+        freq_array = np.array(
+            utils.to_value_in(freq_array, _FTBEAM_FREQ_UNIT, "freq_array")
+        )
+        mapsize = utils.to_value_in(
+            mapsize, _FTBEAM_MAPSIZE_UNIT, "mapsize", example="1.0 * u.rad"
+        )
         if np.size(freq_array) <= 2:
             raise ValueError("Must use at least three frequencies.")
 
-        # Beam widths per frequency
+        # Beam widths per frequency, in deg
+        widths_have_unit = utils._contains_quantity(widths)
+        if widths_have_unit:
+            widths = utils.to_value_in(widths, units.deg, "widths")
+            if np.ndim(widths) == 0:
+                widths = float(widths)
+        else:
+            utils.warn_plain_number(
+                "widths", units.deg, example="5 * u.deg", stacklevel=3
+            )
         if isinstance(widths, (float, int)):
             widths = np.ones_like(freq_array) * widths
         else:
             if np.shape(widths) != np.shape(freq_array):
                 raise ValueError("There must be as many frequencies as widths.")
-        # convert to radian
-        if np.mean(widths) < 1:
+        # convert to radian (a Quantity's unit is explicit: no guessing)
+        if not widths_have_unit and np.mean(widths) < 1:
             warnings.warn("Small widths: make sure the input is in degrees.")
         widths = np.array(widths) * np.pi / 180.0
         # convert widths to Fourier space
@@ -471,7 +546,11 @@ class FTBeam:
             ft_beam[ifreq] = Gauss * (np.pi / 2.0 / mapsize) * widths[ifreq] ** 2
 
         return cls(
-            data=ft_beam, pol=pol, freq_array=freq_array, mapsize=mapsize, **kwargs
+            data=ft_beam,
+            pol=pol,
+            freq_array=freq_array * _FTBEAM_FREQ_UNIT,
+            mapsize=mapsize * _FTBEAM_MAPSIZE_UNIT,
+            **kwargs,
         )
 
     @classmethod
@@ -498,7 +577,13 @@ class FTBeam:
             raise ValueError("Wrong ftfile input. See docstring.")
 
         with h5py.File(ftfile, "r") as f:
-            bandwidth = np.array(f["freq"][...])
+            _check_ftbeam_version(f, ftfile)
+            bandwidth = unit_helpers.convert_from_stored_unit(
+                np.array(f["freq"][...]),
+                f["freq"].attrs.get("unit", None),
+                _FTBEAM_FREQ_UNIT,
+                "freq",
+            )
 
         if bandwidth.size <= 1:
             raise ValueError("Error reading file, empty bandwidth.")
@@ -521,6 +606,13 @@ class FTBeam:
         extra_attrs : dict, optional
             Additional attributes to store in the file (e.g. provenance
             information). Values must be h5py-compatible scalars/strings.
+
+        Notes
+        -----
+        The file has datasets ``FT_beam``, ``freq`` (with attribute
+        ``unit = "Hz"``) and ``mapsize`` (``unit = "rad"``), and attributes
+        ``pol`` and ``ftbeam_version = "2"``. :meth:`from_file` also reads
+        version 1 files, which have no version or unit attributes.
         """
         filepath = Path(filepath)
         if filepath.exists() and not overwrite:
@@ -529,12 +621,15 @@ class FTBeam:
 
         with h5py.File(filepath, "w") as f:
             f.create_dataset("FT_beam", data=self.ft_beam, compression="gzip")
-            f.create_dataset("freq", data=self.freq_array)
-            f.create_dataset("mapsize", data=np.array([self.mapsize]))
+            dset = f.create_dataset("freq", data=self.freq_array)
+            dset.attrs["unit"] = _FTBEAM_FREQ_UNIT.to_string()
+            dset = f.create_dataset("mapsize", data=np.array([self.mapsize]))
+            dset.attrs["unit"] = _FTBEAM_MAPSIZE_UNIT.to_string()
             f.attrs["pol"] = str(self.pol)
             if extra_attrs is not None:
                 for key, val in extra_attrs.items():
                     f.attrs[key] = val
+            f.attrs["ftbeam_version"] = FTBEAM_HDF5_VERSION
         logger.info("Wrote FTBeam to %s", filepath)
 
     def select_freqs(self, freq_array, atol=None, inplace=True):
@@ -551,13 +646,15 @@ class FTBeam:
 
         Parameters
         ----------
-        freq_array : 1D array or list of floats
-            Frequencies (in Hz) to restrict the FTBeam to. Must be
-            within the bandwidth of the FTBeam.
-        atol : float, optional
-            Absolute tolerance (in Hz) used to decide whether a requested
-            frequency coincides with a native channel. Default: 1e-3
-            times the native channel width.
+        freq_array : astropy.units.Quantity
+            Frequencies to restrict the FTBeam to, in any frequency unit (a
+            plain array or list is read as Hz, deprecated). Must be within
+            the bandwidth of the FTBeam.
+        atol : astropy.units.Quantity, optional
+            Absolute tolerance used to decide whether a requested frequency
+            coincides with a native channel, in any frequency unit (a plain
+            float is read as Hz, deprecated). Default: 1e-3 times the native
+            channel width.
         inplace : bool, optional
             If True (default), modify the object in place. Otherwise
             return a new FTBeam object.
@@ -567,6 +664,8 @@ class FTBeam:
         FTBeam object
             Only if inplace is False.
         """
+        freq_array = utils.to_value_in(freq_array, _FTBEAM_FREQ_UNIT, "freq_array")
+        atol = utils.to_value_in(atol, _FTBEAM_FREQ_UNIT, "atol", example="1 * u.kHz")
         fq = self if inplace else copy.deepcopy(self)
 
         freq_array = np.asarray(freq_array, dtype=float)
@@ -650,12 +749,7 @@ class UVWindow:
     """Class for :class:`UVWindow` objects."""
 
     def __init__(
-        self,
-        ftbeam_obj,
-        taper=None,
-        little_h=True,
-        cosmo=conversions.Cosmo_Conversions(),
-        verbose=False,
+        self, ftbeam_obj, taper=None, little_h=True, cosmo=None, verbose=False
     ):
         """
         Class for :class:`UVWindow` objects.
@@ -675,12 +769,13 @@ class UVWindow:
         taper : str
             Type of data tapering applied along bandwidth.
             See :func:`uvtools.dspec.gen_window` for options.
-        little_h : boolean, optional
-                Whether to have cosmological length units be h^-1 Mpc or Mpc
-                Default: True (h^-1 Mpc).
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified.
+        little_h : bool, optional
+            If True (default), k modes are in littleh / Mpc (cosmological
+            lengths in h^-1 Mpc); if False, in 1 / Mpc. See :attr:`kunits`.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 
@@ -689,15 +784,11 @@ class UVWindow:
 
         # cosmology
         if cosmo is None:
-            raise ValueError("If no preferred cosmology, do not call input parameter")
-        self.cosmo = cosmo
+            cosmo = conversions.DEFAULT_COSMOLOGY
+        self.cosmo = conversions.as_astropy_cosmology(cosmo)
 
-        # units
+        # units: k in kunits, cosmological lengths in length_unit = 1 / kunits
         self.little_h = bool(little_h)
-        if self.little_h:
-            self.kunits = units.h / units.Mpc
-        else:
-            self.kunits = units.Mpc ** (-1)
 
         # verbose
         self.verbose = bool(verbose)
@@ -740,7 +831,19 @@ class UVWindow:
         self.Nfreqs = len(self.freq_array)
         self.dly_array = utils.get_delays(self.freq_array, n_dlys=len(self.freq_array))
         self.avg_nu = np.mean(self.freq_array)
-        self.avg_z = self.cosmo.f2z(self.avg_nu)
+        self.avg_z = conversions.f2z(self.avg_nu)
+
+    @property
+    def kunits(self):
+        """
+        Unit of the k modes, set by :attr:`little_h`.
+
+        ``astropy.cosmology.units.littleh / astropy.units.Mpc`` if
+        :attr:`little_h` is True, else ``1 / astropy.units.Mpc``.
+        """
+        if self.little_h:
+            return cu.littleh / units.Mpc
+        return units.Mpc**-1
 
     @classmethod
     def from_uvpspec(
@@ -780,13 +883,13 @@ class UVWindow:
 
         # cosmology
         if not hasattr(uvp, "cosmo"):
-            cosmo = conversions.Cosmo_Conversions()
+            cosmo = conversions.DEFAULT_COSMOLOGY
             warnings.warn("uvp has no cosmo attribute. Using fiducial cosmology.")
         else:
             cosmo = uvp.cosmo
 
-        # units
-        little_h = "h^-3" in uvp.norm_units
+        # units: the k unit of the window functions stored on uvp
+        little_h = unit_helpers.is_littleh(uvp.window_k_unit())
 
         # spectral window
         if spw >= uvp.Nspws:
@@ -832,7 +935,7 @@ class UVWindow:
         for ip in range(2):
             if (ip > 0) and (polpair[ip] == polpair[0]):
                 continue
-            ftbeam_obj_pol[ip].select_freqs(freq_array)
+            ftbeam_obj_pol[ip].select_freqs(freq_array * _FTBEAM_FREQ_UNIT)
 
         return cls(
             ftbeam_obj=ftbeam_obj_pol,
@@ -841,6 +944,31 @@ class UVWindow:
             little_h=little_h,
             verbose=verbose,
         )
+
+    def _cosmo_factor(self, name, z):
+        """
+        Return a cosmological conversion factor as a float.
+
+        Parameters
+        ----------
+        name : str
+            One of ``"bl_to_kperp"`` ([h] Mpc^-1 per m), ``"tau_to_kpara"``
+            ([h] Mpc^-1 per s), ``"dRperp_dtheta"`` ([h^-1] Mpc per rad) or
+            ``"dRpara_df"`` ([h^-1] Mpc per Hz), with lengths in
+            ``1 / kunits`` (h^-1 Mpc or Mpc).
+        z : float
+            Redshift.
+
+        Returns
+        -------
+        float
+            The ``conversions`` helper of that name, evaluated with
+            :attr:`cosmo` (the helpers cache by redshift themselves).
+        """
+        # the helpers return exactly the units listed above, so .value is
+        # already in them (converting to a freshly built unit is slow)
+        helper = getattr(conversions, name)
+        return float(helper(z, self.cosmo, 1 / self.kunits).value)
 
     def _get_kgrid(self, bl_len, width=0.020):
         """
@@ -872,17 +1000,15 @@ class UVWindow:
         # central kperp for given baseline (i.e. 2pi*b*nu/c/R)
         # divided by sqrt(2) because 2 dimensions
         kp_centre = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h)
-            * bl_len
-            / np.sqrt(2.0)
+            self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_len / np.sqrt(2.0)
         )
         # spacing of the numerical Fourier grid, in cosmological units
         dk = (
             2.0
             * np.pi
             / (2.0 * self.ftbeam_obj_pol[0].mapsize)
-            / self.cosmo.dRperp_dtheta(
-                self.cosmo.f2z(self.freq_array.max()), little_h=self.little_h
+            / self._cosmo_factor(
+                "dRperp_dtheta", conversions.f2z(self.freq_array.max())
             )
         )
         if width <= dk:
@@ -896,7 +1022,7 @@ class UVWindow:
 
         return kgrid, kperp_norm
 
-    def _kperp4bl_freq(self, freq, bl_len, ngrid):
+    def _kperp4bl_freq(self, freq, bl_len, ngrid, dRperp_dtheta=None):
         """
         Compute the range of kperp for a given baseline-freq pair.
 
@@ -911,6 +1037,10 @@ class UVWindow:
         ngrid : int
             Number of pixels in the FT beam array.
             Internal use only. Do not modify.
+        dRperp_dtheta : float, optional
+            ``dRperp_dtheta`` at the redshift of ``freq``, in ``1 / kunits``
+            per radian. Computed if not given; callers looping over all
+            frequencies pass it to avoid one cosmology call per frequency.
 
         Returns
         ----------
@@ -923,8 +1053,9 @@ class UVWindow:
         if not (self.freq_array.min() <= freq <= self.freq_array.max()):
             raise ValueError("Choose frequency within spectral window.")
 
-        z = self.cosmo.f2z(freq)
-        R = self.cosmo.DM(z, little_h=self.little_h)  # Mpc
+        if dRperp_dtheta is None:
+            dRperp_dtheta = self._cosmo_factor("dRperp_dtheta", conversions.f2z(freq))
+        R = dRperp_dtheta  # [h^-1] Mpc
         # Fourier dual of sky angle theta
         q = (
             np.fft.fftshift(np.fft.fftfreq(ngrid))
@@ -975,9 +1106,16 @@ class UVWindow:
         # and given baseline length
         ngrid = ft_beam.shape[-1]
         interp_ft_beam = np.zeros((kgrid.size, kgrid.size, self.Nfreqs))
+        # one vectorised cosmology call for all frequencies
+        length_unit = 1 / self.kunits
+        dRperp = conversions.dRperp_dtheta(
+            conversions.f2z(self.freq_array), self.cosmo, length_unit
+        ).to_value(length_unit / units.rad)
         for i in range(self.Nfreqs):
             # kperp values over frequency array for bl_len
-            k = self._kperp4bl_freq(self.freq_array[i], bl_len, ngrid=ngrid)
+            k = self._kperp4bl_freq(
+                self.freq_array[i], bl_len, ngrid=ngrid, dRperp_dtheta=dRperp[i]
+            )
             # interpolate the FT beam over values onto regular kgrid
             A_real = RegularGridInterpolator(
                 (k, k), ft_beam[i], bounds_error=False, fill_value=0.0
@@ -1026,7 +1164,7 @@ class UVWindow:
 
         return fnu
 
-    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins):
+    def _get_wf_for_tau(self, tau, wf_array1, kperp_bins, kpara_bins, dRpara_df=None):
         """
         Get the cylindrical window function for a given delay.
 
@@ -1046,6 +1184,11 @@ class UVWindow:
             1D float array of ascending k_parallel bin centers in [h] Mpc^-1
             units.
             Used for cylindrical binning. Must be linearly spaced.
+        dRpara_df : float, optional
+            :func:`conversions.dRpara_df` at :attr:`avg_z`, in ``1 / kunits``
+            per Hz.
+            Computed if not given; get_cylindrical_wf passes it once for all
+            delays.
 
         Returns
         ----------
@@ -1075,13 +1218,14 @@ class UVWindow:
 
         # get kparallel grid
         # conversion factor to cosmological units
-        alpha = self.cosmo.dRpara_df(self.avg_z, little_h=self.little_h, ghz=False)
+        if dRpara_df is None:
+            dRpara_df = self._cosmo_factor("dRpara_df", self.avg_z)
         # frequency resolution
         delta_nu = np.median(np.diff(self.freq_array))
         # Fourier dual of frequency (unit 1: FT along theta)
         eta = np.fft.fftshift(np.fft.fftfreq(self.Nfreqs), axes=-1) / delta_nu
         # construct array of |kpara| values for given delay tau
-        kpar_norm = np.abs(2.0 * np.pi / alpha * (eta + tau))
+        kpar_norm = np.abs(2.0 * np.pi / dRpara_df * (eta + tau))
 
         # perform binning along k_parallel (vectorized: bin index of each
         # kpar_norm element such that edges[m] <= kpar_norm < edges[m+1])
@@ -1117,22 +1261,25 @@ class UVWindow:
 
         Parameters
         ----------
-        bl_lens : list
-            List of baseline lengths.
-            Can be only one value.
+        bl_lens : astropy.units.Quantity
+            Baseline lengths, in any length unit (e.g. ``[14.6] * u.m``).
+            Can be only one value. Plain numbers are read as m
+            (deprecated).
 
         Returns
         ----------
         kperp_bins : array.
             Array of kperp bins to use.
         """
-        bl_lens = np.array(bl_lens)
+        bl_lens = np.array(
+            utils.to_value_in(bl_lens, units.m, "bl_lens", example="[14.6] * u.m")
+        )
         if bl_lens.size == 0:
             raise ValueError("get_kperp_bins() requires array of baseline lengths.")
 
         dk_perp = np.diff(self._get_kgrid(np.min(bl_lens))[1]).mean() * 5
         kperp_max = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.max(bl_lens)
+            self._cosmo_factor("bl_to_kperp", self.avg_z) * np.max(bl_lens)
             + 10.0 * dk_perp
         )
         kperp_bin_edges = np.arange(dk_perp, kperp_max, step=dk_perp)
@@ -1157,9 +1304,9 @@ class UVWindow:
 
         Parameters
         ----------
-        freq_array : array
-            List of frequencies you want to compute window functions over.
-            In Hz.
+        freq_array : astropy.units.Quantity
+            Frequencies you want to compute window functions over, in any
+            frequency unit. A plain array is read as Hz (deprecated).
 
         Returns
         ----------
@@ -1168,21 +1315,17 @@ class UVWindow:
 
         """
 
-        freq_array = np.array(freq_array)
+        freq_array = np.array(utils.to_value_in(freq_array, units.Hz, "freq_array"))
         if freq_array.size <= 1:
             raise ValueError("Must feed list of frequencies.")
 
         dly_array = utils.get_delays(freq_array, n_dlys=len(freq_array))
-        avg_z = self.cosmo.f2z(np.mean(freq_array))
+        avg_z = conversions.f2z(np.mean(freq_array))
 
         # define default kperp bins,
-        dk_para = (
-            self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)
-            * np.diff(dly_array)[0]
-        )
+        dk_para = self._cosmo_factor("tau_to_kpara", avg_z) * np.diff(dly_array)[0]
         kpara_max = (
-            self.cosmo.tau_to_kpara(avg_z, little_h=self.little_h)
-            * abs(dly_array).max()
+            self._cosmo_factor("tau_to_kpara", avg_z) * abs(dly_array).max()
             + 10.0 * dk_para
         )
         kpara_bin_edges = np.arange(dk_para / 2.0, kpara_max, step=dk_para)
@@ -1208,18 +1351,22 @@ class UVWindow:
 
         Parameters
         ----------
-        bl_len : float
-            Length of the baseline considered, in meters.
+        bl_len : astropy.units.Quantity
+            Length of the baseline considered, in any length unit (e.g.
+            ``14.6 * u.m``). A plain float is read as m (deprecated).
         kperp_bins : array_like of astropy quantity, with units.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
+            Used for cylindrical binning.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
             If computing for different baselines, make sure to input identical
             arrays.
         kpara_bins : array_like of astropy.quantity, with units.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
         return_bins : str
             If 'weighted', return bins weighted by the actual modes inside
             of bin.
@@ -1248,15 +1395,16 @@ class UVWindow:
 
         """
         # INITIALISE PARAMETERS
+        bl_len = utils.to_value_in(bl_len, units.m, "bl_len", example="14.6 * u.m")
 
         if verbose is None:
             verbose = self.verbose
 
         # k-bins for cylindrical binning
         if kperp_bins is None:
-            kperp_bins = self.get_kperp_bins([bl_len])
+            kperp_bins = self.get_kperp_bins([bl_len] * units.m)
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
             raise ValueError("get_cylindrical_wf: kperp_bins must be linearly spaced.")
@@ -1265,9 +1413,7 @@ class UVWindow:
         kperp_bin_edges = np.arange(
             kperp_bins.min() - dk_perp / 2, kperp_bins.max() + dk_perp, step=dk_perp
         )
-        kperp_centre = (
-            self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * bl_len
-        )
+        kperp_centre = self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_len
         if (kperp_bin_edges.max() < kperp_centre + 3 * dk_perp) or (
             kperp_bin_edges.min() > kperp_centre - 3 * dk_perp
         ):
@@ -1277,9 +1423,9 @@ class UVWindow:
             )
 
         if kpara_bins is None:
-            kpara_bins = self.get_kpara_bins(self.freq_array)
+            kpara_bins = self.get_kpara_bins(self.freq_array * units.Hz)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
             raise ValueError("get_cylindrical_wf: kpara_bins must be linearly spaced.")
@@ -1289,8 +1435,7 @@ class UVWindow:
             kpara_bins.min() - dk_para / 2, kpara_bins.max() + dk_para, step=dk_para
         )
         kpara_centre = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)
-            * abs(self.dly_array).max()
+            self._cosmo_factor("tau_to_kpara", self.avg_z) * abs(self.dly_array).max()
         )
         if (kpara_bin_edges.max() < kpara_centre + 3 * dk_para) or (
             kpara_bin_edges.min() > kpara_centre - 3 * dk_para
@@ -1340,9 +1485,10 @@ class UVWindow:
 
         # in frequency direction
         cyl_wf = np.zeros((self.Nfreqs, nbins_kperp, nbins_kpara))
+        dRpara_df = self._cosmo_factor("dRpara_df", self.avg_z)
         for it, tau in enumerate(self.dly_array[: self.Nfreqs // 2 + 1]):
             kpara, cyl_wf[it, :, :] = self._get_wf_for_tau(
-                tau, wf_array1, kperp_bins, kpara_bins
+                tau, wf_array1, kperp_bins, kpara_bins, dRpara_df=dRpara_df
             )
         # fill by symmetry for tau = -tau
         if self.Nfreqs % 2 == 0:
@@ -1355,7 +1501,11 @@ class UVWindow:
             ]
         # except for tau at 1/4 and 3/4 of the spectral window for symmetry reasons
         _, cyl_wf[self.Nfreqs - self.Nfreqs // 4, :, :] = self._get_wf_for_tau(
-            -self.dly_array[self.Nfreqs // 4], wf_array1, kperp_bins, kpara_bins
+            -self.dly_array[self.Nfreqs // 4],
+            wf_array1,
+            kperp_bins,
+            kpara_bins,
+            dRpara_df=dRpara_df,
         )
 
         # normalisation of window functions
@@ -1383,13 +1533,15 @@ class UVWindow:
             Axis 3 is kparallel.
             If only one bl_lens is given, then axis 0 can be omitted.
         kbins : array-like astropy.quantity with units
-            1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
+            1D float array of ascending |k| bin centers, in littleh / Mpc if
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for spherical binning. Must be linearly spaced.
         ktot : array_like
             2-dimensional array giving the magnitude of k corresponding to
             kperp and kpara in cyl_wf.
-        bl_lens : list.
-            List of baseline lengths used to compute cyl_wf.
+        bl_lens : astropy.units.Quantity
+            Baseline lengths used to compute cyl_wf, in any length unit.
+            Plain numbers are read as m (deprecated).
             Must have same length as same size as cyl_wf.shape[0].
         bl_weights : list of weights (float or int), optional
             Relative weight of each baseline-length when performing
@@ -1405,6 +1557,7 @@ class UVWindow:
             Returns weighted k-modes.
         """
         # check bl_lens and bl_weights are consistent
+        bl_lens = utils.to_value_in(bl_lens, units.m, "bl_lens", example="[14.6] * u.m")
         bl_lens = (
             bl_lens if isinstance(bl_lens, (list, tuple, np.ndarray)) else [bl_lens]
         )
@@ -1436,7 +1589,7 @@ class UVWindow:
         # k-bins for spherical binning
         if len(kbins) <= 1:
             raise ValueError("must feed array of k bins for spherical average")
-        self.check_kunits(kbins)  # check k units
+        kbins = self.check_kunits(kbins)  # check k units
         kbins = np.array(kbins.value)
         if not np.allclose(np.diff(kbins), np.diff(kbins)[0]):
             raise ValueError("cylindrical_to_spherical: kbins must be linearly spaced.")
@@ -1445,10 +1598,8 @@ class UVWindow:
         kbin_edges = np.arange(kbins.min() - dk / 2, kbins.max() + dk, step=dk)
 
         # construct array giving the k probed by each baseline-tau pair
-        kperps = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * bl_lens
-        kparas = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h) * self.dly_array
-        )
+        kperps = self._cosmo_factor("bl_to_kperp", self.avg_z) * bl_lens
+        kparas = self._cosmo_factor("tau_to_kpara", self.avg_z) * self.dly_array
         kmags = np.sqrt(kperps[:, None] ** 2 + kparas**2)
 
         # take average
@@ -1502,25 +1653,32 @@ class UVWindow:
         Parameters
         ----------
         kbins : array-like astropy.quantity with units
-            1D float array of ascending |k| bin centers in [h] Mpc^-1 units.
-            Using for spherical binning.
-            Make sure the values are consistent with :attr:`little_h`.
-        bl_lens : list.
-            List of lengths corresponding to each group
-            (can be redundant groups from utils.get_reds).
+            1D float array of ascending |k| bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
+            Used for spherical binning.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
+        bl_lens : astropy.units.Quantity
+            Lengths corresponding to each group (can be redundant groups
+            from utils.get_reds), in any length unit. Plain numbers are read
+            as m (deprecated).
             Must have same length as bl_weights.
         bl_weights : list, optional.
             List baselines weights. Must have same length as bl_lens.
             If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
+        kpara_bins : array-like astropy.quantity with units, optional.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
+            Used for cylindrical binning.
         return_weighted_k : bool, optional
             Return the weighted k-mode corresponding to each bin.
             Default is False.
@@ -1543,7 +1701,12 @@ class UVWindow:
         if verbose is None:
             verbose = self.verbose
 
-        bl_lens = np.atleast_1d(np.asarray(bl_lens, dtype=float)).reshape(-1)
+        bl_lens = np.atleast_1d(
+            np.asarray(
+                utils.to_value_in(bl_lens, units.m, "bl_lens", example="[14.6] * u.m"),
+                dtype=float,
+            )
+        ).reshape(-1)
         nbls = bl_lens.size  # number of redudant groups
         if bl_weights is not None:
             # check consistency of baseline-related inputs
@@ -1558,9 +1721,9 @@ class UVWindow:
         if kperp_bins is None or len(kperp_bins) == 0:
             # define default kperp bins, making sure all values probed by
             # bl_lens are included and there is no over-sampling
-            kperp_bins = self.get_kperp_bins(bl_lens)
+            kperp_bins = self.get_kperp_bins(bl_lens * units.m)
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         if not np.allclose(np.diff(kperp_bins), np.diff(kperp_bins)[0]):
             raise ValueError("get_spherical_wf: kperp_bins must be linearly spaced.")
@@ -1571,10 +1734,10 @@ class UVWindow:
         )
         # make sure proper kperp values are included in given bins
         # raise warning otherwise
-        kperp_max = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.max(
+        kperp_max = self._cosmo_factor("bl_to_kperp", self.avg_z) * np.max(
             bl_lens
         )  # + 10.*dk_perp
-        kperp_min = self.cosmo.bl_to_kperp(self.avg_z, little_h=self.little_h) * np.min(
+        kperp_min = self._cosmo_factor("bl_to_kperp", self.avg_z) * np.min(
             bl_lens
         )  # + 10.*dk_perp
         if kperp_bin_edges.max() <= kperp_max:
@@ -1589,9 +1752,9 @@ class UVWindow:
         if kpara_bins is None or len(kpara_bins) == 0:
             # define default kperp bins, making sure all values probed by freq
             # array are included and there is no over-sampling
-            kpara_bins = self.get_kpara_bins(self.freq_array)
+            kpara_bins = self.get_kpara_bins(self.freq_array * units.Hz)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         if not np.allclose(np.diff(kpara_bins), np.diff(kpara_bins)[0]):
             raise ValueError("get_spherical_wf: kpara_bins must be linearly spaced.")
@@ -1601,8 +1764,7 @@ class UVWindow:
             kpara_bins.min() - dk_para / 2, kpara_bins.max() + dk_para, step=dk_para
         )
         kpara_centre = (
-            self.cosmo.tau_to_kpara(self.avg_z, little_h=self.little_h)
-            * abs(self.dly_array).max()
+            self._cosmo_factor("tau_to_kpara", self.avg_z) * abs(self.dly_array).max()
         )
         # make sure proper kpara values are included in given bins
         # raise warning otherwise
@@ -1618,7 +1780,7 @@ class UVWindow:
         ktot = np.sqrt(kperp_bins[:, None] ** 2 + kpara_bins**2)
 
         # k-bins for spherical binning
-        self.check_kunits(kbins)  # check k units
+        kbins = self.check_kunits(kbins)  # check k units
         if kbins.value.size <= 1:
             raise ValueError("must feed array of k bins for spherical average")
         nbinsk = kbins.value.size
@@ -1643,7 +1805,7 @@ class UVWindow:
             if verbose:
                 sys.stdout.write(f"\rComputing for blg {ib + 1:d} of {nbls:d}...")
             cyl_wf[ib, :, :, :] = self.get_cylindrical_wf(
-                bl_len=bl_lens[ib],
+                bl_len=bl_lens[ib] * units.m,
                 kperp_bins=kperp_bins * self.kunits,
                 kpara_bins=kpara_bins * self.kunits,
                 verbose=verbose,
@@ -1653,7 +1815,7 @@ class UVWindow:
 
         # perform spherical binning
         wf_spherical, weighted_k = self.cylindrical_to_spherical(
-            cyl_wf, kbins, ktot, bl_lens, bl_weights
+            cyl_wf, kbins, ktot, bl_lens * units.m, bl_weights
         )
 
         if return_weighted_k:
@@ -1677,24 +1839,39 @@ class UVWindow:
         ----------
         filepath : str
             Filepath for output file.
-        bl_lens : list, optional.
-            List of lengths corresponding to each group
-            (can be redundant groups from utils.get_reds).
+        bl_lens : astropy.units.Quantity
+            Lengths corresponding to each group (can be redundant groups
+            from utils.get_reds), in any length unit. Plain numbers are read
+            as m (deprecated).
             Must have same length as bl_weights.
         bl_weights : list, optional.
             List baselines weights. Must have same length as bl_lens.
             If None, a weight of 1 is attributed to
             each bl_len.
         kperp_bins : array-like astropy.quantity with unit, optional.
-            1D float array of ascending k_perp bin centers in [h] Mpc^-1 units.
-            Used for cylindrical binning,
-            Make sure the values are consistent with :attr:`little_h`.
-        kpara_bins : array-like astropy.quantity with units, optional.
-            1D float array of ascending k_parallel bin centers.
+            1D float array of ascending k_perp bin centers, in littleh / Mpc
+            (``astropy.cosmology.units.littleh / astropy.units.Mpc``) if
+            :attr:`kunits` is littleh / Mpc, else in 1 / Mpc.
             Used for cylindrical binning.
-            Make sure the values are consistent with :attr:`little_h`.
+            Passing hour / Mpc (``astropy.units.h / astropy.units.Mpc``)
+            is deprecated; the values are read as littleh / Mpc.
+        kpara_bins : array-like astropy.quantity with units, optional.
+            1D float array of ascending k_parallel bin centers, in the
+            same units as kperp_bins (see :attr:`kunits`).
+            Used for cylindrical binning.
         clobber : bool, optional
             Whether to overwrite output file if it exists. Default: False.
+
+        Notes
+        -----
+        The file has attributes ``uvwindow_version = "2"``, ``avg_nu`` (with
+        ``avg_nu_unit = "Hz"``), ``avg_z``, ``nfreqs``, ``little_h``
+        (:attr:`little_h`, kept for v0.x readers),
+        ``polpair`` and ``taper``, and datasets ``kperp_bins`` and
+        ``kpara_bins`` (``unit`` attribute: :attr:`kunits`, i.e.
+        ``"littleh / Mpc"`` or ``"1 / Mpc"``), ``bl_lens`` (``unit = "m"``),
+        ``bl_weights``, ``dly_array`` (``unit = "s"``) and ``cyl_wf``. Version
+        1 files (hera_pspec v0.x) have no version or unit attributes.
         """
         # Check output
         filepath = Path(filepath)
@@ -1704,7 +1881,12 @@ class UVWindow:
             print(f"{filepath} exists, overwriting...")
             os.remove(filepath)
 
-        bl_lens = np.atleast_1d(np.asarray(bl_lens, dtype=float)).reshape(-1)
+        bl_lens = np.atleast_1d(
+            np.asarray(
+                utils.to_value_in(bl_lens, units.m, "bl_lens", example="[14.6] * u.m"),
+                dtype=float,
+            )
+        ).reshape(-1)
         nbls = bl_lens.size  # number of redudant groups
         if bl_weights is not None:
             # check consistency of baseline-related inputs
@@ -1719,18 +1901,18 @@ class UVWindow:
         if kperp_bins is None or len(kperp_bins) == 0:
             # define default kperp bins, making sure all values probed by
             # bl_lens are included and there is no over-sampling
-            kperp_bins = self.get_kperp_bins(bl_lens)
+            kperp_bins = self.get_kperp_bins(bl_lens * units.m)
         else:
-            self.check_kunits(kperp_bins)
+            kperp_bins = self.check_kunits(kperp_bins)
         kperp_bins = np.array(kperp_bins.value)
         nbins_kperp = kperp_bins.size
 
         if kpara_bins is None or len(kpara_bins) == 0:
             # define default kperp bins, making sure all values probed by freq
             # array are included and there is no over-sampling
-            kpara_bins = self.get_kpara_bins(self.freq_array)
+            kpara_bins = self.get_kpara_bins(self.freq_array * units.Hz)
         else:
-            self.check_kunits(kpara_bins)
+            kpara_bins = self.check_kunits(kpara_bins)
         kpara_bins = np.array(kpara_bins.value)
         nbins_kpara = kpara_bins.size
 
@@ -1742,15 +1924,19 @@ class UVWindow:
         for ib in range(nbls):
             cyl_wf[ib, :, :, :] = (
                 self.get_cylindrical_wf(
-                    bl_lens[ib], kperp_bins * self.kunits, kpara_bins * self.kunits
+                    bl_lens[ib] * units.m,
+                    kperp_bins * self.kunits,
+                    kpara_bins * self.kunits,
                 )
                 * bl_weights[ib]
             )
 
         # Write file
         with h5py.File(filepath, "w") as f:
+            f.attrs["uvwindow_version"] = UVWINDOW_HDF5_VERSION
             # parameters
             f.attrs["avg_nu"] = self.avg_nu
+            f.attrs["avg_nu_unit"] = units.Hz.to_string()
             f.attrs["avg_z"] = self.avg_z
             f.attrs["nfreqs"] = self.Nfreqs
             f.attrs["little_h"] = self.little_h
@@ -1761,17 +1947,22 @@ class UVWindow:
             else:
                 f.attrs["taper"] = self.taper
             # arrays
-            f.create_dataset(
+            kunits = unit_helpers.unit_to_string(self.kunits)
+            dset = f.create_dataset(
                 "kperp_bins", shape=(nbins_kperp,), data=kperp_bins, dtype=float
             )
-            f.create_dataset(
+            dset.attrs["unit"] = kunits
+            dset = f.create_dataset(
                 "kpara_bins", shape=(nbins_kpara,), data=kpara_bins, dtype=float
             )
-            f.create_dataset("bl_lens", shape=(nbls,), data=bl_lens, dtype=float)
+            dset.attrs["unit"] = kunits
+            dset = f.create_dataset("bl_lens", shape=(nbls,), data=bl_lens, dtype=float)
+            dset.attrs["unit"] = units.m.to_string()
             f.create_dataset("bl_weights", shape=(nbls,), data=bl_weights, dtype=float)
-            f.create_dataset(
+            dset = f.create_dataset(
                 "dly_array", shape=(self.Nfreqs,), data=self.dly_array, dtype=float
             )
+            dset.attrs["unit"] = units.s.to_string()
             f.create_dataset(
                 "cyl_wf",
                 shape=(nbls, self.Nfreqs, nbins_kperp, nbins_kpara),
@@ -1785,15 +1976,38 @@ class UVWindow:
 
         Parameters
         ----------
-        karray : array-like
-            Array of Fourier modes.
+        karray : array-like astropy.quantity with units
+            Array of Fourier modes. Units must be equivalent to
+            :attr:`kunits` (``astropy.cosmology.units.littleh /
+            astropy.units.Mpc`` or ``astropy.units.Mpc ** -1``). When
+            :attr:`kunits` is littleh / Mpc, hour / Mpc
+            (``astropy.units.h / astropy.units.Mpc``) is still accepted with a
+            DeprecationWarning and its values are read as littleh / Mpc.
+
+        Returns
+        -------
+        karray : astropy.quantity
+            The input array expressed in :attr:`kunits`.
         """
         try:
-            karray.unit
+            karray_unit = karray.unit
         except AttributeError:
             raise AttributeError("Feed k array with units (astropy.units).")
-        if not self.kunits.is_equivalent(karray.unit):
-            raise ValueError("k array units not consistent with little_h")
+        hour_kunits = units.h / units.Mpc
+        if self.little_h and karray_unit.is_equivalent(hour_kunits):
+            warnings.warn(
+                "k arrays in hour / Mpc (astropy.units.h / astropy.units.Mpc) "
+                "are deprecated; use astropy.cosmology.units.littleh / "
+                "astropy.units.Mpc instead. The values are read as littleh / Mpc.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+            return karray.to_value(hour_kunits) * self.kunits
+        if not self.kunits.is_equivalent(karray_unit):
+            raise ValueError(
+                f"k array units not consistent with kunits '{self.kunits}'"
+            )
+        return karray.to(self.kunits)
 
 
 def check_spw_range(spw_range, bandwidth=None):

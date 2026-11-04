@@ -4,8 +4,10 @@ import inspect
 import itertools
 import time
 import traceback
+import warnings
 from datetime import UTC, datetime
 
+import astropy.units as u
 import numpy as np
 import uvtools as uvt
 import yaml
@@ -14,8 +16,119 @@ from pyuvdata import UVData
 from pyuvdata import utils as uvutils
 from scipy.interpolate import interp1d
 
-from . import __version__
-from .conversions import Cosmo_Conversions
+from . import __version__, conversions
+
+
+def _contains_quantity(value):
+    """Return True if ``value`` is a Quantity or a (nested) list/tuple holding one."""
+    if isinstance(value, u.Quantity):
+        return True
+    if isinstance(value, (list, tuple)):
+        return any(_contains_quantity(item) for item in value)
+    return False
+
+
+def to_value_in(
+    value,
+    unit,
+    name,
+    equivalencies=None,
+    deprecate_plain=True,
+    example=None,
+    stacklevel=3,
+):
+    """
+    Return a physical input as a plain float (array) in ``unit``.
+
+    This is the boundary helper of the public API: arguments that carry a
+    physical unit are accepted as astropy Quantities in any equivalent unit
+    and converted once to the fixed unit the internals work in.
+
+    Parameters
+    ----------
+    value : astropy.units.Quantity, array_like, float or None
+        The argument. A list or tuple of Quantities (e.g. ``(100 * u.MHz,
+        120 * u.MHz)``) is stacked into one Quantity first.
+    unit : astropy.units.UnitBase or str
+        Unit to return the value in, e.g. ``u.Hz``.
+    name : str
+        Name of the argument, used in messages.
+    equivalencies : list, optional
+        astropy equivalencies used in the conversion. Default: None.
+    deprecate_plain : bool, optional
+        If True (default), a plain number or array emits a
+        ``DeprecationWarning`` saying it is read as ``unit``. If False, it is
+        returned as a float array without a warning.
+    example : str, optional
+        Example Quantity shown in the warning. Default:
+        ``"<name> * u.<unit>"``.
+    stacklevel : int, optional
+        Stack level of the deprecation warning, counted from this function.
+        The default, 3, points at the caller of the function that calls
+        ``to_value_in``.
+
+    Returns
+    -------
+    value : float, ndarray or None
+        Plain value in ``unit``: a float (numpy scalar) for scalar input, a
+        float ndarray otherwise. None is returned unchanged.
+
+    Raises
+    ------
+    astropy.units.UnitConversionError
+        If ``value`` is a Quantity in a unit that cannot be converted to
+        ``unit``.
+    """
+    if value is None:
+        return None
+    unit = u.Unit(unit)
+    if _contains_quantity(value):
+        try:
+            # astropy stacks a flat list of Quantities but not a nested one
+            # (e.g. a list of (low, high) pairs), so stack the rows first
+            quantity = (
+                u.Quantity([u.Quantity(row) for row in value])
+                if isinstance(value, (list, tuple))
+                else value
+            )
+            return quantity.to_value(unit, equivalencies=equivalencies or [])
+        except u.UnitConversionError as err:
+            given = value.unit if isinstance(value, u.Quantity) else "mixed units"
+            raise u.UnitConversionError(
+                f"{name} must be in a unit equivalent to '{unit}', got '{given}'."
+            ) from err
+    if deprecate_plain:
+        warn_plain_number(name, unit, example=example, stacklevel=stacklevel + 1)
+    value = np.asarray(value, dtype=float)
+    return value[()] if value.ndim == 0 else value
+
+
+def warn_plain_number(name, unit, example=None, stacklevel=2):
+    """
+    Emit the ``DeprecationWarning`` for a physical argument given without units.
+
+    Parameters
+    ----------
+    name : str
+        Name of the argument.
+    unit : astropy.units.UnitBase
+        Unit plain numbers are read as.
+    example : str, optional
+        Example Quantity shown in the message. Default: ``"<name> * u.<unit>"``.
+    stacklevel : int, optional
+        Stack level of the warning, counted from this function. The default,
+        2, points at the caller of ``warn_plain_number``.
+    """
+    unit = u.Unit(unit)
+    if example is None:
+        example = f"{name} * u.{unit.to_string()}"
+    warnings.warn(
+        f"Passing {name} as a plain number is deprecated; pass it as an "
+        f"astropy Quantity, e.g. {example}. Plain numbers are read as "
+        f"{unit.to_string()}.",
+        DeprecationWarning,
+        stacklevel=stacklevel,
+    )
 
 
 def circular_average(angles, axis=0):
@@ -583,11 +696,14 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     data : UVData or UVPSpec object
         Object containing data with a frequency dimension.
 
-    freq_range : tuple or list of tuples
+    freq_range : tuple, list of tuples or astropy.units.Quantity
         Tuples containing the lower and upper frequency bounds for each
         spectral window. The range is inclusive of the lower frequency bound,
         i.e. it includes all channels in freq_range[0] <= freq < freq_range[1].
-        Frequencies are in Hz.
+        Frequencies are Quantities in any frequency unit, e.g.
+        ``(100 * u.MHz, 120 * u.MHz)``; a Quantity of shape (2,) is one
+        window and one of shape (N, 2) is N windows. Plain numbers are read
+        as Hz (deprecated).
 
     bounds_error : bool, optional
         Whether to raise an error if a specified lower/upper frequency is
@@ -608,6 +724,22 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     except:
         raise AttributeError("Object 'data' does not have a freq_array attribute.")
 
+    # A Quantity of shape (2,) is one window, one of shape (N, 2) a list
+    if isinstance(freq_range, u.Quantity):
+        freq_range = to_value_in(freq_range, u.Hz, "freq_range")
+        if freq_range.shape == (2,):
+            freq_range = tuple(freq_range)
+        elif freq_range.ndim == 2 and freq_range.shape[1] == 2:
+            freq_range = [tuple(frange) for frange in freq_range]
+        else:
+            raise ValueError(
+                "A freq_range Quantity must have shape (2,) or (N, 2), got "
+                f"{freq_range.shape}."
+            )
+        plain_numbers = False
+    else:
+        plain_numbers = True
+
     # Check for a single tuple input
     is_tuple = False
     if isinstance(freq_range, tuple):
@@ -617,6 +749,21 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
     # Make sure freq_range is now a list (of tuples)
     if not isinstance(freq_range, list):
         raise TypeError("freq_range must be a tuple or list of tuples.")
+
+    # Quantities inside the tuples are converted to Hz
+    if plain_numbers:
+        if any(_contains_quantity(frange) for frange in freq_range):
+            # a loop, not a comprehension, so that a warning for a plain
+            # tuple in the list points at the caller on Python 3.11 too
+            freq_range_hz = []
+            for frange in freq_range:
+                frange_hz = to_value_in(frange, u.Hz, "freq_range")
+                freq_range_hz.append(tuple(frange_hz))
+            freq_range = freq_range_hz
+        else:
+            warn_plain_number(
+                "freq_range", u.Hz, example="(100 * u.MHz, 120 * u.MHz)", stacklevel=3
+            )
 
     # Loop over tuples and find spectral window indices
     spw_range = []
@@ -687,11 +834,11 @@ def spw_range_from_redshifts(data, z_range, bounds_error=True):
         is_tuple = True
         z_range = [z_range]
 
-    # Convert redshifts to frequencies (in Hz)
+    # Convert redshifts to frequencies (the 21 cm line needs no cosmology)
     freq_range = []
     for zrange in z_range:
         zmin, zmax = zrange
-        freq_range.append((Cosmo_Conversions.z2f(zmax), Cosmo_Conversions.z2f(zmin)))
+        freq_range.append((conversions.z2f(zmax), conversions.z2f(zmin)))
 
     # Use freq. function to get spectral window
     spw_range = spw_range_from_freqs(
@@ -1473,7 +1620,10 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
             Op = {uvp_pol: uvp.OmegaP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
             Opp = {uvp_pol: uvp.OmegaPP[:, ii] for ii, uvp_pol in enumerate(uvp_pols)}
             beam = pspecbeam.PSpecBeamFromArray(
-                Op, Opp, uvp.beam_freqs, cosmo=uvp.cosmo
+                {pol: Omega << u.sr for pol, Omega in Op.items()},
+                {pol: Omega << u.sr for pol, Omega in Opp.items()},
+                uvp.beam_freqs << u.Hz,
+                cosmo=uvp.cosmo,
             )
         else:
             raise ValueError("UVPSpec must have OmegaP and OmegaPP to make a beam")
@@ -1483,7 +1633,7 @@ def uvd_to_Tsys(uvd, beam, Tsys_outfile=None):
         )
 
     # convert autos in Jy to Tsys in Kelvin
-    J2K = {pol: beam.Jy_to_mK(uvd.freq_array, pol=pol) / 1e3 for pol in pols}
+    J2K = {pol: beam.Jy_to_mK(uvd.freq_array << u.Hz, pol=pol) / 1e3 for pol in pols}
     for blpol in uvd.get_antpairpols():
         bl, pol = blpol[:2], blpol[2]
         tinds = uvd.antpair2ind(bl)
@@ -1505,7 +1655,8 @@ def uvp_noise_error(
     precomp_P_N=None,
     P_SN_correction=True,
     num_steps_scalar=2000,
-    little_h=True,
+    little_h=None,
+    length_unit=None,
 ):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
@@ -1547,8 +1698,15 @@ def uvp_noise_error(
         Default is 2000
 
     little_h : bool, optional
-        Use little_h units in power spectrum.
-        Default is True.
+        Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
+        Raises ValueError if it disagrees with ``length_unit``.
+
+    length_unit : astropy.units.Unit or str, optional
+        Cosmological length unit L of the noise spectra. P_N and P_SN are
+        stored in ``uvp.stats_array`` as plain arrays in mK^2 * L^3.
+        Default: None, the object's own length unit
+        (``uvp._default_length_unit()``, the length unit of ``uvp.units``), so
+        the stored errors match the units of the data.
 
     """
     from hera_pspec import uvpspec_utils
@@ -1562,7 +1720,11 @@ def uvp_noise_error(
         lst_indices = np.unique(auto_Tsys.lst_array, return_index=True)[1]
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
-    # calculate scalars for spws and polpairs.
+    # calculate scalars for spws and polpairs (floats in scalar_unit).
+    # stacklevel 4 in the helper: the deprecation warning points at our caller
+    length_unit = uvp._resolve_length_unit(length_unit, little_h)
+    scalar_unit = length_unit**3 / (u.Hz * u.sr)
+    P_N_unit = u.mK**2 * length_unit**3
     scalar = {}
     for spw in uvp.spw_array:
         for polpair in uvp.polpair_array:
@@ -1570,14 +1732,16 @@ def uvp_noise_error(
                 spw,
                 polpair,
                 num_steps=num_steps_scalar,
-                little_h=little_h,
                 noise_scalar=True,
-            )
+                length_unit=length_unit,
+            ).to_value(scalar_unit)
     # iterate over spectral window
     for spw in uvp.spw_array:
         # get spw properties
         spw_range = uvp.get_spw_ranges(spw)[0]
-        spw_start = np.argmin(np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0]))
+        spw_start = np.argmin(
+            np.abs(np.squeeze(auto_Tsys.freq_array) - spw_range[0].to_value(u.Hz))
+        )
         spw_stop = spw_start + spw_range[2]
         taper = uvt.dspec.gen_window(uvp.taper, spw_range[2])
         # iterate over blpairs
@@ -1694,12 +1858,13 @@ def uvp_noise_error(
                     P_N = uvp.generate_noise_spectra(
                         spw,
                         polpair,
-                        Tsys,
+                        Tsys * u.K,
                         blpairs=[blp],
                         form="Pk",
                         component="real",
                         scalar=scalar[(spw, polpair)],
-                    )[blp_int]
+                        length_unit=length_unit,
+                    )[blp_int].to_value(P_N_unit)
 
                 else:
                     P_N = uvp.get_stats(precomp_P_N, key)

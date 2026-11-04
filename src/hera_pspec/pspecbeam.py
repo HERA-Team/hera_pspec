@@ -1,6 +1,7 @@
 import warnings
 from pathlib import Path
 
+import astropy.units as u
 import numpy as np
 import scipy.integrate as integrate
 import uvtools.dspec as dspec
@@ -9,7 +10,7 @@ from pyuvdata import utils as uvutils
 from pyuvdata.analytic_beam import AnalyticBeam, GaussianBeam
 from scipy.interpolate import interp1d
 
-from . import conversions
+from . import conversions, utils
 from . import uvpspec_utils as uvputils
 
 
@@ -20,9 +21,10 @@ def _compute_pspec_scalar(
     pspec_freqs,
     num_steps=5000,
     taper="none",
-    little_h=True,
+    little_h=None,
     noise_scalar=False,
     exact_norm=False,
+    length_unit=None,
 ):
     r"""
     This is not to be used by the novice user to calculate a pspec scalar.
@@ -35,8 +37,8 @@ def _compute_pspec_scalar(
 
     Parameters
     ----------
-    cosmo : conversions.Cosmo_Conversions instance
-        Instance of the cosmological conversion object.
+    cosmo : astropy.cosmology.FLRW
+        Cosmology.
 
     beam_freqs : array of floats
         Frequency of beam integrals in omega_ratio in units of Hz.
@@ -58,8 +60,8 @@ def _compute_pspec_scalar(
         power spectrum estimation. Default: 'none'.
 
     little_h : boolean, optional
-        Whether to have cosmological length units be h^-1 Mpc or Mpc. Value of
-        h is obtained from cosmo object stored in pspecbeam. Default: h^-1 Mpc.
+        Deprecated, use ``length_unit``. Whether to have cosmological length
+        units be h^-1 Mpc (True) or Mpc (False).
 
     noise_scalar : boolean, optional
         Whether to calculate power spectrum scalar, or noise power scalar. The
@@ -70,12 +72,18 @@ def _compute_pspec_scalar(
         returns only X2Y for scalar if True, else uses the existing framework
         involving antenna beam and spectral tapering factors. Default: False.
 
+    length_unit : astropy.units.Unit, optional
+        Cosmological length unit. Default: ``u.Mpc / cu.littleh`` (h^-1 Mpc,
+        with h from ``cosmo``); use ``u.Mpc`` for Mpc.
+
     Returns
     -------
     scalar: float
         [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-        Units: h^-3 Mpc^3 or Mpc^3.
+        in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
     """
+    length_unit = conversions.resolve_length_unit(length_unit, little_h)
+
     # Get integration freqs
     df = np.median(np.diff(pspec_freqs))
     integration_freqs = np.linspace(
@@ -90,8 +98,10 @@ def _compute_pspec_scalar(
     integration_freqs_MHz = integration_freqs / 1e6
 
     # Get redshifts and cosmological functions
-    redshifts = cosmo.f2z(integration_freqs).flatten()
-    X2Y = np.array([cosmo.X2Y(z, little_h=little_h) for z in redshifts])
+    redshifts = conversions.f2z(integration_freqs).flatten()
+    X2Y = conversions.X2Y(redshifts, cosmo, length_unit).to_value(
+        length_unit**3 / (u.sr * u.Hz)
+    )
 
     if exact_norm:  # Beam and spectral tapering are already taken into account in normalization. We only use averaged X2Y
         scalar = integrate.trapezoid(X2Y, x=integration_freqs) / (
@@ -128,6 +138,25 @@ def _compute_pspec_scalar(
     return scalar
 
 
+def _solid_angle_in_sr(value, name, stacklevel):
+    """
+    Return a solid-angle argument with Quantities converted to sr.
+
+    Plain values are returned unchanged (``PSpecBeamFromArray._add_pol``
+    checks and casts them) after a ``DeprecationWarning``; ``stacklevel`` is
+    counted from this function (3 points at the caller of its caller).
+    """
+    if utils._contains_quantity(value):
+        return utils.to_value_in(value, u.sr, name, stacklevel=stacklevel + 1)
+    # input that is not array_like at all is an error, not a deprecation
+    try:
+        np.array(value).astype(float)
+    except (TypeError, ValueError):
+        raise TypeError("OmegaP and OmegaPP must both be array_like.")
+    utils.warn_plain_number(name, u.sr, stacklevel=stacklevel + 1)
+    return value
+
+
 class PSpecBeamBase:
     def __init__(self, cosmo=None):
         """
@@ -137,14 +166,32 @@ class PSpecBeamBase:
 
         Parameters
         ----------
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         """
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
+
+    @property
+    def cosmo(self):
+        """
+        Cosmology of the beam, an ``astropy.cosmology.FLRW``.
+
+        Setting it to None selects ``conversions.DEFAULT_COSMOLOGY``. A
+        ``Cosmo_Conversions`` object is converted (deprecated).
+        """
+        return self._cosmo
+
+    @cosmo.setter
+    def cosmo(self, cosmo):
+        if cosmo is None:
+            cosmo = conversions.DEFAULT_COSMOLOGY
+        self._cosmo = conversions.as_astropy_cosmology(cosmo)
+
+    @cosmo.deleter
+    def cosmo(self):
+        del self._cosmo
 
     def compute_pspec_scalar(
         self,
@@ -154,9 +201,10 @@ class PSpecBeamBase:
         num_steps=5000,
         pol="pI",
         taper="none",
-        little_h=True,
+        little_h=None,
         noise_scalar=False,
         exact_norm=False,
+        length_unit=None,
     ):
         r"""
         Computes the scalar function to convert a power spectrum estimate
@@ -170,13 +218,15 @@ class PSpecBeamBase:
 
         Parameters
         ----------
-        lower_freq : float
+        lower_freq : astropy.units.Quantity
             Bottom edge of frequency band over which power spectrum is being
-            estimated. Assumed to be in Hz.
+            estimated, in any frequency unit. A plain number is read as Hz
+            (deprecated).
 
-        upper_freq : float
+        upper_freq : astropy.units.Quantity
             Top edge of frequency band over which power spectrum is being
-            estimated. Assumed to be in Hz.
+            estimated, in any frequency unit. A plain number is read as Hz
+            (deprecated).
 
         num_freqs : int, optional
             Number of frequencies used in estimating power spectrum.
@@ -195,9 +245,8 @@ class PSpecBeamBase:
             the power spectrum estimation. Default: none.
 
         little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc. Value
-            of h is obtained from cosmo object stored in pspecbeam.
-            Default: h^-1 Mpc
+            Deprecated, use ``length_unit``. Whether to have cosmological
+            length units be h^-1 Mpc (True) or Mpc (False).
 
         noise_scalar : boolean, optional
             Whether to calculate power spectrum scalar, or noise power scalar.
@@ -208,12 +257,25 @@ class PSpecBeamBase:
             returns only X2Y for scalar if True, else uses the existing framework
             involving antenna beam and spectral tapering factors. Default: False.
 
+        length_unit : astropy.units.Unit, optional
+            Cosmological length unit. Default: ``u.Mpc / cu.littleh``
+            (h^-1 Mpc, with h from ``self.cosmo``); use ``u.Mpc`` for Mpc
+            (the old ``little_h=False``).
+
         Returns
         -------
         scalar: float
             [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
-            Units: h^-3 Mpc^3 or Mpc^3.
+            in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
         """
+        length_unit = conversions.resolve_length_unit(length_unit, little_h)
+        lower_freq = utils.to_value_in(
+            lower_freq, u.Hz, "lower_freq", example="100 * u.MHz"
+        )
+        upper_freq = utils.to_value_in(
+            upper_freq, u.Hz, "upper_freq", example="120 * u.MHz"
+        )
+
         # Get pspec_freqs
         pspec_freqs = np.linspace(lower_freq, upper_freq, num_freqs, endpoint=False)
 
@@ -228,9 +290,9 @@ class PSpecBeamBase:
             pspec_freqs,
             num_steps=num_steps,
             taper=taper,
-            little_h=little_h,
             noise_scalar=noise_scalar,
             exact_norm=exact_norm,
+            length_unit=length_unit,
         )
         return scalar
 
@@ -248,8 +310,9 @@ class PSpecBeamBase:
 
         Parameters
         ----------
-        freqs : float ndarray
-            Contains frequencies to evaluate conversion factor [Hz].
+        freqs : astropy.units.Quantity
+            Frequencies to evaluate the conversion factor at, in any frequency
+            unit. A plain float or float ndarray is read as Hz (deprecated).
 
         pol: str, optional
                 Which polarization to compute the beam scalar for.
@@ -261,13 +324,20 @@ class PSpecBeamBase:
         factor : float ndarray
             Contains Jy -> mK factor at each frequency.
         """
-        # Check input types
-        if isinstance(freqs, float):
-            freqs = np.array([freqs])
-        elif not isinstance(freqs, np.ndarray):
-            raise TypeError("freqs must be fed as a float ndarray")
-        elif isinstance(freqs, np.ndarray) and freqs.dtype not in (float, np.float64):
-            raise TypeError("freqs must be fed as a float ndarray")
+        if isinstance(freqs, u.Quantity):
+            freqs = np.atleast_1d(utils.to_value_in(freqs, u.Hz, "freqs"))
+        else:
+            # Check input types
+            if isinstance(freqs, float):
+                freqs = np.array([freqs])
+            elif not isinstance(freqs, np.ndarray):
+                raise TypeError("freqs must be fed as a float ndarray")
+            elif isinstance(freqs, np.ndarray) and freqs.dtype not in (
+                float,
+                np.float64,
+            ):
+                raise TypeError("freqs must be fed as a float ndarray")
+            utils.warn_plain_number("freqs", u.Hz, stacklevel=3)
 
         # Check frequency bounds
         if np.min(freqs) < self.beam_freqs.min():
@@ -368,16 +438,18 @@ class PSpecBeamGauss(PSpecBeamBase):
 
         Parameters
         ----------
-        fwhm: float, optional
-            Full width half max of the power beam, in radians.
+        fwhm: astropy.units.Quantity, optional
+            Full width half max of the power beam, in any angle unit (e.g.
+            ``10 * u.deg``). A plain float is read as radians (deprecated).
 
-        beam_freqs: float, array-like
-            Frequencies over which this Gaussian beam is to be created. Units
-            assumed to be Hz.
+        beam_freqs: astropy.units.Quantity
+            Frequencies over which this Gaussian beam is to be created, in
+            any frequency unit. A plain array is read as Hz (deprecated).
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
 
         beam: pyuvdata.analytic_beam.GaussianBeam, optional
             Ready-made achromatic, sigma-specified GaussianBeam object.
@@ -392,6 +464,8 @@ class PSpecBeamGauss(PSpecBeamBase):
             raise TypeError(
                 "fwhm must be a float; pass analytic beams via the beam keyword."
             )
+        fwhm = utils.to_value_in(fwhm, u.rad, "fwhm", example="10 * u.deg")
+        beam_freqs = utils.to_value_in(beam_freqs, u.Hz, "beam_freqs")
         if beam is not None:
             if not isinstance(beam, GaussianBeam):
                 raise TypeError(
@@ -418,10 +492,7 @@ class PSpecBeamGauss(PSpecBeamBase):
                 sigma=self.fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
             )
         self.beam_freqs = beam_freqs
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
 
     def power_beam_int(self, pol="pI"):
         """
@@ -504,9 +575,10 @@ class PSpecBeamUV(PSpecBeamBase):
         uvbeam: str or UVBeam object
             Path to a pyuvdata UVBeam file or a UVBeam object.
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
         """
         # setup uvbeam object
         if isinstance(uvbeam, str | Path):
@@ -517,10 +589,7 @@ class PSpecBeamUV(PSpecBeamBase):
 
         # get frequencies and set cosmology
         self.beam_freqs = uvb.freq_array
-        if cosmo is not None:
-            self.cosmo = cosmo
-        else:
-            self.cosmo = conversions.Cosmo_Conversions()
+        self.cosmo = cosmo
 
         # setup primary power beam
         self.primary_beam = uvb
@@ -544,8 +613,9 @@ class PSpecBeamUV(PSpecBeamBase):
             'pI', 'pQ', 'pU', 'pV', 'XX', 'YY', 'XY', 'YX'
             The output shape is (Nfreq, Npixels)
             Default: 'pI'
-        freq: array, optional
-            Frequencies [Hz] to interpolate onto.
+        freq: astropy.units.Quantity, optional
+            Frequencies to interpolate onto, in any frequency unit. A plain
+            array is read as Hz (deprecated).
         x_orientation: str, optional
             Orientation in cardinal direction east or north of X dipole.
             Default keeps polarization in X and Y basis.
@@ -559,6 +629,8 @@ class PSpecBeamUV(PSpecBeamBase):
         nside : int, scalar
             used to compute resolution
         """
+        # pyuvdata interpolates in Hz and needs plain floats
+        freq = utils.to_value_in(freq, u.Hz, "freq")
 
         if self.primary_beam.beam_type != "power":
             raise ValueError("beam_type must be power")
@@ -659,28 +731,34 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         Parameters
         ----------
-        OmegaP : array_like of float (or dict of array_like)
-            Integral over beam solid angle, as a function of frequency.
+        OmegaP : astropy.units.Quantity (or dict of Quantities)
+            Integral over beam solid angle, as a function of frequency, in
+            any solid angle unit (e.g. ``u.sr``). Plain arrays are read as
+            sr (deprecated).
 
             If only one array is specified, this will be assumed to be for the
             I polarization. If a dict is specified, an OmegaP array for
             several polarizations can be specified.
 
-        OmegaPP : array_like of float (or dict of array_like)
-            Integral over beam solid angle squared, as a function of frequency.
+        OmegaPP : astropy.units.Quantity (or dict of Quantities)
+            Integral over beam solid angle squared, as a function of
+            frequency, in any solid angle unit. Plain arrays are read as sr
+            (deprecated).
 
             If only one array is specified, this will be assumed to be for the
             I polarization. If a dict is specified, an OmegaP array for
             several polarizations can be specified.
 
-        beam_freqs : array_like of float
+        beam_freqs : astropy.units.Quantity
             Frequencies at which beam solid angles OmegaP and OmegaPP are
-            evaluated, in Hz. This should be specified as a single array, not
+            evaluated, in any frequency unit. A plain array is read as Hz
+            (deprecated). This should be specified as a single array, not
             as a dict.
 
-        cosmo : conversions.Cosmo_Conversions object, optional
-            Cosmology object. Uses the default cosmology object if not
-            specified. Default: None.
+        cosmo : astropy.cosmology.FLRW, optional
+            Cosmology. Default: None, which uses
+            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
+            is still accepted but deprecated.
 
         x_orientation : str, optional
             Orientation in cardinal direction east or north of X dipole.
@@ -694,7 +772,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
         self.allowed_pols = [1, 2, 3, 4, -5, -6, -7, -8]
 
         # Set beam_freqs
-        self.beam_freqs = np.asarray(beam_freqs)
+        self.beam_freqs = utils.to_value_in(beam_freqs, u.Hz, "beam_freqs")
 
         if isinstance(OmegaP, np.ndarray) and isinstance(OmegaPP, np.ndarray):
             # Only single arrays were specified; assume I
@@ -744,14 +822,16 @@ class PSpecBeamFromArray(PSpecBeamBase):
                         " both OmegaP and OmegaPP." % pol
                     )
 
-                # Add arrays for this polarization
-                self.add_pol(pol, OmegaP[pol], OmegaPP[pol])
+                # Add arrays for this polarization (warnings for plain
+                # numbers point at the caller of __init__)
+                self._add_pol(
+                    pol,
+                    _solid_angle_in_sr(OmegaP[pol], "OmegaP", stacklevel=3),
+                    _solid_angle_in_sr(OmegaPP[pol], "OmegaPP", stacklevel=3),
+                )
 
         # Set cosmology
-        if cosmo is None:
-            self.cosmo = conversions.Cosmo_Conversions()
-        else:
-            self.cosmo = cosmo
+        self.cosmo = cosmo
 
     def add_pol(self, pol, OmegaP, OmegaPP):
         """
@@ -769,14 +849,24 @@ class PSpecBeamFromArray(PSpecBeamBase):
             If the arrays already exist for the specified polarization, they
             will be overwritten.
 
-        OmegaP : array_like of float
-            Integral over beam solid angle, as a function of frequency. Must
-            have the same shape as self.beam_freqs.
+        OmegaP : astropy.units.Quantity
+            Integral over beam solid angle, as a function of frequency, in
+            any solid angle unit. Must have the same shape as
+            self.beam_freqs. A plain array is read as sr (deprecated).
 
-        OmegaPP : array_like of float
-            Integral over beam solid angle squared, as a function of frequency.
-            Must have the same shape as self.beam_freqs.
+        OmegaPP : astropy.units.Quantity
+            Integral over beam solid angle squared, as a function of
+            frequency, in any solid angle unit. Must have the same shape as
+            self.beam_freqs. A plain array is read as sr (deprecated).
         """
+        self._add_pol(
+            pol,
+            _solid_angle_in_sr(OmegaP, "OmegaP", stacklevel=3),
+            _solid_angle_in_sr(OmegaPP, "OmegaPP", stacklevel=3),
+        )
+
+    def _add_pol(self, pol, OmegaP, OmegaPP):
+        """Add OmegaP and OmegaPP (plain arrays in sr) for a polarization."""
         # Type check
         if isinstance(pol, str):
             pol = uvutils.polstr2num(pol, x_orientation=self.x_orientation)
