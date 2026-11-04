@@ -12,16 +12,7 @@ from astropy import units
 from astropy.cosmology import FLRW, Cosmology
 from pyuvdata import utils as uvutils
 
-from . import (
-    __version__,
-    _uvpspec_helpers,
-    conversions,
-    grouping,
-    noise,
-    pspecbeam,
-    unit_helpers,
-    utils,
-)
+from . import __version__, conversions, grouping, noise, pspecbeam, unit_helpers, utils
 from . import uvpspec_utils as uvputils
 from .conversions import _LITTLEH_LENGTH
 from .parameter import PSpecParam
@@ -1185,7 +1176,7 @@ class UVPSpec:
         if norm_units is None:
             return _LITTLEH_LENGTH
         try:
-            norm_unit = _uvpspec_helpers.norm_unit(norm_units, False)
+            norm_unit = unit_helpers.norm_unit(norm_units, False)
         except ValueError:
             # an unparsable norm_units string: keep the old littleh default
             return _LITTLEH_LENGTH
@@ -1697,7 +1688,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(unit_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_freq_array for s in spw]).all(), (
@@ -1734,7 +1725,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(unit_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_dly_array for s in spw]).all(), (
@@ -1775,7 +1766,7 @@ class UVPSpec:
         # if spws is a list of spw tuples, convert to spw indices
         if np.all([isinstance(s, tuple) for s in spw]):
             spw_ranges = self._spw_ranges_hz()
-            spw = [spw_ranges.index(_uvpspec_helpers.spw_range_to_hz(s)) for s in spw]
+            spw = [spw_ranges.index(unit_helpers.spw_range_to_hz(s)) for s in spw]
 
         # assert exists in data
         assert np.array([s in self.spw_array for s in spw]).all(), (
@@ -2395,7 +2386,7 @@ class UVPSpec:
         """
         if isinstance(cosmo_yaml, bytes):
             cosmo_yaml = cosmo_yaml.decode()
-        cosmo = _uvpspec_helpers.cosmology_from_yaml(cosmo_yaml)
+        cosmo = unit_helpers.cosmology_from_yaml(cosmo_yaml)
         if cosmo_params is not None:
             params = ast.literal_eval(cosmo_params)
             from_yaml = conversions.params_from_cosmology(cosmo)
@@ -2545,7 +2536,7 @@ class UVPSpec:
                 # handle cosmo: the v0.x dict string (read by every version)
                 # and, when astropy can represent it, the astropy YAML
                 if k == "cosmo":
-                    cosmo_params, cosmo_yaml = _uvpspec_helpers.cosmo_attrs_for_writing(
+                    cosmo_params, cosmo_yaml = unit_helpers.cosmo_attrs_for_writing(
                         conversions.as_astropy_cosmology(self.cosmo)
                     )
                     attrs["cosmo"] = cosmo_params
@@ -2555,7 +2546,7 @@ class UVPSpec:
 
                 unit = getattr(self, "_" + k).unit
                 if unit is not None:
-                    this_attr = _uvpspec_helpers.value_in_unit(this_attr, unit)
+                    this_attr = unit_helpers.value_in_unit(this_attr, unit)
                     attrs[f"{k}_unit"] = unit_helpers.unit_to_string(unit)
 
                 # Do Unicode/string conversions, as HDF5 struggles with them
@@ -2572,7 +2563,7 @@ class UVPSpec:
                     group.create_dataset(k, data=getattr(self, k))
                 else:
                     dset = group.create_dataset(
-                        k, data=_uvpspec_helpers.value_in_unit(getattr(self, k), unit)
+                        k, data=unit_helpers.value_in_unit(getattr(self, k), unit)
                     )
                     dset.attrs["unit"] = unit_helpers.unit_to_string(unit)
 
@@ -2599,7 +2590,7 @@ class UVPSpec:
             )
             dset = group.create_dataset(
                 f"integration_spw{i}",
-                data=_uvpspec_helpers.value_in_unit(
+                data=unit_helpers.value_in_unit(
                     self.integration_array[i], self._integration_array.unit
                 ),
                 dtype=np.float64,
@@ -2618,7 +2609,7 @@ class UVPSpec:
                 if self.exact_windows:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
-                        data=_uvpspec_helpers.value_in_unit(
+                        data=unit_helpers.value_in_unit(
                             self.window_function_kperp[i], window_k_unit
                         ),
                         dtype=np.float64,
@@ -2626,7 +2617,7 @@ class UVPSpec:
                     dset.attrs["unit"] = window_k_unit_string
                     dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
-                        data=_uvpspec_helpers.value_in_unit(
+                        data=unit_helpers.value_in_unit(
                             self.window_function_kpara[i], window_k_unit
                         ),
                         dtype=np.float64,
@@ -3291,7 +3282,7 @@ class UVPSpec:
         -------
         astropy.units.UnitBase
         """
-        return _uvpspec_helpers.norm_unit(
+        return unit_helpers.norm_unit(
             self.norm_units, bool(getattr(self, "deltasq", False))
         )
 
@@ -3313,7 +3304,7 @@ class UVPSpec:
         ``"({vis_units})^2 {norm_units}"`` before; it now returns an astropy
         unit. Use ``unit_helpers.unit_to_string(uvp.units)`` for a string.
         """
-        return _uvpspec_helpers.pspec_unit(
+        return unit_helpers.pspec_unit(
             self.vis_units, self.norm_units, bool(getattr(self, "deltasq", False))
         )
 
@@ -3443,7 +3434,7 @@ class UVPSpec:
                 noise_scalar=True,
             ).to_value(scalar_unit)
         else:
-            scalar = _uvpspec_helpers.value_in_unit(scalar, scalar_unit)
+            scalar = unit_helpers.value_in_unit(scalar, scalar_unit)
 
         # Get k vectors
         if form == "DelSq":
