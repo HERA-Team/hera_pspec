@@ -2717,8 +2717,8 @@ class UVPSpec:
           scalar and the covariances by ``r**2``. This is approximate: an
           exact change rebuilds the response matrix, which depends on the
           flags and weighting that UVPSpec does not store. The error is
-          ~1e-5 or less for changes of the scalar of tens of percent (design
-          note for #329). One-step spectra not in cosmological units (made
+          ~1e-5 or less for changes of the scalar of tens of percent.
+          One-step spectra not in cosmological units (made
           with a legacy response, ``Hz sr``) raise a ValueError.
 
         Parameters

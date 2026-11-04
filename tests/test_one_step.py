@@ -477,9 +477,9 @@ class TestUserResponseAndErrors:
 
 class TestExpectedDifferences:
     """Closed forms of the two-step / one-step ratio for a flat P(k),
-    with a user response of constant w = B / X2Y so they are exact (design
-    note sections 1.6, 3.2 and 6). F1 and F2 are pre-existing two-step
-    biases that the one-step path does not have."""
+    with a user response of constant w = B / X2Y so they are exact. F1 and
+    F2 are pre-existing two-step biases that the one-step path does not
+    have."""
 
     W0 = 1e-6
 

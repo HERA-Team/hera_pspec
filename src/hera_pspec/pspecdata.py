@@ -4352,8 +4352,8 @@ class PSpecData:
 
                     # Build Fisher matrix
                     if one_step:
-                        # one-step: M comes from the response H alone (design
-                        # note section 3.1), so G is H
+                        # one-step: M comes from the response H alone, so G
+                        # is H
                         if input_data_weight == "identity":
                             # H differs only by flagging pattern, as below
                             Y = np.vstack(
