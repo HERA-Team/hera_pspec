@@ -26,7 +26,7 @@ The following example plots the power spectra from a ``UVPSpec`` object, average
   # varying metadata is written to the legend. Pass title_legend=False
   # to disable the automatic title/legend text entirely.
 
-For a more extensive worked example, see `this example Jupyter notebook <https://github.com/HERA-Team/hera_pspec/blob/master/examples/Plotting_examples.ipynb>`_.
+For a more extensive worked example, see the :doc:`Plotting delay spectra <examples/Plotting_examples>` tutorial notebook.
 
 The only plotting function currently available in the ``hera_pspec.plot`` module is ``delay_spectrum()``.
 

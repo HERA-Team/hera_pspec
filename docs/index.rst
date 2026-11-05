@@ -10,7 +10,7 @@ can be in any format supported by ``pyuvdata``, and the output data are stored i
 HDF5 containers.
 
 You can find the code in the ``hera_pspec`` `GitHub repository <https://github.com/HERA-Team/hera_pspec>`_. It is also available on `PyPi <https://pypi.org/project/hera-pspec/>`_.
-A set of `example Jupyter notebooks <https://github.com/HERA-Team/hera_pspec/tree/master/examples>`_ are also available on GitHub.
+A set of worked example Jupyter notebooks is included in the :doc:`tutorials`.
 
 
 Contents
@@ -26,6 +26,7 @@ Contents
    uvpspec
    container
    plot
+   tutorials
 
 
 Indices and tables

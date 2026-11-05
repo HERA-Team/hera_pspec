@@ -1,4 +1,3 @@
-import argparse
 import copy
 import os
 import random
@@ -925,7 +924,8 @@ def spherical_average(
         # setup the design matrix: P_cyl = A P_sph
         A[spw] = np.zeros((uvp.Ntimes, Ndlyblps, Nk, uvp.Npols), dtype=np.float64)
         # design matrix for window functions
-        Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
+        if store_window:
+            Aw = np.zeros((uvp.Ntimes, Nfreqs, Nk_theory, uvp.Npols), dtype=np.float64)
         # setup weighting matrix: block diagonal for each Ndly x Ndly
         # we can represent the Ndlyblps x Ndlyblps block diagonal matrix as Ndlyblps x Ndlys
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
@@ -1031,17 +1031,18 @@ def spherical_average(
                 # populate A matrix
                 A[spw][:, i + Ndlys * b, kind, :] = 1.0
 
-            # get k_sph -> k_cyl mapping for window function
-            # get k magnitude of data: (Ndlys,)
-            kmags_per_freq = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas_per_freq**2)
-            for i, kmag in enumerate(kmags_per_freq):
-                kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
-                if np.any(kind):
-                    # skip if not in any kbins
-                    # convert kind into an integer for indexing
-                    kind = np.where(kind)[0][0]
-                # populate Aw matrix
-                Aw[:, i, kind, :] = 1.0
+            if store_window:
+                # get k_sph -> k_cyl mapping for window function
+                # get k magnitude of data: (Ndlys,)
+                kmags_per_freq = np.sqrt(kperps[blpt_inds][0] ** 2 + kparas_per_freq**2)
+                for i, kmag in enumerate(kmags_per_freq):
+                    kind = (kbin_left_theory < kmag) & (kbin_right_theory >= kmag)
+                    if np.any(kind):
+                        # skip if not in any kbins
+                        # convert kind into an integer for indexing
+                        kind = np.where(kind)[0][0]
+                    # populate Aw matrix
+                    Aw[:, i, kind, :] = 1.0
 
         # normalize metadata sums
         wgt_array[spw] /= np.max(wgt_array[spw], axis=(2, 3), keepdims=True).clip(
@@ -1956,8 +1957,8 @@ def bootstrap_run(
 
     Note: PSpecContainers should not be opened in SWMR mode for this function.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
     filename : str or PSpecContainer object
         PSpecContainer object to run bootstrapping on.
 
@@ -2075,109 +2076,6 @@ def bootstrap_run(
         if keep_samples:
             for i, uvpb in enumerate(uvp_boots):
                 psc.set_pspec(grp, spc + f"_bs{i}", uvpb, overwrite=overwrite)
-
-
-def get_bootstrap_run_argparser():
-    a = argparse.ArgumentParser(
-        description="argument parser for grouping.bootstrap_run()"
-    )
-
-    def list_of_lists_of_tuples(s):
-        s = [[int(_x) for _x in x.split()] for x in s.split(",")]
-        return s
-
-    # Add list of arguments
-    a.add_argument(
-        "filename",
-        type=str,
-        help="Filename of HDF5 container (PSpecContainer) containing "
-        "input power spectra.",
-    )
-    a.add_argument(
-        "--spectra",
-        default=None,
-        type=str,
-        nargs="+",
-        help="List of power spectra names (with group prefix) to bootstrap over.",
-    )
-    a.add_argument(
-        "--blpair_groups",
-        default=None,
-        type=list_of_lists_of_tuples,
-        help="List of baseline-pair groups (must be space-delimited blpair integers) "
-        "wrapped in quotes to use in resampling. Default is to solve for and use redundant groups (recommended)."
-        "Ex: --blpair_groups '101102103104 102103014015, 101013102104' --> "
-        "[ [((1, 2), (3, 4)), ((2, 3), (4, 5))], [((1, 3), (2, 4))], ...]",
-    )
-    a.add_argument(
-        "--time_avg",
-        default=False,
-        type=bool,
-        help="Perform time-average in averaging step.",
-    )
-    a.add_argument(
-        "--Nsamples",
-        default=100,
-        type=int,
-        help="Number of bootstrap resamples to generate.",
-    )
-    a.add_argument(
-        "--seed",
-        default=0,
-        type=int,
-        help="random seed to initialize bootstrap resampling with.",
-    )
-    a.add_argument(
-        "--normal_std",
-        default=True,
-        type=bool,
-        help="Whether to calculate a 'normal' standard deviation (np.std).",
-    )
-    a.add_argument(
-        "--robust_std",
-        default=False,
-        type=bool,
-        help="Whether to calculate a 'robust' standard deviation (astropy.stats.biweight_midvariance).",
-    )
-    a.add_argument(
-        "--cintervals",
-        default=None,
-        type=float,
-        nargs="+",
-        help="Confidence intervals (precentage from 0 < ci < 100) to calculate.",
-    )
-    a.add_argument(
-        "--keep_samples",
-        default=False,
-        action="store_true",
-        help="If True, store bootstrap resamples in PSpecContainer object with *_bs# extension.",
-    )
-    a.add_argument(
-        "--bl_error_tol",
-        type=float,
-        default=1.0,
-        help="Baseline redudancy tolerance if calculating redundant groups.",
-    )
-    a.add_argument(
-        "--overwrite",
-        default=False,
-        action="store_true",
-        help="overwrite outputs if they exist.",
-    )
-    a.add_argument(
-        "--add_to_history",
-        default="",
-        type=str,
-        help="String to add to history of power spectra.",
-    )
-    a.add_argument(
-        "--verbose",
-        default=False,
-        action="store_true",
-        help="report feedback to stdout.",
-    )
-
-    return a
 
 
 def _bin_data_like_array(
