@@ -9,6 +9,7 @@ from astropy import stats as astats
 
 from . import __version__, utils
 from . import uvpspec_utils as uvputils
+from .bandpower_kernels import BandpowerCovariance, BandpowerWindow
 from .uvpspec import _ordered_unique
 
 
@@ -704,6 +705,125 @@ def average_spectra(
     # Return
     if not inplace:
         return uvp
+
+
+def _bandpower_weights(weights, kernel):
+    """Weights of shape (Nbltpairs, Npols, Nout) for averaging ``kernel``; ones if None."""
+    shape = (kernel.Nbltpairs, kernel.Npols, kernel.Nout)
+    if weights is None:
+        return np.ones(shape)
+    weights = np.asarray(weights, dtype=np.float64)
+    if weights.shape != shape:
+        raise ValueError(
+            f"weights must have shape (Nbltpairs, Npols, Nout) = {shape}; "
+            f"got {weights.shape}"
+        )
+    return weights
+
+
+def average_bandpower_window(window, groups, weights=None):
+    """Weighted average of window functions over groups of baseline-pair-times.
+
+    Output entry ``(g, p)`` has rows
+    ``W_out[d] = sum_k w_k[d] W_k[d] / sum_k w_k[d]`` over the members ``k`` of group
+    ``g``: the normalisation :func:`average_spectra` uses for window functions. When
+    every member of a group uses the same block and no row has zero total weight,
+    that block is reused unchanged, so averaging adds no storage.
+
+    Parameters
+    ----------
+    window : BandpowerWindow
+        Window functions to average.
+    groups : sequence of array_like of int
+        Each item lists the baseline-pair-time indices averaged into one output entry.
+    weights : array_like, optional
+        Shape ``(Nbltpairs, Npols, Nout)``: a weight per entry and output bandpower,
+        like the ``w`` in :func:`average_spectra`. Default: equal weights.
+
+    Returns
+    -------
+    BandpowerWindow
+        With ``Nbltpairs == len(groups)``.
+    """
+    weights = _bandpower_weights(weights, window)
+    blocks = list(window.blocks)
+    block_index = np.empty((len(groups), window.Npols), dtype=np.intp)
+    # Broadcast a per-row weight over the input axes of a block.
+    row_shape = (window.Nout,) + (1,) * (len(window.block_shape) - 1)
+    for g, members in enumerate(groups):
+        members = np.asarray(members, dtype=np.intp)
+        if members.size == 0:
+            raise ValueError("cannot average an empty group")
+        for p in range(window.Npols):
+            ids = window.block_index[members, p]
+            w = weights[members, p]
+            wsum = w.sum(axis=0)
+            if np.all(ids == ids[0]) and np.all(wsum > 1e-40):
+                block_index[g, p] = ids[0]
+                continue
+            averaged = np.einsum("kd,kd...->d...", w, window.blocks[ids])
+            # clip as average_spectra does: rows with no weight come out as zero
+            averaged /= wsum.clip(1e-40, np.inf).reshape(row_shape)
+            block_index[g, p] = len(blocks)
+            blocks.append(averaged)
+    return BandpowerWindow(
+        blocks=np.stack(blocks),
+        block_index=block_index,
+        in_axes=window.in_axes,
+        in_coords=window.in_coords,
+    ).select()
+
+
+def average_bandpower_covariance(cov, groups, weights=None):
+    """Weighted average of covariances over groups of baseline-pair-times.
+
+    Output entry ``(g, p)`` is ``C_out[d, e] = sum_k w_k[d] w_k[e] C_k[d, e] / (W[d] W[e])``
+    with ``W = sum_k w_k``: the covariance of the weighted mean that
+    :func:`average_spectra` computes. When the members share one block and each
+    member's weights are the same for every bandpower (as with the default
+    integration-time weights), the result is that block times a new scale, so no new
+    block is stored.
+
+    Parameters
+    ----------
+    cov : BandpowerCovariance
+        Covariances to average.
+    groups : sequence of array_like of int
+        Each item lists the baseline-pair-time indices averaged into one output entry.
+    weights : array_like, optional
+        Shape ``(Nbltpairs, Npols, Nout)``. Default: equal weights.
+
+    Returns
+    -------
+    BandpowerCovariance
+        With ``Nbltpairs == len(groups)``.
+    """
+    weights = _bandpower_weights(weights, cov)
+    blocks = list(cov.blocks)
+    block_index = np.empty((len(groups), cov.Npols), dtype=np.intp)
+    scale = np.ones((len(groups), cov.Npols))
+    for g, members in enumerate(groups):
+        members = np.asarray(members, dtype=np.intp)
+        if members.size == 0:
+            raise ValueError("cannot average an empty group")
+        for p in range(cov.Npols):
+            ids = cov.block_index[members, p]
+            s = cov.scale[members, p]
+            w = weights[members, p]
+            wsum = w.sum(axis=0).clip(1e-40, np.inf)
+            if np.all(ids == ids[0]) and np.all(w == w[:, :1]):
+                # One block B and one weight a_k per member:
+                # C_out = sum_k a_k^2 s_k B / (sum_k a_k)^2, a rescaled B.
+                a = w[:, 0]
+                block_index[g, p] = ids[0]
+                scale[g, p] = np.sum(a**2 * s) / wsum[0] ** 2
+                continue
+            averaged = np.einsum("kd,ke,k,kde->de", w, w, s, cov.blocks[ids])
+            blocks.append(averaged / np.outer(wsum, wsum))
+            block_index[g, p] = len(blocks) - 1
+    return BandpowerCovariance(
+        blocks=np.stack(blocks), block_index=block_index, scale=scale
+    ).select()
 
 
 def spherical_average(
