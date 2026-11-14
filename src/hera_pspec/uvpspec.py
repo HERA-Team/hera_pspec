@@ -320,10 +320,10 @@ class UVPSpec:
             description="Form of data weighting used when forming power spectra.",
             expected_type=str,
         )
-        self.set_symmetric_taper = PSpecParam(
+        self._symmetric_taper = PSpecParam(
             "symmetric_taper",
-            description="Specify whether Taper was applied symmetrically (True) or to the left(False).",
-            expected_type=str,
+            description="Whether the taper was applied symmetrically (True) or to the left (False).",
+            expected_type=bool,
         )
         self._norm = PSpecParam(
             "norm",
@@ -475,6 +475,7 @@ class UVPSpec:
             "beamfile",
             "folded",
             "exact_windows",
+            "symmetric_taper",
         ]
         self._ndarrays = [
             "spw_array",
@@ -667,6 +668,11 @@ class UVPSpec:
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            if self.exact_windows:
+                # only the delay axis is folded; (kperp, kpara) grid is untouched
+                return self.window_function_array[spw][
+                    blpairts, -(Ndlys - Ndlys // 2 - 1) :, ..., polpair
+                ]
             return self.window_function_array[spw][
                 blpairts,
                 -(Ndlys - Ndlys // 2 - 1) :,
@@ -1830,6 +1836,11 @@ class UVPSpec:
         # Backwards compatibility: exact_windows
         if "exact_windows" not in grp.attrs:
             setattr(self, "exact_windows", False)
+
+        # Backwards compatibility: symmetric_taper was not written to file
+        # before it was a registered PSpecParam; True was the pspec() default
+        if "symmetric_taper" not in grp.attrs:
+            setattr(self, "symmetric_taper", True)
 
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
@@ -3453,7 +3464,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     include:
         'channel_width', 'telescope_location', 'weighting', 'OmegaP',
         'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units',
-        'norm_units', 'folded', 'cosmo', 'scalar'
+        'norm_units', 'folded', 'cosmo', 'scalar', 'symmetric_taper'
 
     Parameters
     ----------
@@ -3518,6 +3529,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         "folded",
         "cosmo",
         "exact_windows",
+        "symmetric_taper",
     ]
     for m in static_meta:
         for u in uvps[1:]:

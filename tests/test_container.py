@@ -1,12 +1,11 @@
+import copy
 from pathlib import Path
 
 import numpy as np
 import pytest
+from pyuvdata import UVData
 
 from hera_pspec import PSpecContainer, UVPSpec, container, testing
-from hera_pspec.data import DATA_PATH
-
-DATA_PATH = Path(DATA_PATH)
 
 _MODES = pytest.mark.parametrize(
     "keep_open,swmr", [(True, False), (False, True)], ids=["default", "transactional"]
@@ -334,15 +333,19 @@ class TestSWMR:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(scope="module")
+def uvp_pair(uvd_zen_2458042_xx: UVData) -> tuple[UVPSpec, UVPSpec]:
+    """Two compatible UVPSpecs (from zen.2458042.17772.xx.HH.uvXA) with disjoint
+    baseline-pairs, to be combined by combine_psc_spectra."""
+    uvd = copy.deepcopy(uvd_zen_2458042_xx)
+    uvp1 = testing.uvpspec_from_data(uvd, [(24, 25), (37, 38)], spw_ranges=[(10, 40)])
+    uvp2 = testing.uvpspec_from_data(uvd, [(38, 39), (52, 53)], spw_ranges=[(10, 40)])
+    return uvp1, uvp2
+
+
 class TestCombinePscSpectra:
-    def test_basic(self, tmp_path: Path) -> None:
-        fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-        uvp1 = testing.uvpspec_from_data(
-            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
-        )
-        uvp2 = testing.uvpspec_from_data(
-            fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)]
-        )
+    def test_basic(self, tmp_path: Path, uvp_pair: tuple[UVPSpec, UVPSpec]) -> None:
+        uvp1, uvp2 = uvp_pair
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
         psc.set_pspec("grp1", "uvp_b", uvp2, overwrite=True)
@@ -354,15 +357,14 @@ class TestCombinePscSpectra:
         [("d1_x_d2_a", "d1_x_d2_b", "d1_x_d2"), ("d2_x_d3_a", "d2_x_d3_b", "d2_x_d3")],
     )
     def test_dset_names(
-        self, tmp_path: Path, name_a: str, name_b: str, expected: str
+        self,
+        tmp_path: Path,
+        uvp_pair: tuple[UVPSpec, UVPSpec],
+        name_a: str,
+        name_b: str,
+        expected: str,
     ) -> None:
-        data_fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-        uvp1 = testing.uvpspec_from_data(
-            data_fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
-        )
-        uvp2 = testing.uvpspec_from_data(
-            data_fname, [(38, 39), (52, 53)], spw_ranges=[(10, 40)]
-        )
+        uvp1, uvp2 = uvp_pair
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         psc.set_pspec("grp1", name_a, uvp1, overwrite=True)
         psc.set_pspec("grp1", name_b, uvp2, overwrite=True)
@@ -371,11 +373,8 @@ class TestCombinePscSpectra:
         )
         assert psc.spectra("grp1") == [expected]
 
-    def test_errors(self, tmp_path: Path) -> None:
-        fname = str(DATA_PATH / "zen.2458042.17772.xx.HH.uvXA")
-        uvp1 = testing.uvpspec_from_data(
-            fname, [(24, 25), (37, 38)], spw_ranges=[(10, 40)]
-        )
+    def test_errors(self, tmp_path: Path, uvp_pair: tuple[UVPSpec, UVPSpec]) -> None:
+        uvp1 = uvp_pair[0]
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         with pytest.raises(AssertionError, match="no specified groups exist"):
             container.combine_psc_spectra(psc)

@@ -102,6 +102,7 @@ def build_vanilla_uvpspec(
     uvp.channel_width = np.ones(uvp.Nfreqs) * np.median(np.diff(uvp.freq_array))
     uvp.history = "example"
     uvp.taper = "none"
+    uvp.symmetric_taper = True
     uvp.norm = "I"
     uvp.git_hash = "random"
     uvp.scalar_array = np.ones((uvp.Nspws, uvp.Npols), float)
