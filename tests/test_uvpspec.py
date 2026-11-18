@@ -1153,69 +1153,85 @@ class TestParamUnits:
     def test_check_passes(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
         vanilla_uvp.check()
 
-    def test_check_accepts_matching_quantity(
-        self, mutable_uvp: uvpspec.UVPSpec
+    @pytest.mark.parametrize(
+        "name, unit",
+        [("freq_array", units.Hz), ("dly_array", units.ns)],
+        ids=["declared_unit", "equivalent_unit"],
+    )
+    def test_check_accepts_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec, name: str, unit: units.UnitBase
     ) -> None:
-        freqs = mutable_uvp.freq_array * units.Hz
-        mutable_uvp.freq_array = freqs
+        quantity = getattr(mutable_uvp, name) * unit
+        setattr(mutable_uvp, name, quantity)
         mutable_uvp.check()
-        assert isinstance(mutable_uvp.freq_array, units.Quantity)
-        assert mutable_uvp.freq_array.unit == units.Hz
-        assert np.array_equal(mutable_uvp.freq_array, freqs)
+        assert isinstance(getattr(mutable_uvp, name), units.Quantity)
+        assert getattr(mutable_uvp, name).unit == unit
+        assert np.array_equal(getattr(mutable_uvp, name), quantity)
 
-    def test_check_accepts_equivalent_quantity(
-        self, mutable_uvp: uvpspec.UVPSpec
+    @pytest.mark.parametrize(
+        "name, to_quantity, match",
+        [
+            pytest.param(
+                "freq_array",
+                lambda freqs: freqs * units.m,
+                "freq_array has unit 'm'.*declared unit 'Hz'",
+                id="wrong_unit",
+            ),
+            pytest.param(
+                "scalar_array",
+                lambda scalar: scalar * units.mK**2,
+                "scalar_array is a Quantity.*does not declare a unit",
+                id="no_declared_unit",
+            ),
+            pytest.param(
+                "integration_array",
+                lambda ints: {spw: arr * units.Hz for spw, arr in ints.items()},
+                "integration_array has unit 'Hz'",
+                id="wrong_unit_in_dict",
+            ),
+        ],
+    )
+    def test_check_rejects_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec, name: str, to_quantity: Callable, match: str
     ) -> None:
-        mutable_uvp.dly_array = mutable_uvp.dly_array * units.ns
-        mutable_uvp.check()
-        assert mutable_uvp.dly_array.unit == units.ns
-
-    def test_check_rejects_wrong_unit(self, mutable_uvp: uvpspec.UVPSpec) -> None:
-        mutable_uvp.freq_array = mutable_uvp.freq_array * units.m
-        with pytest.raises(
-            ValueError, match="freq_array has unit 'm'.*declared unit 'Hz'"
-        ):
+        setattr(mutable_uvp, name, to_quantity(getattr(mutable_uvp, name)))
+        with pytest.raises(ValueError, match=match):
             mutable_uvp.check()
 
-    def test_check_rejects_quantity_without_declared_unit(
-        self, mutable_uvp: uvpspec.UVPSpec
-    ) -> None:
-        mutable_uvp.scalar_array = mutable_uvp.scalar_array * units.mK**2
-        with pytest.raises(
-            ValueError, match="scalar_array is a Quantity.*does not declare a unit"
-        ):
-            mutable_uvp.check()
-
-    def test_check_rejects_wrong_unit_in_dict(
-        self, mutable_uvp: uvpspec.UVPSpec
-    ) -> None:
-        mutable_uvp.integration_array = {
-            spw: ints * units.Hz for spw, ints in mutable_uvp.integration_array.items()
-        }
-        with pytest.raises(ValueError, match="integration_array has unit 'Hz'"):
-            mutable_uvp.check()
-
-    def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
-        # the window k grids of an "Hz sr" object are in 1 / Mpc
-        assert mutable_uvp.window_k_unit() == units.Mpc ** (-1)
-        mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
-        mutable_uvp.check()
-        mutable_uvp.window_function_kperp = {
-            0: np.ones((2, 2)) * cu.littleh / units.Mpc
-        }
-        with pytest.raises(ValueError, match="window_function_kperp has unit"):
-            mutable_uvp.check()
-
+    @pytest.mark.parametrize(
+        "norm_units, name, kunit, wrong_kunit",
+        [
+            # the window k grids of an "Hz sr" object are in 1 / Mpc
+            pytest.param(
+                "Hz sr",
+                "window_function_kperp",
+                units.Mpc ** (-1),
+                cu.littleh / units.Mpc,
+                id="hz_sr_rejects_littleh",
+            ),
+            pytest.param(
+                "Mpc3 / littleh3",
+                "window_function_kpara",
+                cu.littleh / units.Mpc,
+                units.Mpc ** (-1),
+                id="littleh_rejects_inverse_mpc",
+            ),
+        ],
+    )
     def test_check_window_k_follows_norm_units(
-        self, mutable_uvp: uvpspec.UVPSpec
+        self,
+        mutable_uvp: uvpspec.UVPSpec,
+        norm_units: str,
+        name: str,
+        kunit: units.UnitBase,
+        wrong_kunit: units.UnitBase,
     ) -> None:
-        mutable_uvp.norm_units = "Mpc3 / littleh3"
-        mutable_uvp.window_function_kpara = {
-            0: np.ones((2, 2)) * cu.littleh / units.Mpc
-        }
+        mutable_uvp.norm_units = norm_units
+        assert mutable_uvp.window_k_unit() == kunit
+        setattr(mutable_uvp, name, {0: np.ones((2, 2)) * kunit})
         mutable_uvp.check()
-        mutable_uvp.window_function_kpara = {0: np.ones((2, 2)) / units.Mpc}
-        with pytest.raises(ValueError, match="window_function_kpara has unit"):
+        setattr(mutable_uvp, name, {0: np.ones((2, 2)) * wrong_kunit})
+        with pytest.raises(ValueError, match=f"{name} has unit"):
             mutable_uvp.check()
 
 
