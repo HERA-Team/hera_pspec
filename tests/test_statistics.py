@@ -744,7 +744,9 @@ class TestNoiseCrossSpectra:
     bias. Their real and imaginary parts scatter equally, by the thermal noise
     power P_N of noise.calc_P_N, and the analytic covariance computed from the
     noise level of the visibilities (cov_model="dsets") must predict that
-    scatter, so that error bars are calibrated.
+    scatter, so that error bars are calibrated. This holds for both the two-step
+    and the one-step normalization, which propagate the noise through
+    different normalization matrices.
     """
 
     # The noise level of the visibilities corresponds to a system temperature
@@ -770,13 +772,21 @@ class TestNoiseCrossSpectra:
 
     @pytest.fixture(
         scope="class",
-        params=[("I", "none"), ("I", "bh"), ("H^-1", "bh")],
+        params=[
+            ("two-step", "I", "none"),
+            ("two-step", "I", "bh"),
+            ("two-step", "H^-1", "bh"),
+            ("one-step", "I", "none"),
+            ("one-step", "I", "bh"),
+            ("one-step", "H^-1", "bh"),
+            ("one-step", "V^-1/2", "bh"),
+        ],
         ids=lambda p: "-".join(p),
     )
     def cross_uvp(self, request, noise_dsets, gauss_beam) -> UVPSpec:
         """Cross-dataset power spectra of every baseline, with the analytic
         covariance of each spectrum."""
-        norm, taper = request.param
+        normalization, norm, taper = request.param
         dsets, dsets_std = noise_dsets
         ds = PSpecData(
             dsets=dsets, wgts=[None, None], dsets_std=dsets_std, beam=gauss_beam
@@ -790,6 +800,7 @@ class TestNoiseCrossSpectra:
             taper=taper,
             store_cov=True,
             cov_model="dsets",
+            normalization=normalization,
             verbose=False,
         )
 
@@ -809,7 +820,10 @@ class TestNoiseCrossSpectra:
             assert_within_errors(mean, 0.0, error)
 
     @pytest.mark.parametrize(
-        "cross_uvp", [("I", "none"), ("I", "bh")], indirect=True, ids=["I-none", "I-bh"]
+        "cross_uvp",
+        [("two-step", "I", "none"), ("two-step", "I", "bh")],
+        indirect=True,
+        ids=["two-step-I-none", "two-step-I-bh"],
     )
     def test_noise_power_matches_p_n(self, cross_uvp) -> None:
         """The rms of the real and of the imaginary parts both equal the noise
