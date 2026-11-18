@@ -2,6 +2,8 @@
 import copy
 
 import numpy as np
+from astropy import units
+from astropy.cosmology import FLRW
 from hera_cal.utils import JD2LST
 from pyuvdata import UVData
 from scipy import interpolate, stats
@@ -13,7 +15,7 @@ def build_vanilla_uvpspec(
     beam: pspecbeam.PSpecBeamBase | None = None,
     Ndlys: int | None = None,
     equal_time_arrays: bool = True,
-) -> tuple[uvpspec.UVPSpec, conversions.Cosmo_Conversions]:
+) -> tuple[uvpspec.UVPSpec, FLRW]:
     """
     Build an example vanilla UVPSpec object from scratch, with all necessary
     metadata.
@@ -96,8 +98,8 @@ def build_vanilla_uvpspec(
     uvp.polpair_array = np.array([1515])  # corresponds to ('xx','xx')
     uvp.Npols = len(uvp.polpair_array)
 
-    uvp.vis_units = "unknown"
-    uvp.norm_units = "Hz str"
+    uvp.vis_units = "uncalib"
+    uvp.norm_units = "Hz sr"
     uvp.weighting = "identity"
     uvp.channel_width = np.ones(uvp.Nfreqs) * np.median(np.diff(uvp.freq_array))
     uvp.history = "example"
@@ -126,7 +128,7 @@ def build_vanilla_uvpspec(
     )
 
     uvp.store_cov = True
-    cosmo = conversions.Cosmo_Conversions()
+    cosmo = conversions.DEFAULT_COSMOLOGY
 
     data_array, wgt_array = {}, {}
     integration_array, nsample_array, cov_array_real, cov_array_imag = {}, {}, {}, {}
@@ -234,8 +236,9 @@ def uvpspec_from_data(
     taper : str, optional
         Optional tapering applied to the data before OQE. Default: 'none'.
 
-    cosmo : Cosmo_Conversions object
-        Cosmology object.
+    cosmo : astropy.cosmology.FLRW, optional
+        Cosmology. A ``Cosmo_Conversions`` object is still accepted but
+        deprecated.
 
     n_dlys : int, optional
         Number of delay bins to use. Default: None (uses as many delay bins as
@@ -449,7 +452,7 @@ def noise_sim(
     if beam is not None:
         freqs = np.unique(data.freq_array)[None, :, None]
         K_to_Jy = [
-            1e3 / (beam.Jy_to_mK(freqs.squeeze(), pol=p))
+            1e3 / (beam.Jy_to_mK(freqs.squeeze() << units.Hz, pol=p))
             for p in data.polarization_array
         ]
         K_to_Jy = np.array(K_to_Jy).T[None, :, :]

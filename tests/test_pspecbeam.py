@@ -3,8 +3,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import astropy.cosmology.units as cu
+import astropy.units as u
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW, LambdaCDM
 from pyuvdata import UVBeam
 from pyuvdata.analytic_beam import AiryBeam, GaussianBeam
 
@@ -14,9 +17,19 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 # Frequency range/resolution shared by compute_pspec_scalar calls across all beam types.
-LOWER_FREQ = 120.0 * 10**6
-UPPER_FREQ = 128.0 * 10**6
+LOWER_FREQ = 120.0 * 10**6 * u.Hz
+UPPER_FREQ = 128.0 * 10**6 * u.Hz
 NUM_FREQS = 20
+
+
+@pytest.fixture(scope="module")
+def beam_nf_pstokes_legacy(
+    beam_nf_pstokes: pspecbeam.PSpecBeamUV,
+) -> pspecbeam.PSpecBeamUV:
+    """beam_nf_pstokes with the v0.x default cosmology, for the v0.x reference scalars."""
+    beam = copy.deepcopy(beam_nf_pstokes)
+    beam.cosmo = conversions.LEGACY_COSMOLOGY
+    return beam
 
 
 @pytest.fixture
@@ -27,12 +40,16 @@ def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     return beam
 
 
+# A non-default cosmology for the constructor tests.
+CUSTOM_COSMO = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+
+
 class TestPSpecBeamUV:
     def test_init(self, beam_nf_dipole: pspecbeam.PSpecBeamUV) -> None:
         """Check that PSpecBeamUV loads a beamfits file and sets primary_beam/beam_freqs/cosmo."""
         assert isinstance(beam_nf_dipole.primary_beam, UVBeam)
         assert beam_nf_dipole.beam_freqs.size > 0
-        assert isinstance(beam_nf_dipole.cosmo, conversions.Cosmo_Conversions)
+        assert beam_nf_dipole.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_omegas(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check power_beam_int/power_beam_sq_int against precomputed reference values."""
@@ -52,9 +69,9 @@ class TestPSpecBeamUV:
         assert Om_p.ndim == 1
         assert Om_pp.ndim == 1
 
-    def test_scalar_pI(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_scalar_pI(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar for pI against a precomputed reference value."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
+        scalar = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 568847837.72586381 - 1.0) <= 1e-4
@@ -70,10 +87,10 @@ class TestPSpecBeamUV:
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
     def test_custom_cosmology(
-        self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV
+        self, beam_nf_dipole_wcosmo: pspecbeam.PSpecBeamUV, cosmo: FLRW
     ) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        assert isinstance(beam_nf_dipole_wcosmo.cosmo, conversions.Cosmo_Conversions)
+        assert beam_nf_dipole_wcosmo.cosmo is cosmo
 
     @pytest.mark.parametrize("pol", ["pQ", "pU", "pV"])
     def test_scalar_other_stokes(
@@ -90,19 +107,20 @@ class TestPSpecBeamUV:
         assert np.isfinite(scalar) and scalar > 0
         assert not np.isclose(scalar, scalar_pI, rtol=1e-3)
 
-    def test_taper(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_taper(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = beam_nf_pstokes.compute_pspec_scalar(
+        scalar = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
         """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
-        M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11))
+        M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11) * u.Hz)
         assert len(M) == 11
-        np.testing.assert_almost_equal(M[0], 40.643366654821904)
-        M = beam_nf_pstokes.Jy_to_mK(150e6)
+        # k_B from astropy.constants (CODATA 2018); CODATA 2014 gave 40.643366654821904
+        np.testing.assert_almost_equal(M[0], 40.643352524643994)
+        M = beam_nf_pstokes.Jy_to_mK(150e6 * u.Hz)
         assert isinstance(M, np.ndarray)
 
         # Frequencies outside the beam's frequency range are extrapolated, with
@@ -111,7 +129,7 @@ class TestPSpecBeamUV:
             pytest.warns(UserWarning, match="min freq .* extrapolating"),
             pytest.warns(UserWarning, match="max freq .* extrapolating"),
         ):
-            M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13))
+            M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13) * u.Hz)
         assert np.all(np.isfinite(M))
 
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
@@ -119,9 +137,9 @@ class TestPSpecBeamUV:
         with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
             beam_nf_pstokes.Jy_to_mK(np.array([1]))
 
-    def test_noise_scalar(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
+    def test_noise_scalar(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with noise_scalar=True against a precomputed reference value."""
-        sclr = beam_nf_pstokes.compute_pspec_scalar(
+        sclr = beam_nf_pstokes_legacy.compute_pspec_scalar(
             LOWER_FREQ,
             UPPER_FREQ,
             NUM_FREQS,
@@ -205,7 +223,7 @@ class TestPSpecBeamUV:
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check the shape of beam_normalized_response's output for a dipole power beam."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         nside = beam_nf_dipole.primary_beam.nside
         beam_res = pspecbeam.PSpecBeamUV.beam_normalized_response(
             beam_nf_dipole, pol="xx", freq=freq
@@ -218,7 +236,7 @@ class TestPSpecBeamUV:
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that an unavailable polarization raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         with pytest.raises(ValueError, match="Do not have the right polarization"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(
                 beam_nf_dipole, pol="ll", freq=freq
@@ -228,7 +246,7 @@ class TestPSpecBeamUV:
         self, beam_nf_efield: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that a non-power beam_type raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         beam = copy.deepcopy(beam_nf_efield)
         beam.primary_beam.beam_type = "voltage"
         with pytest.raises(ValueError, match="beam_type must be power"):
@@ -238,7 +256,7 @@ class TestPSpecBeamUV:
         self, efield_beam: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that Naxes_vec > 1 raises a ValueError for a power beam."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         efield_beam.primary_beam.Naxes_vec = 2
         with pytest.raises(ValueError, match="Expect scalar for power beam"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(
@@ -249,7 +267,7 @@ class TestPSpecBeamUV:
         self, efield_beam: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that a non-peak-normalized beam raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         efield_beam.primary_beam._data_normalization.value = "area"
         with pytest.raises(ValueError, match="beam must be peak normalized"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(
@@ -260,7 +278,7 @@ class TestPSpecBeamUV:
         self, efield_beam: pspecbeam.PSpecBeamUV
     ) -> None:
         """Check that a non-healpix pixel coordinate system raises a ValueError."""
-        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10)
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
         efield_beam.primary_beam.pixel_coordinate_system = "cartesian"
         with pytest.raises(ValueError, match="only healpix format supported"):
             pspecbeam.PSpecBeamUV.beam_normalized_response(
@@ -271,7 +289,19 @@ class TestPSpecBeamUV:
 @pytest.fixture(scope="module")
 def gauss_beam() -> pspecbeam.PSpecBeamGauss:
     """A Gaussian primary beam (FWHM=0.8), used both as its own test subject and as a reference for PSpecBeamFromArray."""
-    return pspecbeam.PSpecBeamGauss(0.8, np.linspace(115e6, 130e6, 50, endpoint=False))
+    return pspecbeam.PSpecBeamGauss(
+        0.8 * u.rad, np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz
+    )
+
+
+@pytest.fixture(scope="module")
+def gauss_beam_legacy() -> pspecbeam.PSpecBeamGauss:
+    """gauss_beam with the v0.x default cosmology, for the v0.x reference scalars."""
+    return pspecbeam.PSpecBeamGauss(
+        0.8 * u.rad,
+        np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz,
+        cosmo=conversions.LEGACY_COSMOLOGY,
+    )
 
 
 class TestPSpecBeamGauss:
@@ -286,9 +316,9 @@ class TestPSpecBeamGauss:
         assert Om_pp[4] == 0.36258881134617554
         assert Om_pp[4] == Om_pp[0]
 
-    def test_scalar(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+    def test_scalar(self, gauss_beam_legacy: pspecbeam.PSpecBeamGauss) -> None:
         """Check compute_pspec_scalar against a precomputed reference value."""
-        scalar = gauss_beam.compute_pspec_scalar(
+        scalar = gauss_beam_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
         )
         assert abs(scalar / 6392750120.8657961 - 1.0) <= 1e-4
@@ -296,11 +326,11 @@ class TestPSpecBeamGauss:
     def test_custom_cosmology(self) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
         bgauss = pspecbeam.PSpecBeamGauss(
-            0.8,
-            np.linspace(115e6, 130e6, 50, endpoint=False),
-            cosmo=conversions.Cosmo_Conversions(),
+            0.8 * u.rad,
+            np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz,
+            cosmo=CUSTOM_COSMO,
         )
-        assert isinstance(bgauss.cosmo, conversions.Cosmo_Conversions)
+        assert bgauss.cosmo is CUSTOM_COSMO
 
     def test_scalar_convergence(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar converges as num_steps increases."""
@@ -312,9 +342,9 @@ class TestPSpecBeamGauss:
         )
         assert abs(scalar / scalar_large_Nsteps - 1.0) <= 1e-5
 
-    def test_taper(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
+    def test_taper(self, gauss_beam_legacy: pspecbeam.PSpecBeamGauss) -> None:
         """Check compute_pspec_scalar with a taper against a precomputed reference value."""
-        scalar = gauss_beam.compute_pspec_scalar(
+        scalar = gauss_beam_legacy.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
         )
         assert abs(scalar / 22123832163.072491 - 1.0) <= 1e-8
@@ -328,7 +358,7 @@ class TestPSpecBeamGauss:
             sigma=fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0))), sigma_type="power"
         )
         bgauss = pspecbeam.PSpecBeamGauss(
-            beam=analytic, beam_freqs=gauss_beam.beam_freqs
+            beam=analytic, beam_freqs=gauss_beam.beam_freqs * u.Hz
         )
         assert bgauss.analytic_beam is analytic
         assert isinstance(gauss_beam.analytic_beam, GaussianBeam)
@@ -343,11 +373,11 @@ class TestPSpecBeamGauss:
         sigma_power = 0.8 / (2.0 * np.sqrt(2.0 * np.log(2.0)))
         from_power = pspecbeam.PSpecBeamGauss(
             beam=GaussianBeam(sigma=sigma_power, sigma_type="power"),
-            beam_freqs=gauss_beam.beam_freqs,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
         )
         from_efield = pspecbeam.PSpecBeamGauss(
             beam=GaussianBeam(sigma=np.sqrt(2.0) * sigma_power, sigma_type="efield"),
-            beam_freqs=gauss_beam.beam_freqs,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
         )
         np.testing.assert_allclose(from_power.fwhm, from_efield.fwhm)
         np.testing.assert_allclose(
@@ -363,18 +393,19 @@ class TestPSpecBeamGauss:
         """Check clear errors for diameter-specified, chromatic, and non-Gaussian analytic beams."""
         with pytest.raises(ValueError, match="Diameter-specified"):
             pspecbeam.PSpecBeamGauss(
-                beam=GaussianBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
+                beam=GaussianBeam(diameter=14.0),
+                beam_freqs=gauss_beam.beam_freqs * u.Hz,
             )
         with pytest.raises(NotImplementedError, match="Chromatic"):
             pspecbeam.PSpecBeamGauss(
                 beam=GaussianBeam(
                     sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
                 ),
-                beam_freqs=gauss_beam.beam_freqs,
+                beam_freqs=gauss_beam.beam_freqs * u.Hz,
             )
         with pytest.raises(TypeError, match="must be a pyuvdata GaussianBeam"):
             pspecbeam.PSpecBeamGauss(
-                beam=AiryBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs
+                beam=AiryBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs * u.Hz
             )
 
     def test_raises_on_bad_argument_combinations(
@@ -384,14 +415,14 @@ class TestPSpecBeamGauss:
         analytic = GaussianBeam(sigma=0.1)
         with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
             pspecbeam.PSpecBeamGauss(
-                fwhm=0.8, beam=analytic, beam_freqs=gauss_beam.beam_freqs
+                fwhm=0.8 * u.rad, beam=analytic, beam_freqs=gauss_beam.beam_freqs * u.Hz
             )
         with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
-            pspecbeam.PSpecBeamGauss(beam_freqs=gauss_beam.beam_freqs)
+            pspecbeam.PSpecBeamGauss(beam_freqs=gauss_beam.beam_freqs * u.Hz)
         with pytest.raises(ValueError, match="beam_freqs must be specified"):
-            pspecbeam.PSpecBeamGauss(fwhm=0.8)
+            pspecbeam.PSpecBeamGauss(fwhm=0.8 * u.rad)
         with pytest.raises(TypeError, match="pass analytic beams via the beam keyword"):
-            pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs)
+            pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs * u.Hz)
 
     def test_omegas_match_numerical_integration(self) -> None:
         """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
@@ -401,7 +432,7 @@ class TestPSpecBeamGauss:
         """
         fwhm = 0.1
         beam_freqs = np.array([150e6])
-        bgauss = pspecbeam.PSpecBeamGauss(fwhm, beam_freqs)
+        bgauss = pspecbeam.PSpecBeamGauss(fwhm * u.rad, beam_freqs * u.Hz)
         nside = 128
         uvb = bgauss.analytic_beam.to_uvbeam(
             freq_array=beam_freqs,
@@ -422,15 +453,17 @@ class TestPSpecBeamGauss:
 class TestPSpecBeamFromArray:
     def test_construction(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check construction from array or dict OmegaP/OmegaPP, dict-specified pol recognition, and repr."""
-        Om_P = gauss_beam.power_beam_int()
-        Om_PP = gauss_beam.power_beam_sq_int()
+        Om_P = gauss_beam.power_beam_int() * u.sr
+        Om_PP = gauss_beam.power_beam_sq_int() * u.sr
         psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=gauss_beam.beam_freqs
+            OmegaP=Om_P, OmegaPP=Om_PP, beam_freqs=gauss_beam.beam_freqs * u.Hz
         )
         psbeampol = pspecbeam.PSpecBeamFromArray(
             OmegaP={"pI": Om_P, "pQ": Om_P},
             OmegaPP={"pI": Om_PP, "pQ": Om_PP},
-            beam_freqs=gauss_beam.beam_freqs,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            # the reference scalar below is from v0.x, with its default cosmology
+            cosmo=conversions.LEGACY_COSMOLOGY,
         )
         assert len(str(psbeam)) > 0
         # polarizations are recognized for the dict-specified beam
@@ -442,19 +475,19 @@ class TestPSpecBeamFromArray:
     def test_custom_cosmology(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
         bm2 = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
-            cosmo=conversions.Cosmo_Conversions(),
+            OmegaP=gauss_beam.power_beam_int() * u.sr,
+            OmegaPP=gauss_beam.power_beam_sq_int() * u.sr,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            cosmo=CUSTOM_COSMO,
         )
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
+        assert bm2.cosmo is CUSTOM_COSMO
 
     def test_matches_gauss(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar matches the equivalent Gaussian beam's result."""
         psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
+            OmegaP=gauss_beam.power_beam_int() * u.sr,
+            OmegaPP=gauss_beam.power_beam_sq_int() * u.sr,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
         )
         scalar = psbeam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="pI", num_steps=2000
@@ -467,9 +500,10 @@ class TestPSpecBeamFromArray:
     def test_taper(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
         """Check that compute_pspec_scalar with a taper matches the equivalent Gaussian-beam result."""
         psbeam = pspecbeam.PSpecBeamFromArray(
-            OmegaP=gauss_beam.power_beam_int(),
-            OmegaPP=gauss_beam.power_beam_sq_int(),
-            beam_freqs=gauss_beam.beam_freqs,
+            OmegaP=gauss_beam.power_beam_int() * u.sr,
+            OmegaPP=gauss_beam.power_beam_sq_int() * u.sr,
+            beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            cosmo=conversions.LEGACY_COSMOLOGY,
         )
         scalar = psbeam.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, num_steps=5000, taper="blackman"
@@ -533,9 +567,9 @@ class TestPSpecBeamFromArray:
         match: str,
     ) -> None:
         """Check that malformed OmegaP/OmegaPP combinations raise the documented error type and message."""
-        Om_P = gauss_beam.power_beam_int()
-        Om_PP = gauss_beam.power_beam_sq_int()
-        kwargs = build_kwargs(Om_P, Om_PP, gauss_beam.beam_freqs)
+        Om_P = gauss_beam.power_beam_int() * u.sr
+        Om_PP = gauss_beam.power_beam_sq_int() * u.sr
+        kwargs = build_kwargs(Om_P, Om_PP, gauss_beam.beam_freqs * u.Hz)
         with pytest.raises(exc_type, match=match):
             pspecbeam.PSpecBeamFromArray(**kwargs)
 
@@ -592,19 +626,174 @@ class TestPSpecBeamFromArray:
         # Unknown pol *strings* are rejected earlier, by pyuvdata's polstr2num,
         # so these cases use integer codes, a circular pol ("rr", code -1) that
         # the beam does not support, or valid pols that were never added.
-        Om_P = gauss_beam.power_beam_int()
-        Om_PP = gauss_beam.power_beam_sq_int()
+        Om_P = gauss_beam.power_beam_int() * u.sr
+        Om_PP = gauss_beam.power_beam_sq_int() * u.sr
         with pytest.raises(KeyError, match=match):
-            call(Om_P, Om_PP, gauss_beam.beam_freqs)
+            call(Om_P, Om_PP, gauss_beam.beam_freqs * u.Hz)
 
 
 class TestPSpecBeamBase:
     def test_default_construction(self) -> None:
         """Check that the base class can be instantiated with a default cosmology."""
         bm1 = pspecbeam.PSpecBeamBase()
-        assert isinstance(bm1.cosmo, conversions.Cosmo_Conversions)
+        assert bm1.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_custom_cosmology(self) -> None:
         """Check that a user-defined cosmology can be passed to the constructor."""
-        bm2 = pspecbeam.PSpecBeamBase(cosmo=conversions.Cosmo_Conversions())
-        assert isinstance(bm2.cosmo, conversions.Cosmo_Conversions)
+        bm2 = pspecbeam.PSpecBeamBase(cosmo=CUSTOM_COSMO)
+        assert bm2.cosmo is CUSTOM_COSMO
+
+
+def _beam_from_constructor(name: str, cosmo):
+    """Build one of the PSpecBeam classes with the given cosmology."""
+    freqs = np.linspace(115e6, 130e6, 50, endpoint=False)
+    if name == "base":
+        return pspecbeam.PSpecBeamBase(cosmo=cosmo)
+    if name == "uv":
+        return pspecbeam.PSpecBeamUV(
+            DATA_PATH / "HERA_NF_dipole_power.beamfits", cosmo=cosmo
+        )
+    if name == "gauss":
+        return pspecbeam.PSpecBeamGauss(0.8 * u.rad, freqs * u.Hz, cosmo=cosmo)
+    gauss = pspecbeam.PSpecBeamGauss(0.8 * u.rad, freqs * u.Hz)
+    return pspecbeam.PSpecBeamFromArray(
+        OmegaP=gauss.power_beam_int() * u.sr,
+        OmegaPP=gauss.power_beam_sq_int() * u.sr,
+        beam_freqs=freqs * u.Hz,
+        cosmo=cosmo,
+    )
+
+
+BEAM_CONSTRUCTORS = ["base", "uv", "gauss", "from_array"]
+
+
+class TestBeamCosmology:
+    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
+    def test_default_is_shared_default_cosmology(self, name: str) -> None:
+        """Every beam class defaults to the one DEFAULT_COSMOLOGY object."""
+        beam = _beam_from_constructor(name, None)
+        assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+
+    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
+    def test_cosmo_conversions_deprecated(self, name: str) -> None:
+        """A Cosmo_Conversions is converted to astropy with a DeprecationWarning."""
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            beam = _beam_from_constructor(name, old)
+        assert isinstance(beam.cosmo, FLRW)
+        assert beam.cosmo.is_equivalent(old.to_astropy())
+
+    def test_set_cosmo(self) -> None:
+        """Setting beam.cosmo accepts astropy, dicts and None; rejects others."""
+        beam = pspecbeam.PSpecBeamBase()
+        beam.cosmo = CUSTOM_COSMO
+        assert beam.cosmo is CUSTOM_COSMO
+        beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
+        assert beam.cosmo.is_equivalent(CUSTOM_COSMO)
+        beam.cosmo = None
+        assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+        with pytest.raises(TypeError, match="FLRW"):
+            beam.cosmo = [0.7, 0.05]
+        del beam.cosmo
+        assert not hasattr(beam, "cosmo")
+
+
+def test_vectorised_x2y_matches_loop() -> None:
+    """The vectorised X2Y gives the per-frequency Cosmo_Conversions values."""
+    with pytest.warns(DeprecationWarning):
+        old = conversions.Cosmo_Conversions()
+    freqs = np.linspace(LOWER_FREQ.to_value(u.Hz), UPPER_FREQ.to_value(u.Hz), 200)
+    redshifts = conversions.f2z(freqs)
+    for little_h in (True, False):
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        new = conversions.X2Y(
+            redshifts, conversions.LEGACY_COSMOLOGY, length_unit
+        ).to_value(length_unit**3 / (u.sr * u.Hz))
+        loop = np.array([old.X2Y(z, little_h=little_h) for z in redshifts])
+        np.testing.assert_allclose(new, loop, rtol=1e-14)
+
+
+class TestScalarLengthUnit:
+    @pytest.mark.parametrize("exact_norm", [False, True])
+    def test_length_unit_matches_little_h(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV, exact_norm: bool
+    ) -> None:
+        """length_unit=Mpc / Mpc/littleh give the old little_h=False/True values."""
+        kwargs = dict(pol="XX", num_steps=500, exact_norm=exact_norm)
+        for little_h, length_unit in [(True, u.Mpc / cu.littleh), (False, u.Mpc)]:
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                old = beam_nf_dipole.compute_pspec_scalar(
+                    LOWER_FREQ, UPPER_FREQ, NUM_FREQS, little_h=little_h, **kwargs
+                )
+            new = beam_nf_dipole.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=length_unit, **kwargs
+            )
+            assert new == old
+            assert isinstance(new, float)
+        default = beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, **kwargs
+        )
+        littleh = beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=u.Mpc / cu.littleh, **kwargs
+        )
+        assert default == littleh
+        mpc = beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit="Mpc", **kwargs
+        )
+        h = beam_nf_dipole.cosmo.h
+        np.testing.assert_allclose(mpc, littleh / h**3, rtol=1e-12)
+
+    def test_disagreeing_arguments_raise(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
+    ) -> None:
+        with (
+            pytest.warns(DeprecationWarning, match="little_h"),
+            pytest.raises(ValueError, match="disagrees"),
+        ):
+            beam_nf_dipole.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, little_h=True, length_unit=u.Mpc
+            )
+
+    def test_agreeing_arguments_warn(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
+    ) -> None:
+        with pytest.warns(DeprecationWarning, match="little_h"):
+            both = beam_nf_dipole.compute_pspec_scalar(
+                LOWER_FREQ,
+                UPPER_FREQ,
+                NUM_FREQS,
+                pol="XX",
+                little_h=False,
+                length_unit=u.Mpc,
+            )
+        assert both == beam_nf_dipole.compute_pspec_scalar(
+            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX", length_unit=u.Mpc
+        )
+
+    @pytest.mark.parametrize("length_unit", [u.s, u.Mpc**3, "littleh"])
+    def test_bad_length_unit_raises(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV, length_unit
+    ) -> None:
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            beam_nf_dipole.compute_pspec_scalar(
+                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=length_unit
+            )
+
+    def test_private_function_little_h_deprecated(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
+    ) -> None:
+        beam_freqs = beam_nf_dipole.beam_freqs
+        ratio = beam_nf_dipole.power_beam_sq_int("XX") / (
+            beam_nf_dipole.power_beam_int("XX") ** 2
+        )
+        pspec_freqs = np.linspace(
+            LOWER_FREQ.to_value(u.Hz),
+            UPPER_FREQ.to_value(u.Hz),
+            NUM_FREQS,
+            endpoint=False,
+        )
+        args = (conversions.DEFAULT_COSMOLOGY, beam_freqs, ratio, pspec_freqs)
+        with pytest.warns(DeprecationWarning, match="little_h"):
+            old = pspecbeam._compute_pspec_scalar(*args, little_h=False)
+        assert old == pspecbeam._compute_pspec_scalar(*args, length_unit=u.Mpc)
