@@ -688,7 +688,16 @@ class TestIntegralBeamCache:
     """get_integral_beam is computed once per spectral window, pol and beam."""
 
     @pytest.fixture
-    def counting_ds(self, beam_nf_dipole, uvd, monkeypatch):
+    def cache_uvd(self, synthetic_uvd) -> UVData:
+        """Synthetic noise on antennas 24, 25, 37 and 38, 14.6 m apart on an
+        east-west line (so 24-25 and 37-38, and 24-37 and 25-38, are
+        redundant), including the autos that cov_model="autos" uses."""
+        ants = (24, 25, 37, 38)
+        antpairs = [(a, b) for i, a in enumerate(ants) for b in ants[i:]]
+        return synthetic_uvd(nfreq=40, ntimes=4, antpairs=antpairs, seed=7)
+
+    @pytest.fixture
+    def counting_ds(self, beam_nf_dipole, cache_uvd, monkeypatch):
         calls = []
         original = beam_nf_dipole.beam_normalized_response
 
@@ -697,7 +706,7 @@ class TestIntegralBeamCache:
             return original(pol, freq, *args, **kwargs)
 
         monkeypatch.setattr(beam_nf_dipole, "beam_normalized_response", counting)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=beam_nf_dipole)
+        ds = pspecdata.PSpecData(dsets=[cache_uvd, cache_uvd], beam=beam_nf_dipole)
         ds.set_spw((10, 30))
         return ds, calls
 
@@ -738,8 +747,8 @@ class TestIntegralBeamCache:
         ds.get_integral_beam("xx")
         assert len(calls) == 4
 
-    def test_fallback_warns_on_every_call(self, uvd) -> None:
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd])
+    def test_fallback_warns_on_every_call(self, cache_uvd) -> None:
+        ds = pspecdata.PSpecData(dsets=[cache_uvd, cache_uvd])
         for _ in range(2):
             with pytest.warns(UserWarning, match="could not be calculated"):
                 ds.get_integral_beam("xx")
@@ -1412,10 +1421,10 @@ class TestScalar:
         "length_unit", [u.Mpc / cu.littleh, u.Mpc, "Mpc / littleh", "Mpc"]
     )
     def test_scalar_quantity_matches_beam_scalar(
-        self, d, beam_nf_dipole, length_unit
+        self, synth_d, beam_nf_dipole, length_unit
     ) -> None:
         """scalar() is the beam's float scalar with unit length_unit^3 / (Hz sr)."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
         freqs = ds.freqs[ds.spw_range[0] : ds.spw_range[1]]
         unit = (
             unit_helpers.parse_unit_string(length_unit)
@@ -1437,8 +1446,10 @@ class TestScalar:
         assert scalar.value == expected
 
     @pytest.mark.parametrize("little_h", [True, False])
-    def test_scalar_little_h_deprecated(self, d, beam_nf_dipole, little_h) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+    def test_scalar_little_h_deprecated(
+        self, synth_d, beam_nf_dipole, little_h
+    ) -> None:
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
         length_unit = u.Mpc / cu.littleh if little_h else u.Mpc
         with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
             old = ds.scalar("xx", little_h=little_h)
