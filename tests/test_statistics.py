@@ -863,6 +863,81 @@ class TestNoiseCrossSpectra:
             assert_within_errors(mean, 1.0, error)
 
 
+class TestLengthUnits:
+    """A power spectrum is a physical quantity, so computing it with lengths in
+    Mpc instead of h^-1 Mpc (length_unit) must give the same spectrum in other
+    units: P [mK^2 Mpc^3] = P [mK^2 h^-3 Mpc^3] / h^3, with covariances scaled
+    by h^-6 and k by h, and the same dimensionless Delta^2 = k^3 P / (2 pi^2).
+
+    The two-step normalization applies the length unit through the scalar
+    only, but the one-step normalization builds its response matrices in that
+    unit, so a little-h factor missing or applied twice there would change the
+    spectra of one unit only.
+    """
+
+    ANTPAIRS = [(0, 1), (1, 2), (0, 2)]
+
+    @pytest.fixture(scope="class")
+    def ds(self, synthetic_uvd, gauss_beam) -> PSpecData:
+        kwargs = dict(nfreq=NFREQ, ntimes=10, antpairs=self.ANTPAIRS)
+        dsets = [synthetic_uvd(seed=1, **kwargs), synthetic_uvd(seed=2, **kwargs)]
+        for uvd in dsets:
+            uvd.vis_units = "mK"
+        return PSpecData(dsets=dsets, wgts=[None, None], beam=gauss_beam)
+
+    @pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
+    @pytest.mark.parametrize("normalization", ["two-step", "one-step"])
+    def test_spectra_do_not_depend_on_length_unit(
+        self, ds, normalization: str, norm: str
+    ) -> None:
+        """Spectra, covariances, k values and Delta^2 computed in h^-1 Mpc and
+        in Mpc are the same quantities."""
+        uvp_h, uvp_mpc = (
+            ds.pspec(
+                self.ANTPAIRS,
+                self.ANTPAIRS,
+                dsets=(0, 1),
+                pols=[("xx", "xx")],
+                norm=norm,
+                taper="bh",
+                store_cov=True,
+                normalization=normalization,
+                length_unit=length_unit,
+                verbose=False,
+            )
+            for length_unit in [u.Mpc / cu.littleh, u.Mpc]
+        )
+        h = ds.primary_beam.cosmo.h
+        to_mpc = cu.with_H0(ds.primary_beam.cosmo.H0)
+        assert uvp_h.units == u.mK**2 * u.Mpc**3 / cu.littleh**3
+        assert uvp_mpc.units == u.mK**2 * u.Mpc**3
+
+        def assert_same(actual, expected):
+            np.testing.assert_allclose(
+                actual, expected, rtol=1e-10, atol=1e-10 * np.abs(expected).max()
+            )
+
+        assert_same(
+            uvp_mpc.data_array[0],
+            (uvp_h.data_array[0] * uvp_h.units).to_value(
+                uvp_mpc.units, equivalencies=to_mpc
+            ),
+        )
+        assert_same(uvp_mpc.data_array[0], uvp_h.data_array[0] / h**3)
+        for name in ["cov_array_real", "cov_array_imag"]:
+            assert_same(getattr(uvp_mpc, name)[0], getattr(uvp_h, name)[0] / h**6)
+        for getter in ["get_kperps", "get_kparas"]:
+            k_h = getattr(uvp_h, getter)(0)
+            k_mpc = getattr(uvp_mpc, getter)(0)
+            assert k_mpc.unit == 1 / u.Mpc
+            assert_same(k_mpc.value, k_h.to_value(k_mpc.unit, equivalencies=to_mpc))
+
+        dsq_h = uvp_h.convert_to_deltasq(inplace=False)
+        dsq_mpc = uvp_mpc.convert_to_deltasq(inplace=False)
+        assert dsq_h.units == dsq_mpc.units == u.mK**2
+        assert_same(dsq_mpc.data_array[0], dsq_h.data_array[0])
+
+
 class TestBootstrap:
     """Bootstrap resampling of baseline pairs estimates the error on their
     average. For N independent spectra resampled with replacement, the
