@@ -421,6 +421,15 @@ def ft_freqs():
     return uvwindow.FTBeam.get_bandwidth(FT_BEAM_FILE)[5:25]
 
 
+@pytest.fixture(scope="module")
+def gaussian_ftbeam(ft_freqs):
+    """Analytic Gaussian FTBeam on ft_freqs, on the flat-sky grid of the FT beam
+    file (half-width 0.5 rad, 213 pixels), for tests that need *some* FTBeam."""
+    return uvwindow.FTBeam.gaussian(
+        ft_freqs * u.Hz, 7 * u.deg, "xx", mapsize=0.5 * u.rad, npix=213
+    )
+
+
 class TestFTBeam:
     def test_init_units(self, ft_freqs):
         data = np.ones((ft_freqs.size, 5, 5))
@@ -449,8 +458,8 @@ class TestFTBeam:
         with pytest.raises(u.UnitConversionError, match="freq_array"):
             uvwindow.FTBeam.from_file(FT_BEAM_FILE, freq_array=ft_freqs * u.s)
 
-    def test_select_freqs_units(self, ft_freqs):
-        full = uvwindow.FTBeam.from_file(FT_BEAM_FILE, freq_array=ft_freqs * u.Hz)
+    def test_select_freqs_units(self, ft_freqs, gaussian_ftbeam):
+        full = gaussian_ftbeam
         ref = full.select_freqs(ft_freqs[2:8] * u.Hz, inplace=False)
         beam = full.select_freqs(ft_freqs[2:8] * u.Hz, atol=1 * u.kHz, inplace=False)
         assert beam == ref
@@ -475,9 +484,8 @@ class TestFTBeam:
 
 class TestUVWindowLengths:
     @pytest.fixture(scope="class")
-    def uvw(self, ft_freqs):
-        ftbeam = uvwindow.FTBeam.from_file(FT_BEAM_FILE, freq_array=ft_freqs * u.Hz)
-        return uvwindow.UVWindow(ftbeam_obj=ftbeam, taper="blackman-harris")
+    def uvw(self, gaussian_ftbeam):
+        return uvwindow.UVWindow(ftbeam_obj=gaussian_ftbeam, taper="blackman-harris")
 
     def test_k_bins(self, uvw):
         bl_lens = np.array([14.6, 29.2])

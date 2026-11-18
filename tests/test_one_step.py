@@ -62,10 +62,21 @@ def assert_close(actual, expected, rtol=IDENTITY_RTOL, scale=None):
 
 
 @pytest.fixture(scope="module")
-def unflagged_uvd(uvd_zen_2458116):
-    uvd = copy.deepcopy(uvd_zen_2458116)
-    uvd.flag_array[:] = False
-    return uvd
+def unflagged_uvd(synthetic_uvd):
+    """Unflagged synthetic noise on the HERA band (1024 channels from 100 MHz)
+    for antennas 23, 24 and 25, 14.6 m apart on an east-west line. The iC and
+    V^-1/2 checks need the empirical covariance of about a dozen integrations
+    (with 4 they miss the 1e-9 tolerance), hence 12."""
+    return synthetic_uvd(
+        nfreq=1024,
+        ntimes=12,
+        antpairs=[(23, 23), (23, 24), (24, 25)],
+        pols=("ee", "nn"),
+        freq_start=100e6,
+        channel_width=100e6 / 1024,
+        vis_units="uncalib",
+        seed=0,
+    )
 
 
 @pytest.fixture
