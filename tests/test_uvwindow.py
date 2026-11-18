@@ -1491,13 +1491,6 @@ class TestUVWindowCheckKunits:
         # consistent units pass without raising
         uvwindow_obj.check_kunits(kbins)
 
-    def test_inconsistent_little_h_raises(
-        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
-    ) -> None:
-        assert uvwindow_obj.kunits == cu.littleh / units.Mpc
-        with pytest.raises(ValueError, match="not consistent with kunits"):
-            uvwindow_obj.check_kunits(kbins.value / units.Mpc)
-
     def test_without_units_raises(
         self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
     ) -> None:
@@ -1511,25 +1504,6 @@ class TestUVWindowCheckKunits:
         assert checked.unit == uvwindow_obj.kunits
         np.testing.assert_array_equal(checked.value, kbins.value)
 
-    def test_inverse_mpc_with_little_h_raises(
-        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
-    ) -> None:
-        with pytest.raises(ValueError, match="not consistent with kunits"):
-            uvwindow_obj.check_kunits(kbins.value / units.Mpc)
-
-    def test_littleh_without_little_h_raises(
-        self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
-    ) -> None:
-        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
-        with pytest.raises(ValueError, match="not consistent with kunits"):
-            uvw.check_kunits(kbins)
-
-    def test_dimensionless_raises(
-        self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
-    ) -> None:
-        with pytest.raises(ValueError, match="not consistent with kunits"):
-            uvwindow_obj.check_kunits(kbins.value * units.dimensionless_unscaled)
-
     def test_hour_per_mpc_deprecated(
         self, uvwindow_obj: uvwindow.UVWindow, kbins: units.Quantity
     ) -> None:
@@ -1538,12 +1512,34 @@ class TestUVWindowCheckKunits:
         assert checked.unit == cu.littleh / units.Mpc
         np.testing.assert_array_equal(checked.value, kbins.value)
 
-    def test_hour_per_mpc_without_little_h_raises(
-        self, ft_beam_spw: uvwindow.FTBeam, kbins: units.Quantity
+    @pytest.mark.parametrize(
+        ("little_h", "kunits", "bad_unit"),
+        [
+            (True, cu.littleh / units.Mpc, units.Mpc ** (-1)),
+            (True, cu.littleh / units.Mpc, units.dimensionless_unscaled),
+            (False, units.Mpc ** (-1), cu.littleh / units.Mpc),
+            # astropy's units.h is the hour, not little h
+            (False, units.Mpc ** (-1), units.h / units.Mpc),
+        ],
+        ids=[
+            "little_h-inverse_mpc",
+            "little_h-dimensionless",
+            "no_little_h-littleh_per_mpc",
+            "no_little_h-hour_per_mpc",
+        ],
+    )
+    def test_inconsistent_units_raise(
+        self,
+        ft_beam_spw: uvwindow.FTBeam,
+        kbins: units.Quantity,
+        little_h: bool,
+        kunits: units.UnitBase,
+        bad_unit: units.UnitBase,
     ) -> None:
-        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=False)
+        uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=little_h)
+        assert uvw.kunits == kunits
         with pytest.raises(ValueError, match="not consistent with kunits"):
-            uvw.check_kunits(kbins.value * units.h / units.Mpc)
+            uvw.check_kunits(kbins.value * bad_unit)
 
 
 class TestUVWindowHourPerMpcDeprecation:
