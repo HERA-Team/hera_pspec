@@ -226,47 +226,67 @@ class TestConstructPstokes:
         ):
             pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
 
-    def test_raises_on_mismatched_frequencies_one_sided(
-        self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
+    @pytest.mark.parametrize(
+        "axis,array_name,subset1,subset2,match",
+        [
+            pytest.param(
+                "frequencies",
+                "freq_array",
+                None,
+                slice(0, 10),
+                "same frequencies",
+                id="frequencies-one_sided",
+            ),
+            pytest.param(
+                "frequencies",
+                "freq_array",
+                slice(0, 10),
+                slice(10, 20),
+                "same frequencies",
+                id="frequencies-partial_overlap",
+            ),
+            pytest.param(
+                "times",
+                "time_array",
+                None,
+                slice(0, 3),
+                "same timestamps",
+                id="timestamps-one_sided",
+            ),
+            pytest.param(
+                "times",
+                "time_array",
+                slice(0, 3),
+                slice(1, 4),
+                "same timestamps",
+                id="timestamps-partial_overlap",
+            ),
+        ],
+    )
+    def test_raises_on_mismatched_axis(
+        self,
+        uvd1: pyuvdata.UVData,
+        uvd2: pyuvdata.UVData,
+        axis: str,
+        array_name: str,
+        subset1: slice | None,
+        subset2: slice,
+        match: str,
     ) -> None:
-        """Check that restricting only dset2's frequencies raises a frequency-mismatch error."""
-        uvd3 = uvd2.select(frequencies=np.unique(uvd2.freq_array)[:10], inplace=False)
-        with pytest.raises(
-            ValueError, match="dset1 and dset2 must have the same frequencies"
-        ):
-            pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
+        """Check that datasets covering different frequencies or times raise a
+        mismatch error, whether only dset2 is restricted (one-sided) or both are
+        restricted to partially overlapping subsets."""
 
-    def test_raises_on_mismatched_frequencies_partial_overlap(
-        self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
-    ) -> None:
-        """Check that non-overlapping frequency subsets on both datasets raise a frequency-mismatch error."""
-        uvd3 = uvd1.select(frequencies=np.unique(uvd1.freq_array)[:10], inplace=False)
-        uvd4 = uvd2.select(frequencies=np.unique(uvd2.freq_array)[10:20], inplace=False)
-        with pytest.raises(
-            ValueError, match="dset1 and dset2 must have the same frequencies"
-        ):
-            pstokes.construct_pstokes(dset1=uvd3, dset2=uvd4)
+        def select(uvd: pyuvdata.UVData, subset: slice | None) -> pyuvdata.UVData:
+            if subset is None:
+                return uvd
+            values = np.unique(getattr(uvd, array_name))[subset]
+            return uvd.select(**{axis: values}, inplace=False)
 
-    def test_raises_on_mismatched_timestamps_one_sided(
-        self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
-    ) -> None:
-        """Check that restricting only dset2's times raises a timestamp-mismatch error."""
-        uvd3 = uvd2.select(times=np.unique(uvd2.time_array)[0:3], inplace=False)
-        with pytest.raises(
-            ValueError, match="dset1 and dset2 must have the same timestamps"
-        ):
-            pstokes.construct_pstokes(dset1=uvd1, dset2=uvd3)
-
-    def test_raises_on_mismatched_timestamps_partial_overlap(
-        self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData
-    ) -> None:
-        """Check that non-overlapping time subsets on both datasets raise a timestamp-mismatch error."""
-        uvd3 = uvd1.select(times=np.unique(uvd1.time_array)[0:3], inplace=False)
-        uvd4 = uvd2.select(times=np.unique(uvd2.time_array)[1:4], inplace=False)
-        with pytest.raises(
-            ValueError, match="dset1 and dset2 must have the same timestamps"
-        ):
-            pstokes.construct_pstokes(dset1=uvd3, dset2=uvd4)
+        with pytest.raises(ValueError, match=f"dset1 and dset2 must have the {match}"):
+            pstokes.construct_pstokes(
+                dset1=select(uvd1, subset1), dset2=select(uvd2, subset2)
+            )
 
     def test_dual_pol_input(self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData) -> None:
         """Check that pI can be constructed from a single dual-polarization UVData object."""

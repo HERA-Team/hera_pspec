@@ -15,25 +15,30 @@ class TestPSpecParamUnit:
         param = parameter.PSpecParam("freq", unit=u.Hz)
         assert param.unit is u.Hz
 
-    def test_accepts_string(self) -> None:
-        param = parameter.PSpecParam("dly", unit="ns")
-        assert param.unit == u.ns
+    @pytest.mark.parametrize(
+        "unit, expected",
+        [
+            ("ns", u.ns),
+            ("littleh / Mpc", cu.littleh / u.Mpc),
+            (cu.littleh / u.Mpc, cu.littleh / u.Mpc),
+        ],
+        ids=["string", "littleh_string", "composite_unit"],
+    )
+    def test_accepts_unit_forms(self, unit, expected) -> None:
+        param = parameter.PSpecParam("example", unit=unit)
+        assert param.unit == expected
 
-    def test_accepts_littleh_string(self) -> None:
-        param = parameter.PSpecParam("k", unit="littleh / Mpc")
-        assert param.unit == cu.littleh / u.Mpc
-
-    def test_accepts_composite_unit(self) -> None:
-        param = parameter.PSpecParam("k", unit=cu.littleh / u.Mpc)
-        assert param.unit == cu.littleh / u.Mpc
-
-    def test_rejects_unparsable_string(self) -> None:
-        with pytest.raises(ValueError, match="could not parse unit string"):
-            parameter.PSpecParam("bad", unit="not_a_unit")
-
-    def test_rejects_non_unit(self) -> None:
-        with pytest.raises(TypeError, match="unit must be"):
-            parameter.PSpecParam("bad", unit=1.0)
+    @pytest.mark.parametrize(
+        "unit, exception, match",
+        [
+            ("not_a_unit", ValueError, "could not parse unit string"),
+            (1.0, TypeError, "unit must be"),
+        ],
+        ids=["unparsable_string", "non_unit"],
+    )
+    def test_rejects_bad_unit(self, unit, exception, match) -> None:
+        with pytest.raises(exception, match=match):
+            parameter.PSpecParam("bad", unit=unit)
 
     def test_positional_args_still_work(self) -> None:
         param = parameter.PSpecParam("example", "desc", 3, int, "(N,)")
