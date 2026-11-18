@@ -978,31 +978,63 @@ class TestSpherical:
                 kbins_theory=self.KBINS[:4].value,
             )
 
-    def test_average_bad_k_units(self, uvp_spherical: UVPSpec) -> None:
+    @pytest.mark.parametrize(
+        "kbins,bin_widths,kwargs,exception,match",
+        [
+            pytest.param(
+                KBINS,
+                BIN_WIDTHS,
+                {"little_h": False},
+                ValueError,
+                "little_h=False disagrees",
+                id="littleh_bins_with_little_h_false",
+            ),
+            pytest.param(
+                KBINS.value / u.Mpc,
+                0.25,
+                {"little_h": True},
+                ValueError,
+                "little_h=True disagrees",
+                id="inverse_mpc_bins_with_little_h_true",
+            ),
+            pytest.param(
+                KBINS.value * u.Mpc,
+                0.25,
+                {},
+                u.UnitConversionError,
+                "kbins must be a wavenumber",
+                id="kbins_not_a_wavenumber",
+            ),
+            pytest.param(
+                KBINS,
+                0.25 * u.s,
+                {},
+                u.UnitConversionError,
+                "bin_widths must be a wavenumber",
+                id="bin_widths_not_a_wavenumber",
+            ),
+            pytest.param(
+                KBINS,
+                BIN_WIDTHS,
+                {"kbins_theory": KBINS.value * u.m},
+                u.UnitConversionError,
+                "kbins_theory must be a wavenumber",
+                id="kbins_theory_not_a_wavenumber",
+            ),
+        ],
+    )
+    def test_average_bad_k_units(
+        self,
+        uvp_spherical: UVPSpec,
+        kbins: u.Quantity,
+        bin_widths: u.Quantity | float,
+        kwargs: dict,
+        exception: type[Exception],
+        match: str,
+    ) -> None:
         """Check that little_h disagreeing with the bins, or a non-k unit, raises."""
-        with pytest.raises(ValueError, match="little_h=False disagrees"):
-            grouping.spherical_average(
-                uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=False
-            )
-        with pytest.raises(ValueError, match="little_h=True disagrees"):
-            grouping.spherical_average(
-                uvp_spherical, self.KBINS.value / u.Mpc, 0.25, little_h=True
-            )
-        with pytest.raises(u.UnitConversionError, match="kbins must be a wavenumber"):
-            grouping.spherical_average(uvp_spherical, self.KBINS.value * u.Mpc, 0.25)
-        with pytest.raises(
-            u.UnitConversionError, match="bin_widths must be a wavenumber"
-        ):
-            grouping.spherical_average(uvp_spherical, self.KBINS, 0.25 * u.s)
-        with pytest.raises(
-            u.UnitConversionError, match="kbins_theory must be a wavenumber"
-        ):
-            grouping.spherical_average(
-                uvp_spherical,
-                self.KBINS,
-                self.BIN_WIDTHS,
-                kbins_theory=self.KBINS.value * u.m,
-            )
+        with pytest.raises(exception, match=match):
+            grouping.spherical_average(uvp_spherical, kbins, bin_widths, **kwargs)
 
     def test_average_mpc3_object(self, uvp_spherical: UVPSpec, cosmo: FLRW) -> None:
         """Check that an Mpc3 object is binned on a 1 / Mpc grid consistent with its norm_units."""
@@ -1230,11 +1262,44 @@ class TestSpherical:
         with pytest.raises(exception, match=match):
             grouping.spherical_wf_from_uvp(uvp, kbin_edges, **build_kwargs(uvp))
 
-    def test_wf_overlapping_kbins(self, uvp_exact_wfs: UVPSpec) -> None:
-        """Check that overlapping kbin_edges raise an AssertionError."""
-        with pytest.raises(AssertionError, match="kbins must not overlap"):
+    @pytest.mark.parametrize(
+        "kbin_edges,kwargs,exception,match",
+        [
+            pytest.param(
+                np.array([1.0, 2.0, 1.5]) / u.Mpc,
+                {},
+                AssertionError,
+                "kbins must not overlap",
+                id="overlapping",
+            ),
+            pytest.param(
+                np.arange(0.075, 2.9, 0.25) * cu.littleh / u.Mpc,
+                {"little_h": False},
+                ValueError,
+                "little_h=False disagrees",
+                id="littleh_edges_with_little_h_false",
+            ),
+            pytest.param(
+                np.arange(0.075, 2.9, 0.25) * u.Mpc,
+                {},
+                u.UnitConversionError,
+                "kbin_edges must be a wavenumber",
+                id="not_a_wavenumber",
+            ),
+        ],
+    )
+    def test_wf_bad_kbin_edges(
+        self,
+        uvp_exact_wfs: UVPSpec,
+        kbin_edges: u.Quantity,
+        kwargs: dict,
+        exception: type[Exception],
+        match: str,
+    ) -> None:
+        """Check that overlapping kbin_edges, little_h disagreeing with their unit, or a non-k unit raise."""
+        with pytest.raises(exception, match=match):
             grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs, kbin_edges=np.array([1.0, 2.0, 1.5]) / u.Mpc
+                uvp_exact_wfs, kbin_edges=kbin_edges, **kwargs
             )
 
     def test_wf_kbin_units(self, uvp_exact_wfs: UVPSpec) -> None:
@@ -1272,15 +1337,6 @@ class TestSpherical:
         for spw in wf_h:
             np.testing.assert_array_equal(wf_h[spw], wf_plain[spw])
             np.testing.assert_allclose(wf_h[spw], wf_noh[spw], rtol=1e-12)
-
-        with pytest.raises(ValueError, match="little_h=False disagrees"):
-            grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs, kbin_edges=edges * cu.littleh / u.Mpc, little_h=False
-            )
-        with pytest.raises(
-            u.UnitConversionError, match="kbin_edges must be a wavenumber"
-        ):
-            grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges=edges * u.Mpc)
 
 
 class TestAverageInDelayBins:
