@@ -24,6 +24,7 @@ tested with fixed inputs and seeds elsewhere.
 import copy
 import functools
 import json
+import operator
 import warnings
 from unittest import mock
 
@@ -1616,3 +1617,393 @@ class TestUVPSpecOperations:
         np.testing.assert_allclose(
             same.cov_array_real[0], 2 * uvp1.cov_array_real[0], rtol=1e-14
         )
+
+
+# Units of a few physical types: units of one type are equivalent, units of
+# different types are not.
+UNIT_FAMILIES = {
+    "frequency": [u.Hz, u.kHz, u.MHz, u.GHz],
+    "time": [u.s, u.ms, u.us, u.ns],
+    "length": [u.m, u.cm, u.km, u.pc, u.Mpc],
+    "temperature": [u.K, u.mK],
+}
+unit_families = st.sampled_from(sorted(UNIT_FAMILIES))
+# away from the subnormal numbers, which conversions between units can reach
+# and which have fewer significant digits
+positive_values = st.floats(1e-6, 1e6)
+values = st.one_of(st.just(0.0), positive_values, positive_values.map(np.negative))
+value_arrays = arrays(np.float64, st.integers(1, 5), elements=values)
+
+
+def other_family_units(family: str):
+    """Units of the UNIT_FAMILIES other than the given one."""
+    return st.sampled_from(
+        [
+            unit
+            for name, units in UNIT_FAMILIES.items()
+            if name != family
+            for unit in units
+        ]
+    )
+
+
+class TestToValueIn:
+    @given(value=st.one_of(values, value_arrays), family=unit_families, data=st.data())
+    def test_equivalent_units(self, value, family: str, data) -> None:
+        """A Quantity gives the same plain numbers in a target unit whatever
+        equivalent unit it is in, and whether the target is given as a unit,
+        as its string or as the same unit scaled by a factor (the numbers
+        then scale by the inverse factor); in its own unit, it gives its own
+        numbers. A Quantity in an incompatible unit raises."""
+        unit, other, target = (
+            data.draw(st.sampled_from(UNIT_FAMILIES[family])) for _ in range(3)
+        )
+        quantity = value * unit
+        result = utils.to_value_in(quantity, target, "x")
+        assert not isinstance(result, u.Quantity)
+        assert np.shape(result) == np.shape(value)
+        np.testing.assert_allclose(result, value * unit.to(target), rtol=1e-14)
+        np.testing.assert_allclose(
+            utils.to_value_in(quantity.to(other), target, "x"), result, rtol=1e-14
+        )
+        np.testing.assert_array_equal(
+            utils.to_value_in(quantity, target.to_string(), "x"), result
+        )
+        scale = data.draw(st.floats(1e-3, 1e3))
+        np.testing.assert_allclose(
+            utils.to_value_in(quantity, scale * target, "x") * scale, result, rtol=1e-14
+        )
+        np.testing.assert_array_equal(utils.to_value_in(quantity, unit, "x"), value)
+
+        bad_unit = data.draw(other_family_units(family))
+        with pytest.raises(
+            u.UnitConversionError, match=f"x must be in a unit equivalent to '{target}'"
+        ):
+            utils.to_value_in(value * bad_unit, target, "x")
+
+    @given(value=value_arrays, family=unit_families, data=st.data())
+    def test_lists_of_quantities(self, value: np.ndarray, family: str, data) -> None:
+        """A list of Quantities, each in its own equivalent unit, gives the
+        numbers of each in the target unit; so does a list of (low, high)
+        pairs, as rows. A list mixing incompatible units raises."""
+        units = data.draw(
+            st.lists(
+                st.sampled_from(UNIT_FAMILIES[family]),
+                min_size=value.size,
+                max_size=value.size,
+            )
+        )
+        target = data.draw(st.sampled_from(UNIT_FAMILIES[family]))
+        quantities = [v * unit for v, unit in zip(value, units)]
+        expected = [quantity.to_value(target) for quantity in quantities]
+        result = utils.to_value_in(quantities, target, "x")
+        assert result.shape == value.shape
+        np.testing.assert_allclose(result, expected, rtol=1e-14)
+        pairs = utils.to_value_in(list(zip(quantities, quantities)), target, "x")
+        assert pairs.shape == (value.size, 2)
+        np.testing.assert_allclose(pairs, np.stack([expected] * 2, axis=1), rtol=1e-14)
+
+        bad_unit = data.draw(other_family_units(family))
+        with pytest.raises(u.UnitConversionError, match="mixed units"):
+            utils.to_value_in(quantities + [value[0] * bad_unit], target, "x")
+
+    @given(
+        value=st.one_of(
+            values,
+            value_arrays,
+            st.integers(-1000, 1000),
+            st.lists(st.integers(-1000, 1000), min_size=1, max_size=5),
+        ),
+        target=st.sampled_from([u.Hz, u.K]),
+    )
+    def test_plain_numbers(self, value, target: u.UnitBase) -> None:
+        """Plain numbers (floats or integers, alone, in a list or in an array)
+        are read as being in the target unit, with a deprecation warning
+        unless deprecate_plain is False; a number gives a numpy float,
+        anything else a float array."""
+        with pytest.warns(DeprecationWarning, match="Passing x as a plain number"):
+            warned = utils.to_value_in(value, target, "x")
+        result = utils.to_value_in(value, target, "x", deprecate_plain=False)
+        for out in [warned, result]:
+            assert not isinstance(out, u.Quantity)
+            np.testing.assert_array_equal(out, value)
+            if np.ndim(value):
+                assert isinstance(out, np.ndarray)
+                assert out.dtype == np.float64
+            else:
+                assert isinstance(out, np.floating)
+
+    @given(
+        value=st.one_of(
+            positive_values,
+            arrays(np.float64, st.integers(1, 5), elements=positive_values),
+        ),
+        length=st.sampled_from(UNIT_FAMILIES["length"]),
+        frequency=st.sampled_from(UNIT_FAMILIES["frequency"]),
+    )
+    def test_spectral_equivalencies(self, value, length, frequency) -> None:
+        """With the spectral equivalencies, a wavelength converts to the
+        frequency c / wavelength, and back."""
+        result = utils.to_value_in(
+            value * length, frequency, "x", equivalencies=u.spectral()
+        )
+        expected = constants.c.value / (value * length).to_value(u.m)
+        np.testing.assert_allclose(result * frequency.to(u.Hz), expected, rtol=1e-14)
+        back = utils.to_value_in(
+            result * frequency, length, "x", equivalencies=u.spectral()
+        )
+        np.testing.assert_allclose(back, value, rtol=1e-14)
+
+
+LENGTHS = [u.m, u.km, u.pc, u.kpc, u.Mpc, u.Gpc, u.lyr]
+
+
+@st.composite
+def cosmological_lengths(draw) -> u.UnitBase:
+    """A length unit, or a length unit per littleh (as h^-1 Mpc)."""
+    length = draw(st.sampled_from(LENGTHS))
+    return length / cu.littleh if draw(st.booleans()) else length
+
+
+@st.composite
+def not_cosmological_lengths(draw) -> u.UnitBase:
+    """Units that are neither a length nor a length per littleh: powers of a
+    length times powers of littleh (an area, a length times littleh, littleh
+    itself, a dimensionless unit, ...) and other physical units."""
+    length = draw(st.sampled_from(LENGTHS))
+    power, littleh_power = draw(
+        st.tuples(st.integers(-2, 3), st.integers(-3, 3)).filter(
+            lambda powers: powers not in [(1, 0), (1, -1)]
+        )
+    )
+    other = draw(st.sampled_from([u.dimensionless_unscaled, u.s, u.Hz, u.K]))
+    if other is not u.dimensionless_unscaled:
+        power = 0
+    return length**power * cu.littleh**littleh_power * other
+
+
+class TestLengthUnits:
+    @given(
+        unit=st.one_of(st.none(), cosmological_lengths()),
+        as_string=st.booleans(),
+        little_h=st.one_of(st.none(), st.booleans()),
+    )
+    @example(unit=None, as_string=False, little_h=None)
+    @example(unit=u.Mpc, as_string=False, little_h=None)
+    @example(unit=u.Mpc, as_string=True, little_h=None)
+    @example(unit=LITTLEH_MPC, as_string=False, little_h=None)
+    @example(unit=LITTLEH_MPC, as_string=True, little_h=None)
+    @example(unit=u.kpc, as_string=False, little_h=None)
+    @example(unit=u.Gpc / cu.littleh, as_string=False, little_h=None)
+    @example(unit=None, as_string=False, little_h=True)
+    @example(unit=None, as_string=False, little_h=False)
+    @example(unit=LITTLEH_MPC, as_string=False, little_h=True)
+    @example(unit=u.Mpc, as_string=False, little_h=True)
+    def test_resolve_length_unit(self, unit, as_string: bool, little_h) -> None:
+        """Any length unit, or length per littleh, given as a unit or as its
+        string, resolves to itself, so resolving is idempotent; the default
+        is h^-1 Mpc. The deprecated little_h flag gives h^-1 Mpc (True) or
+        Mpc (False), with a DeprecationWarning, and raises if a unit is also
+        given and differs."""
+        given_unit = unit.to_string() if as_string and unit is not None else unit
+        if little_h is None:
+            resolved = conversions.resolve_length_unit(given_unit)
+            expected = LITTLEH_MPC if unit is None else unit
+        else:
+            expected = conversions.length_unit_from_little_h(little_h)
+            with pytest.warns(DeprecationWarning, match="little_h argument"):
+                if unit is not None and unit != expected:
+                    with pytest.raises(ValueError, match="disagrees"):
+                        conversions.resolve_length_unit(given_unit, little_h=little_h)
+                    return
+                resolved = conversions.resolve_length_unit(
+                    given_unit, little_h=little_h
+                )
+        assert isinstance(resolved, u.UnitBase)
+        assert resolved == expected
+        assert conversions.resolve_length_unit(resolved) == resolved
+
+    @given(unit=not_cosmological_lengths(), as_string=st.booleans())
+    @example(unit=u.s, as_string=False)
+    @example(unit=u.Mpc**2, as_string=False)
+    @example(unit=cu.littleh, as_string=False)
+    def test_resolve_length_unit_rejects_other_units(
+        self, unit: u.UnitBase, as_string: bool
+    ) -> None:
+        """Only lengths and lengths per littleh are length units."""
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            conversions.resolve_length_unit(unit.to_string() if as_string else unit)
+
+
+# Units that appear in power spectrum and visibility units, including the
+# units hera_pspec adds to unit strings (littleh and uncalib).
+PSPEC_BASE_UNITS = [
+    u.Mpc,
+    u.Hz,
+    u.sr,
+    u.K,
+    u.mK,
+    u.Jy,
+    u.s,
+    u.m,
+    cu.littleh,
+    unit_helpers.uncalib,
+]
+
+
+@st.composite
+def unit_products(draw) -> tuple:
+    """A product of powers (-3 to 3) of up to four PSPEC_BASE_UNITS, and the
+    power of littleh in it."""
+    powers = draw(
+        st.dictionaries(
+            st.sampled_from(PSPEC_BASE_UNITS), st.integers(-3, 3), max_size=4
+        )
+    )
+    unit = u.dimensionless_unscaled
+    for base, power in powers.items():
+        unit = unit * base**power
+    return unit, powers.get(cu.littleh, 0)
+
+
+# The norm_units strings of hera_pspec v0.x, and the suffix of Delta^2 spectra.
+LEGACY_NORM_UNITS = [
+    "h^-3 Mpc^3",
+    "Mpc^3",
+    "Hz str [beam normalization not specified]",
+    "Hz str",
+]
+DELTASQ_SUFFIX = " k^3 / (2pi^2)"
+
+
+class TestUnitStrings:
+    @given(unit_and_littleh_power=unit_products(), deltasq=st.booleans())
+    def test_unit_string_round_trip(
+        self, unit_and_littleh_power: tuple, deltasq: bool
+    ) -> None:
+        """The string of a unit (as written to files) parses back to the
+        unit, also as bytes and as a power spectrum unit. Its canonical form
+        is the same unit, and is its own canonical form (astropy may simplify
+        the string, e.g. "K / (Hz s)" to "K"). The unit contains littleh if
+        and only if littleh has a nonzero power in it, and the unit of a
+        Delta^2 spectrum is that of P(k) times the unit of k^3,
+        littleh^3 / Mpc^3 or 1 / Mpc^3."""
+        unit, littleh_power = unit_and_littleh_power
+        string = unit_helpers.unit_to_string(unit)
+        assert unit_helpers.parse_unit_string(string) == unit
+        assert unit_helpers.parse_unit_string(string.encode()) == unit
+        assert unit_helpers.parse_pspec_unit(string) == unit
+        canonical = unit_helpers.canonical_unit_string(string)
+        assert unit_helpers.parse_pspec_unit(canonical) == unit
+        assert unit_helpers.canonical_unit_string(canonical) == canonical
+        assert unit_helpers.canonical_norm_units(string) == (canonical, False)
+        assert unit_helpers.is_littleh(unit) is (littleh_power != 0)
+        assert unit_helpers.is_littleh(string) is (littleh_power != 0)
+        k_unit = cu.littleh / u.Mpc if littleh_power else 1 / u.Mpc
+        assert unit_helpers.norm_unit(string, deltasq) == unit * k_unit ** (3 * deltasq)
+
+    @given(base=st.sampled_from(LEGACY_NORM_UNITS))
+    def test_legacy_deltasq_units(self, base: str) -> None:
+        """A legacy Delta^2 norm_units string (P(k) units plus the suffix)
+        has the unit hera_pspec now gives the Delta^2 spectrum of its P(k)
+        units, and its canonical form is that of the P(k) units with a
+        Delta^2 flag."""
+        unit, is_deltasq = unit_helpers.norm_units_from_legacy_string(base)
+        assert not is_deltasq
+        canonical = unit_helpers.canonical_unit_string(base)
+        assert unit_helpers.parse_unit_string(canonical) == unit
+        legacy_deltasq = base + DELTASQ_SUFFIX
+        deltasq_unit, is_deltasq = unit_helpers.norm_units_from_legacy_string(
+            legacy_deltasq
+        )
+        assert is_deltasq
+        assert deltasq_unit == unit_helpers.norm_unit(canonical, True)
+        assert unit_helpers.parse_pspec_unit(legacy_deltasq) == deltasq_unit
+        assert unit_helpers.canonical_norm_units(legacy_deltasq) == (canonical, True)
+
+    @given(
+        string=st.one_of(
+            # strings of the characters of the legacy forms (a text strategy
+            # with a given alphabet also starts faster than one without)
+            st.text(sorted(set("".join(LEGACY_NORM_UNITS) + DELTASQ_SUFFIX))),
+            st.builds(
+                operator.add,
+                st.sampled_from([*LEGACY_NORM_UNITS, "Mpc3", "", "h^-3"]),
+                st.sampled_from(["", DELTASQ_SUFFIX, " ", DELTASQ_SUFFIX + " "]),
+            ),
+        )
+    )
+    def test_legacy_strings_are_recognised(self, string: str) -> None:
+        """is_legacy_norm_units says whether norm_units_from_legacy_string
+        maps a string, for the legacy forms and any other string."""
+        if unit_helpers.is_legacy_norm_units(string):
+            unit_helpers.norm_units_from_legacy_string(string)
+            unit_helpers.norm_units_from_legacy_string(string.encode())
+        else:
+            with pytest.raises(ValueError, match="Known forms are"):
+                unit_helpers.norm_units_from_legacy_string(string)
+
+    @given(
+        alias=st.sampled_from(["uncalib", "unknown", "k str", "jy", "mk"]),
+        data=st.data(),
+    )
+    def test_visibility_unit_aliases(self, alias: str, data) -> None:
+        """The visibility unit strings of pyuvdata (and "mK") are read
+        whatever their case, and with surrounding whitespace."""
+        upper = data.draw(
+            st.lists(st.booleans(), min_size=len(alias), max_size=len(alias))
+        )
+        string = "".join(c.upper() if up else c for c, up in zip(alias, upper))
+        string = data.draw(st.sampled_from(["", " ", "\t"])) + string
+        string = string + data.draw(st.sampled_from(["", " ", "\n"]))
+        expected = unit_helpers.parse_pspec_unit(alias)
+        assert unit_helpers.parse_pspec_unit(string) == expected
+        assert unit_helpers.parse_pspec_unit(string.encode()) == expected
+
+    @given(value=st.one_of(values, value_arrays), family=unit_families, data=st.data())
+    def test_convert_from_stored_unit(self, value, family: str, data) -> None:
+        """A value stored in a unit equivalent to its declared unit is
+        converted to the declared unit (the stored unit string may be bytes);
+        a value stored in its declared unit, or without a unit, is returned
+        as is. A unit that is not equivalent, or not a unit, raises."""
+        stored, declared = (
+            data.draw(st.sampled_from(UNIT_FAMILIES[family])) for _ in range(2)
+        )
+        string = unit_helpers.unit_to_string(stored)
+        result = unit_helpers.convert_from_stored_unit(value, string, declared, "x")
+        if stored == declared:
+            assert result is value
+        np.testing.assert_allclose(result, value * stored.to(declared), rtol=1e-14)
+        np.testing.assert_array_equal(
+            unit_helpers.convert_from_stored_unit(
+                value, string.encode(), declared, "x"
+            ),
+            result,
+        )
+        assert (
+            unit_helpers.convert_from_stored_unit(value, None, declared, "x") is value
+        )
+
+        bad = unit_helpers.unit_to_string(data.draw(other_family_units(family)))
+        with pytest.raises(ValueError, match=f"x is stored in unit '{bad}'"):
+            unit_helpers.convert_from_stored_unit(value, bad, declared, "x")
+        with pytest.raises(ValueError, match="not a valid unit"):
+            unit_helpers.convert_from_stored_unit(value, "not a unit", declared, "x")
+
+    @given(
+        band=st.tuples(st.floats(50.0, 250.0), st.floats(50.0, 250.0)),
+        unit=st.sampled_from(UNIT_FAMILIES["frequency"]),
+        rest=st.lists(st.integers(1, 100), max_size=1),
+    )
+    def test_spw_range_to_hz(self, band, unit, rest: list) -> None:
+        """A spectral window range with frequencies as Quantities in any unit
+        is the range with plain frequencies in Hz; a range of plain numbers
+        (taken to be in Hz) is unchanged, and the entries after the two
+        frequencies are kept."""
+        in_hz = tuple(freq * 1e6 for freq in band) + tuple(rest)
+        quantities = tuple((freq * u.MHz).to(unit) for freq in band) + tuple(rest)
+        result = unit_helpers.spw_range_to_hz(quantities)
+        assert not any(isinstance(item, u.Quantity) for item in result)
+        assert result[2:] == tuple(rest)
+        np.testing.assert_allclose(result[:2], in_hz[:2], rtol=1e-14)
+        assert unit_helpers.spw_range_to_hz(in_hz) == in_hz
