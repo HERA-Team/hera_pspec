@@ -13,7 +13,6 @@ from pyuvdata import UVData
 
 from hera_pspec import (
     PSpecBeamGauss,
-    PSpecBeamUV,
     PSpecData,
     UVPSpec,
     conversions,
@@ -849,30 +848,21 @@ class TestDelayWedge:
 
 
 @pytest.fixture(scope="module")
-def k_axis_uvps(
-    uvd_zen_all_xx: UVData, beam_nf_dipole: PSpecBeamUV
-) -> dict[str, UVPSpec]:
+def k_axis_uvps(pspec_ds: PSpecData) -> dict[str, UVPSpec]:
     """The same redundant-group spectra normalised in Mpc^3 / littleh^3 and in Mpc^3."""
-    uvd1 = uvd_zen_all_xx.select(
-        times=np.unique(uvd_zen_all_xx.time_array)[:-1:2], inplace=False
-    )
-    uvd2 = uvd_zen_all_xx.select(
-        times=np.unique(uvd_zen_all_xx.time_array)[1::2], inplace=False
-    )
-    ds = pspecdata.PSpecData(
-        dsets=[uvd1, uvd2], wgts=[None, None], beam=copy.deepcopy(beam_nf_dipole)
-    )
-    ds.rephase_to_dset(0)
     bls1, bls2, _, _, _ = utils.calc_blpair_reds(
-        ds.dsets[0], ds.dsets[1], exclude_auto_bls=False, exclude_permutations=True
+        pspec_ds.dsets[0],
+        pspec_ds.dsets[1],
+        exclude_auto_bls=False,
+        exclude_permutations=True,
     )
     return {
-        name: ds.pspec(
+        name: pspec_ds.pspec(
             bls1,
             bls2,
             (0, 1),
             ("xx", "xx"),
-            spw_ranges=[(300, 350)],
+            spw_ranges=[(0, 24)],
             input_data_weight="identity",
             norm="I",
             taper="blackman-harris",
