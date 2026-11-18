@@ -1,21 +1,68 @@
+import contextlib
+import io
+import os
 import pickle
+from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
+import numpy as np
 import pytest
-from click.testing import Result
-from typer.testing import CliRunner
+from astropy import cosmology as astropy_cosmology
+from astropy import units
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM
 
-from hera_pspec import cli
+from hera_pspec import cli, container, conversions, testing
 from hera_pspec.container import PSpecContainer
+from hera_pspec.data import DATA_PATH
 from hera_pspec.uvpspec import UVPSpec
+from hera_pspec.uvwindow import FTBeam
+
+
+@dataclass
+class Result:
+    """Minimal stand-in for a CliRunner-style invocation result."""
+
+    exit_code: int
+    output: str
+    exception: BaseException | None
+
+    @property
+    def stdout(self) -> str:  # tests use .stdout and .output interchangeably
+        return self.output
+
+
+def invoke(args: list[str]) -> Result:
+    """Invoke the cyclopts app like CliRunner.invoke, returning a Result.
+
+    Always pass an explicit token list (never bare ``cli.app()``) so the strict
+    ``-Werror`` warnings job does not trip cyclopts' "Did you mean app([])?" warning.
+    """
+    buf = io.StringIO()
+    exc: BaseException | None = None
+    code = 0
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            # exit_on_error=False -> parse errors raise instead of SystemExit(1);
+            # print_error=False  -> no rich error panel leaks into captured output.
+            cli.app(args, exit_on_error=False, print_error=False)
+    except SystemExit as e:  # --help (and any version-style exit) lands here
+        code = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+        exc = e
+    except BaseException as e:  # cyclopts CoercionError/MissingArgumentError/...
+        code = 1
+        exc = e
+    return Result(exit_code=code, output=buf.getvalue(), exception=exc)
 
 
 @pytest.fixture(scope="module")
-def single_baseline_files(
-    tmp_path_factory: pytest.TempPathFactory, vanilla_uvp: UVPSpec
-) -> list[Path]:
-    """Write out one-blpair PSpecContainer files for fast-merge-baselines to combine."""
+def vanilla_uvp() -> UVPSpec:
+    uvp, _ = testing.build_vanilla_uvpspec()
+    return uvp
+
+
+@pytest.fixture(scope="module")
+def single_baseline_files(tmp_path_factory, vanilla_uvp: UVPSpec) -> list[Path]:
     # Set up by writing out some one-blpair files.
     tmp_path = tmp_path_factory.mktemp("single-bl-files")
 
@@ -39,69 +86,1010 @@ def single_baseline_files(
     return files
 
 
-@pytest.fixture
-def cli_runner() -> CliRunner:
-    """A fresh typer CliRunner for invoking the CLI app."""
-    return CliRunner()
-
-
-def assert_cli_success(result: Result) -> None:
-    """Assert a CLI invocation succeeded, printing diagnostics on failure."""
-    if result.exit_code != 0:
-        print(result.exc_info)
-        print(result.stdout)
-        assert result.exit_code == 0
-
-
 class TestFastMergeBaselines:
-    @pytest.mark.parametrize(
-        "batch_size,names,extras,outpath_suffix",
-        [
-            (None, ["name", "name2"], ["extra0", "extra1"], "combined"),
-            (2, ["name", "name2"], ["extra0", "extra1"], "combined_batched"),
-            (1, ["name"], [], "combined_single"),
-        ],
-        ids=["no_batching", "batch_size_2", "batch_size_1"],
-    )
-    def test_merge(
-        self,
-        cli_runner: CliRunner,
-        vanilla_uvp: UVPSpec,
-        single_baseline_files: list[Path],
-        batch_size: int | None,
-        names: list[str],
-        extras: list[str],
-        outpath_suffix: str,
-    ) -> None:
-        """Check that fast-merge-baselines reproduces all baselines and extras for various batch sizes."""
+    def test_happy_path(self, vanilla_uvp, single_baseline_files: list[Path]):
         pth = single_baseline_files[0].parent
 
-        args = [
-            "fast-merge-baselines",
-            "--pattern",
-            f"{pth}/blpair.*.h5",
-            "--group",
-            "pspecgroup",
-        ]
-        for name in names:
-            args += ["--names", name]
-        args += ["--outpath", f"{pth}/{outpath_suffix}", "--no-progress"]
-        for extra in extras:
-            args += ["--extras", extra]
-        if batch_size is not None:
-            args += ["--batch-size", str(batch_size)]
+        result = invoke(
+            [
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--names",
+                "name2",
+                "--outpath",
+                f"{pth}/combined",
+                "--no-progress",
+                "--extras",
+                "extra0",
+                "--extras",
+                "extra1",
+            ]
+        )
 
-        result = cli_runner.invoke(cli.app, args=args)
-        assert_cli_success(result)
+        if result.exit_code != 0:
+            print(result.exception)
+            print(result.stdout)
+            assert result.exit_code == 0
 
-        new = PSpecContainer(pth / f"{outpath_suffix}.pspec.h5", "r", keep_open=False)
-        for name in names:
+        # Test that the file we made has all the baselines in it (and no others).
+        new = PSpecContainer(pth / "combined.pspec.h5", "r", keep_open=False)
+        for name in ["name", "name2"]:
             newuvp = new.get_pspec("pspecgroup", name)
-            assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
-            assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+            assert sorted(newuvp.get_blpairs()) == sorted(vanilla_uvp.get_blpairs())
 
-        for extra in extras:
-            with open(pth / f"{outpath_suffix}.{extra}.pkl", "rb") as fl:
+        # Test that the extras were collected from every file.
+        for extra, value in [("extra0", [1, 2, 3]), ("extra1", "a nice string")]:
+            with open(pth / f"combined.{extra}.pkl", "rb") as fl:
                 data = pickle.load(fl)
-                assert all(blp in data for blp in vanilla_uvp.get_blpairs())
-                assert len(data) == len(vanilla_uvp.get_blpairs())
+            assert sorted(data) == sorted(vanilla_uvp.get_blpairs())
+            assert all(np.all(v == value) for v in data.values())
+
+    def test_batch_processing(self, vanilla_uvp, single_baseline_files: list[Path]):
+        """Test that batch processing produces the same result as loading all at once."""
+        pth = single_baseline_files[0].parent
+
+        # Run with batch_size=2 (small batches to test the batching logic)
+        result = invoke(
+            [
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--names",
+                "name2",
+                "--outpath",
+                f"{pth}/combined_batched",
+                "--no-progress",
+                "--extras",
+                "extra0",
+                "--extras",
+                "extra1",
+                "--batch-size",
+                "2",
+            ]
+        )
+
+        if result.exit_code != 0:
+            print(result.exception)
+            print(result.stdout)
+            assert result.exit_code == 0
+
+        # Verify the batched result has all the baselines
+        new = PSpecContainer(pth / "combined_batched.pspec.h5", "r", keep_open=False)
+        newuvp = new.get_pspec("pspecgroup", "name")
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
+        assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
+        newuvp2 = new.get_pspec("pspecgroup", "name2")
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp2.get_blpairs())
+        assert len(newuvp2.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
+        # Test extras were saved correctly
+        with open(pth / "combined_batched.extra0.pkl", "rb") as fl:
+            data = pickle.load(fl)
+            assert all(blp in data for blp in vanilla_uvp.get_blpairs())
+            assert len(data) == len(vanilla_uvp.get_blpairs())
+
+    def test_single_batch(self, vanilla_uvp, single_baseline_files: list[Path]):
+        """Test that batch_size=1 works correctly (edge case)."""
+        pth = single_baseline_files[0].parent
+
+        # Run with batch_size=1 (most extreme batching)
+        result = invoke(
+            [
+                "fast-merge-baselines",
+                "--pattern",
+                f"{pth}/blpair.*.h5",
+                "--group",
+                "pspecgroup",
+                "--names",
+                "name",
+                "--outpath",
+                f"{pth}/combined_single",
+                "--no-progress",
+                "--batch-size",
+                "1",
+            ]
+        )
+
+        if result.exit_code != 0:
+            print(result.exception)
+            print(result.stdout)
+            assert result.exit_code == 0
+
+        # Verify the result has all the baselines
+        new = PSpecContainer(pth / "combined_single.pspec.h5", "r", keep_open=False)
+        newuvp = new.get_pspec("pspecgroup", "name")
+        assert all(blp in vanilla_uvp.get_blpairs() for blp in newuvp.get_blpairs())
+        assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
+
+
+def test_run_help():
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--dset-pairs" in result.output
+
+
+def test_run_end_to_end(tmp_path):
+    f0 = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    f1 = os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA")
+    out = tmp_path / "out.h5"
+    result = invoke(
+        [
+            "run",
+            f0,
+            f1,
+            "--output",
+            str(out),
+            "--overwrite",
+            "--dset-pairs",
+            "0",
+            "1",
+            "--bl-len-range",
+            "14",
+            "15",
+            "--bl-deg-range",
+            "50",
+            "70",
+            "--psname-ext",
+            "_0",
+            "--spw-ranges",
+            "0",
+            "25",
+            "--file-type",
+            "miriad",
+        ]
+    )
+    assert result.exit_code == 0, f"{result.output}\n{result.exception}"
+    psc = container.PSpecContainer(str(out), mode="r")
+    assert psc.groups() == ["dset0_dset1"]
+    assert psc.spectra("dset0_dset1") == ["dset0_x_dset1_0"]
+
+    # the spectral window and baseline length/angle selections were applied
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1_0")
+    assert uvp.Nspws == 1
+    assert uvp.get_spw_ranges()[0][2] == 25
+    blvecs = uvp.get_blpair_blvecs()
+    bl_lens = np.linalg.norm(blvecs, axis=1)
+    bl_degs = np.degrees(np.arctan2(blvecs[:, 1], blvecs[:, 0])) % 180
+    assert np.all((bl_lens >= 14) & (bl_lens <= 15))
+    assert np.all((bl_degs >= 50) & (bl_degs <= 70))
+
+
+def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
+    """Regression: --no-symmetric-taper must forward Python False (not a truthy str)."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["symmetric_taper"] is False
+    assert captured["include_crosscorrs"] is True
+
+
+def test_run_blpair_reshaped(monkeypatch, tmp_path):
+    """--blpairs 1 2 3 4 must reshape to ((1, 2), (3, 4))."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(
+        [
+            "run",
+            "a.uvh5",
+            "--output",
+            str(tmp_path / "o.h5"),
+            "--blpairs",
+            "1",
+            "2",
+            "3",
+            "4",
+            "--blpairs",
+            "5",
+            "6",
+            "7",
+            "8",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["blpairs"] == [((1, 2), (3, 4)), ((5, 6), (7, 8))]
+
+
+def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
+    """--cosmo values must reach pspec_run as an astropy cosmology, not a list."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    beamfile = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+    with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
+        result = invoke(
+            [
+                "run",
+                "a.uvh5",
+                "--output",
+                str(tmp_path / "o.h5"),
+                "--cosmo",
+                "0.7",
+                "0.05",
+                "0.25",
+                "70",
+                "--beam",
+                str(beamfile),
+            ]
+        )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert isinstance(cosmo, LambdaCDM)
+    assert cosmo.Ode0 == pytest.approx(0.7)
+    assert cosmo.Ob0 == pytest.approx(0.05)
+    assert cosmo.Om0 == pytest.approx(0.3)
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == pytest.approx(70.0)
+    assert cosmo.Tcmb0.value == 0
+    assert captured["beam"] == str(beamfile)
+
+
+def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
+    """Omitted trailing --cosmo values give the v0.x default cosmology's parameters."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
+        result = invoke(
+            ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo", "0.6844"]
+        )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
+    assert conversions.params_from_cosmology(cosmo) == (
+        conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
+    )
+
+
+def test_run_cosmo_default_is_none(monkeypatch, tmp_path):
+    """Without --cosmo, pspec_run gets cosmo=None so the beam's cosmology is kept."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is None
+
+
+def test_run_cosmo_too_many_values(monkeypatch, tmp_path):
+    """More than 6 --cosmo values must fail before pspec_run is called."""
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo"]
+        + ["1", "2", "3", "4", "5", "6", "7"]
+    )
+    assert result.exit_code != 0
+    assert not called
+    message = str(result.exception)
+    assert "1 to 6 values" in message
+    assert cli.COSMO_PARAM_ORDER in message
+
+
+def test_run_help_shows_cosmo_order(monkeypatch):
+    # wide terminal so rich does not wrap the parameter order across lines
+    monkeypatch.setenv("COLUMNS", "300")
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]" in result.output
+
+
+def _capture_pspec_run(monkeypatch) -> dict:
+    """Replace pspec_run by a stub recording the keyword arguments it gets."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    return captured
+
+
+@pytest.mark.parametrize("name", ["Planck18", "Planck15", "WMAP9"])
+def test_run_cosmology_name_is_the_astropy_realization(monkeypatch, tmp_path, name):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", name]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is getattr(astropy_cosmology, name)
+
+
+def test_run_cosmology_hera_pspec_default(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        [
+            "run",
+            "a.uvh5",
+            "--output",
+            str(tmp_path / "o.h5"),
+            "--cosmology",
+            "hera_pspec_default",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"] is conversions.LEGACY_COSMOLOGY
+
+
+def test_run_cosmology_unknown_name_lists_available(monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", "Nope"]
+    )
+    assert result.exit_code != 0
+    assert not called
+    message = str(result.exception)
+    assert "unknown cosmology 'Nope'" in message
+    for name in ("hera_pspec_default", "Planck18", "WMAP9"):
+        assert name in message
+
+
+def test_run_cosmology_parameters_build_lambdacdm(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", "70", "--om0", "0.3", "--ode0", "0.69", "--ob0", "0.05"]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert type(cosmo) is LambdaCDM
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == 70.0
+    assert cosmo.Om0 == 0.3
+    assert cosmo.Ode0 == 0.69
+    assert cosmo.Ob0 == 0.05
+    assert cosmo.Tcmb0.to_value(units.K) == 0
+
+
+def test_run_cosmology_parameters_without_ode0_are_flat(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", "67.7", "--om0", "0.31", "--tcmb0", "2.7255"]
+    )
+    assert result.exit_code == 0, result.output
+    cosmo = captured["cosmo"]
+    assert type(cosmo) is FlatLambdaCDM
+    assert cosmo.H0.to_value(units.km / units.s / units.Mpc) == 67.7
+    assert cosmo.Om0 == 0.31
+    assert cosmo.Ob0 == 0
+    assert cosmo.Tcmb0.to_value(units.K) == 2.7255
+
+
+def test_run_cosmology_parameters_match_default(monkeypatch, tmp_path):
+    """The v0.x default cosmology's parameters rebuild it."""
+    captured = _capture_pspec_run(monkeypatch)
+    default = conversions.LEGACY_COSMOLOGY
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--h0", str(default.H0.to_value(units.km / units.s / units.Mpc))]
+        + ["--om0", str(default.Om0), "--ode0", str(default.Ode0)]
+        + ["--ob0", str(default.Ob0)]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["cosmo"].is_equivalent(default)
+
+
+@pytest.mark.parametrize(
+    "options, missing",
+    [
+        (["--h0", "70"], "--om0 must be given"),
+        (["--om0", "0.3"], "--h0 must be given"),
+        (["--ode0", "0.7", "--ob0", "0.05"], "--h0 and --om0 must be given"),
+    ],
+)
+def test_run_cosmology_parameters_need_h0_and_om0(
+    monkeypatch, tmp_path, options, missing
+):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
+    assert result.exit_code != 0
+    assert not called
+    assert missing in str(result.exception)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        ["--cosmology", "Planck18", "--h0", "70", "--om0", "0.3"],
+        ["--cosmology", "Planck18", "--cosmo", "0.7"],
+        ["--h0", "70", "--om0", "0.3", "--cosmo", "0.7"],
+        ["--cosmology", "Planck18", "--tcmb0", "2.7"],
+    ],
+)
+def test_run_cosmology_options_are_exclusive(monkeypatch, tmp_path, options):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
+    assert result.exit_code != 0
+    assert not called
+    assert "give the cosmology one way only" in str(result.exception)
+
+
+def test_run_cosmo_deprecation_is_shown_to_users(tmp_path):
+    """--cosmo warns with a FutureWarning, shown by Python's default filters."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; from hera_pspec import cli; "
+        "cli.pspecdata.pspec_run = lambda *a, **k: None; "
+        "cli.app(sys.argv[1:], exit_on_error=False)"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code, "run", "a.uvh5", "-o", str(tmp_path / "o.h5")]
+        + ["--cosmo", "0.6844"],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={k: v for k, v in os.environ.items() if k != "PYTHONWARNINGS"},
+    )
+    assert "--cosmo is deprecated" in proc.stderr
+    assert "--cosmology" in proc.stderr
+
+
+def test_run_length_unit_and_normalization_reach_pspec_run(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--length-unit", "Mpc", "--normalization", "one-step"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["length_unit"] == "Mpc"
+    assert captured["normalization"] == "one-step"
+
+
+def test_run_length_unit_and_normalization_defaults(monkeypatch, tmp_path):
+    captured = _capture_pspec_run(monkeypatch)
+    result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
+    assert result.exit_code == 0, result.output
+    assert captured["length_unit"] == "Mpc / littleh"
+    assert captured["normalization"] == "two-step"
+
+
+def test_run_rejects_unknown_normalization(monkeypatch, tmp_path):
+    called = []
+    monkeypatch.setattr(
+        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
+    )
+    result = invoke(
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
+        + ["--normalization", "three-step"]
+    )
+    assert result.exit_code != 0
+    assert not called
+
+
+def test_run_help_lists_cosmology_and_unit_options(monkeypatch):
+    monkeypatch.setenv("COLUMNS", "300")
+    result = invoke(["run", "--help"])
+    assert result.exit_code == 0, result.output
+    for option in (
+        "--cosmology",
+        "--h0",
+        "--om0",
+        "--ode0",
+        "--ob0",
+        "--tcmb0",
+        "--length-unit",
+        "--normalization",
+    ):
+        assert option in result.output
+    assert "Planck18" in result.output
+    assert "km/s/Mpc" in result.output
+    assert "CMB temperature today in K" in result.output
+    assert "baseline length, in metres" in result.output
+    assert "angle (ENU frame in degrees)" in result.output
+    assert "tolerance, in metres" in result.output
+    assert "Deprecated: use --cosmology" in result.output
+
+
+def test_run_end_to_end_cosmology_and_length_unit(tmp_path):
+    f0 = os.path.join(DATA_PATH, "zen.even.xx.LST.1.28828.uvOCRSA")
+    f1 = os.path.join(DATA_PATH, "zen.odd.xx.LST.1.28828.uvOCRSA")
+    beamfile = os.path.join(DATA_PATH, "HERA_NF_dipole_power.beamfits")
+    out = tmp_path / "out.h5"
+    result = invoke(
+        ["run", f0, f1, "--output", str(out), "--overwrite"]
+        + ["--dset-pairs", "0", "1", "--bl-len-range", "14", "15"]
+        + ["--bl-deg-range", "50", "70", "--spw-ranges", "0", "25"]
+        + ["--file-type", "miriad", "--beam", beamfile]
+        + ["--cosmology", "Planck18", "--length-unit", "Mpc"]
+    )
+    assert result.exit_code == 0, f"{result.output}\n{result.exception}"
+    psc = container.PSpecContainer(str(out), mode="r")
+    uvp = psc.get_pspec("dset0_dset1", "dset0_x_dset1")
+    assert uvp.cosmo.is_equivalent(astropy_cosmology.Planck18)
+    assert uvp.get_kparas(0).unit == 1 / units.Mpc
+
+
+def test_bootstrap_help():
+    result = invoke(["bootstrap", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--nsamples" in result.output
+
+
+def test_bootstrap_bool_flags_round_trip(monkeypatch):
+    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
+    captured = {}
+
+    def fake_bootstrap_run(filename, **kwargs):
+        captured["filename"] = filename
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    result = invoke(
+        ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["filename"] == "x.h5"
+    assert captured["time_avg"] is True
+    assert captured["normal_std"] is False
+    assert captured["robust_std"] is False  # argparser default
+    assert captured["Nsamples"] == 5
+    assert captured["seed"] == 0
+
+
+def test_bootstrap_blpair_group_parsed(monkeypatch):
+    """--blpair-group tokens parse to list[list[int]]."""
+    captured = {}
+
+    def fake_bootstrap_run(filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    result = invoke(
+        ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"]
+    )
+    assert result.exit_code == 0, result.output
+    assert captured["blpair_groups"] == [[101, 102], [103]]
+
+
+def test_auto_noise_help():
+    result = invoke(["auto-noise", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--err-type" in result.output
+
+
+def _auto_noise_fakes(monkeypatch, calls):
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    class FakeContainer:
+        def __init__(self, *a, **k):
+            pass
+
+        def groups(self):
+            return ["grp1"]
+
+        def spectra(self, group):
+            return ["auto_spec"]
+
+        def get_pspec(self, group, spec):
+            return f"{group}/{spec}"
+
+        def set_pspec(self, group, spec, uvp, overwrite):
+            calls["set"].append((group, spec, overwrite))
+
+        def save(self):
+            calls["saved"] = True
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.utils, "uvd_to_Tsys", lambda uvd, beam: "TSYS")
+    monkeypatch.setattr(
+        cli.utils,
+        "uvp_noise_error",
+        lambda uvp, tsys, err_type: calls["noise"].append((uvp, tsys, tuple(err_type))),
+    )
+    monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+
+
+def test_auto_noise_default_spectra(monkeypatch):
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = invoke(["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"])
+    assert result.exit_code == 0, result.output
+    assert calls["read"] == "autos.uvh5"
+    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
+    assert calls["set"] == [("grp1", "auto_spec", True)]
+    assert calls["saved"] is True
+
+
+def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
+    """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = invoke(
+        [
+            "auto-noise",
+            "cont.h5",
+            "autos.uvh5",
+            "beam.fits",
+            "--spectra",
+            "s1",
+            "--spectra",
+            "s2",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
+
+
+def test_auto_noise_multiple_err_types(monkeypatch):
+    """--err-type is repeatable and the full list reaches uvp_noise_error."""
+    calls = {"noise": [], "set": [], "saved": False}
+    _auto_noise_fakes(monkeypatch, calls)
+    result = invoke(
+        [
+            "auto-noise",
+            "cont.h5",
+            "autos.uvh5",
+            "beam.fits",
+            "--err-type",
+            "P_N",
+            "--err-type",
+            "P_SN",
+        ]
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
+
+
+def test_generate_pstokes_help():
+    result = invoke(["generate-pstokes", "--help"])
+    assert result.exit_code == 0, result.output
+    assert "--pstokes" in result.output
+
+
+def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
+    """Regression: --pstokes default is ['pI'] (a list), not the string 'pI'."""
+    calls = {"construct": 0}
+
+    class FakeOut:
+        polarization_array = []  # pI absent -> construct path taken
+
+        def __iadd__(self, other):
+            return self
+
+        def write_uvh5(self, outputdata, clobber):
+            calls["write"] = (outputdata, clobber)
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    def fake_construct(uvd1, uvd2, pstokes):
+        calls["construct"] += 1
+        calls["first_pstokes"] = pstokes  # must be 'pI', never 'p'
+        return FakeOut()
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
+
+    result = invoke(["generate-pstokes", "in.uvh5", "--clobber"])
+    assert result.exit_code == 0, result.output
+    assert calls["read"] == "in.uvh5"
+    assert calls["first_pstokes"] == "pI"
+    assert calls["write"] == ("in.uvh5", True)
+
+
+def test_generate_pstokes_keep_vispols(monkeypatch):
+    """keep_vispols=True takes the deepcopy branch, not the construct-for-base branch."""
+    calls = {"deepcopy": 0, "construct": 0}
+
+    class FakeOut:
+        polarization_array = []
+
+        def __iadd__(self, other):
+            return self
+
+        def write_uvh5(self, outputdata, clobber):
+            calls["write"] = (outputdata, clobber)
+
+    class FakeUVData:
+        def read(self, fname):
+            calls["read"] = fname
+
+    def fake_deepcopy(obj):
+        calls["deepcopy"] += 1
+        return FakeOut()
+
+    def fake_construct(*a, **k):
+        calls["construct"] += 1
+        return FakeOut()
+
+    monkeypatch.setattr(cli, "UVData", FakeUVData)
+    monkeypatch.setattr(cli.copy, "deepcopy", fake_deepcopy)
+    monkeypatch.setattr(cli.pstokes, "construct_pstokes", fake_construct)
+
+    result = invoke(["generate-pstokes", "in.uvh5", "--keep-vispols", "--clobber"])
+    assert result.exit_code == 0, result.output
+    assert calls["deepcopy"] == 1
+    assert calls["construct"] == 1  # one missing pol constructed in the loop
+    assert calls["write"] == ("in.uvh5", True)
+
+
+@pytest.fixture(scope="module")
+def wf_pspec_file(tmp_path_factory, vanilla_uvp: UVPSpec) -> Path:
+    """A container with a single group/spectrum, so group/name inference applies."""
+    fname = tmp_path_factory.mktemp("wf-cli") / "vanilla.pspec.h5"
+    psc = PSpecContainer(fname, "rw", keep_open=False)
+    psc.set_pspec("testgroup", "testps", vanilla_uvp)
+    return fname
+
+
+WF_BEAMFILE = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
+
+
+class TestComputeFtBeam:
+    def test_help(self):
+        result = invoke(["compute-ft-beam", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "--npix" in result.output
+
+    @pytest.fixture(scope="class")
+    def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
+        out_dir = tmp_path_factory.mktemp("ftcache")
+        result = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(out_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        return result, out_dir
+
+    @staticmethod
+    def _output_path(result: Result) -> Path:
+        return Path(result.output.split("FT_BEAM_PATH=")[1].splitlines()[0])
+
+    def test_writes_file_and_prints_path(self, ft_beam_run: tuple[Result, Path]):
+        result, out_dir = ft_beam_run
+        assert result.exit_code == 0
+        assert "FT_BEAM_PATH=" in result.output
+        path = self._output_path(result)
+        assert path.is_file()
+        assert path.parent == out_dir
+
+    def test_grid_is_taken_from_the_data(
+        self, ft_beam_run: tuple[Result, Path], vanilla_uvp: UVPSpec
+    ):
+        ftb = FTBeam.from_file(self._output_path(ft_beam_run[0]))
+        assert np.allclose(ftb.freq_array, np.unique(vanilla_uvp.freq_array))
+        assert ftb.pol == "xx"
+
+    def test_second_call_reuses_cache(
+        self, ft_beam_run: tuple[Result, Path], wf_pspec_file: Path
+    ):
+        result, out_dir = ft_beam_run
+        path = self._output_path(result)
+        mtime = path.stat().st_mtime
+        result2 = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(out_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        assert result2.exit_code == 0
+        assert self._output_path(result2) == path
+        assert path.stat().st_mtime == mtime  # not recomputed
+
+
+class TestComputeWindowFunctions:
+    def test_help(self):
+        result = invoke(["compute-window-functions", "--help"])
+        assert result.exit_code == 0, result.output
+        assert "--workers" in result.output
+
+    @pytest.fixture(scope="class")
+    def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
+        ft_dir = tmp_path_factory.mktemp("ftcache-wf")
+        ft_result = invoke(
+            [
+                "compute-ft-beam",
+                str(WF_BEAMFILE),
+                "xx",
+                str(wf_pspec_file),
+                "--out-dir",
+                str(ft_dir),
+                "--npix",
+                "29",
+            ]
+        )
+        ft_path = ft_result.output.split("FT_BEAM_PATH=")[1].splitlines()[0]
+        out_dir = tmp_path_factory.mktemp("wfout")
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                ft_path,
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        return result, out_dir
+
+    def test_writes_file_and_prints_path(self, wf_run: tuple[Result, Path]):
+        result, out_dir = wf_run
+        assert result.exit_code == 0
+        assert "WF_PATH=" in result.output
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        assert path.is_file()
+        assert path.name == "wf_exact_xx_clitest_spw00.hdf5"
+
+    def test_file_contents(self, wf_run: tuple[Result, Path], vanilla_uvp: UVPSpec):
+        result, _ = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        with h5py.File(path, "r") as f:
+            assert {"wf", "kperp", "kpara"} <= set(f.keys())
+            # (Nbltpairs, Ndlys, Nkperp, Nkpara, Npol)
+            wf = f["wf"][:]
+            assert wf.shape == (
+                vanilla_uvp.Nbltpairs,
+                vanilla_uvp.Ndlys,
+                f["kperp"].shape[0],
+                f["kpara"].shape[0],
+                1,
+            )
+            # each delay's window function is normalized over (kperp, kpara)
+            np.testing.assert_allclose(wf.sum(axis=(2, 3)), 1.0)
+            assert f.attrs["dataset_label"] == "clitest"
+            assert f.attrs["polpair"] == "xx"
+            assert f.attrs["spw_index"] == 0
+
+    def test_second_call_reuses_file(
+        self, wf_run: tuple[Result, Path], wf_pspec_file: Path
+    ):
+        result, out_dir = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        mtime = path.stat().st_mtime
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                str(path),  # reuse hit happens before the FT beam is touched
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        assert result2.exit_code == 0
+        assert path.stat().st_mtime == mtime  # not recomputed
+
+    def test_parallel_workers(
+        self, wf_run: tuple[Result, Path], wf_pspec_file: Path, tmp_path: Path
+    ):
+        # compute into a fresh directory (so nothing is reused) with a
+        # worker pool, and compare with the serial result
+        result, _ = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        with h5py.File(path, "r") as f:
+            ft_path = f.attrs["ft_beam_file"]
+            wf_serial = f["wf"][:]
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                ft_path,
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(tmp_path),
+                "--workers",
+                "2",
+            ]
+        )
+        assert result2.exit_code == 0, result2.output
+        path2 = Path(result2.output.split("WF_PATH=")[1].splitlines()[0])
+        assert path2.parent == tmp_path
+        with h5py.File(path2, "r") as f:
+            np.testing.assert_array_equal(f["wf"][:], wf_serial)
+
+    def test_out_of_range_spws(self, wf_run: tuple[Result, Path], wf_pspec_file: Path):
+        result, out_dir = wf_run
+        path = Path(result.output.split("WF_PATH=")[1].splitlines()[0])
+        result2 = invoke(
+            [
+                "compute-window-functions",
+                str(wf_pspec_file),
+                str(path),
+                "--spws",
+                "99",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(out_dir),
+            ]
+        )
+        assert isinstance(result2.exception, ValueError)
+        assert "out of range" in str(result2.exception)
+
+    def test_ambiguous_group(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        fname = tmp_path / "twogroups.pspec.h5"
+        psc = PSpecContainer(fname, "rw", keep_open=False)
+        psc.set_pspec("g1", "testps", vanilla_uvp)
+        psc.set_pspec("g2", "testps", vanilla_uvp)
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(fname),
+                "unused.hdf5",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(tmp_path),
+            ]
+        )
+        assert isinstance(result.exception, ValueError)
+        assert "--group" in str(result.exception)
+
+    def test_ambiguous_name(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        fname = tmp_path / "twospectra.pspec.h5"
+        psc = PSpecContainer(fname, "rw", keep_open=False)
+        psc.set_pspec("g1", "ps1", vanilla_uvp)
+        psc.set_pspec("g1", "ps2", vanilla_uvp)
+        result = invoke(
+            [
+                "compute-window-functions",
+                str(fname),
+                "unused.hdf5",
+                "--dataset-label",
+                "clitest",
+                "--out-dir",
+                str(tmp_path),
+            ]
+        )
+        assert isinstance(result.exception, ValueError)
+        assert "--name" in str(result.exception)

@@ -1,10 +1,14 @@
 import copy
+import re
 from pathlib import Path
 
+import astropy.cosmology.units as cu
+import h5py
 import numpy as np
 import pytest
+from astropy import units
+from astropy.cosmology import FLRW, LambdaCDM
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -16,6 +20,7 @@ from hera_pspec import (
     pspecbeam,
     pspecdata,
     testing,
+    unit_helpers,
     utils,
     uvpspec,
     uvwindow,
@@ -26,33 +31,18 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 
 
-# Setup Test Cases for this module
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(
-    beam_nf_dipole: PSpecBeamUV, vanilla_uvp_with_beam: UVPSpec
-) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_w_ndlys(vanilla_uvp_w_ndlys: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_w_ndlys
-
-
-def case_vanilla_uvp_delay_binned(vanilla_uvp_delay_binned: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_delay_binned
-
-
-def case_vanilla_uvp_alternating_times(
-    beam_nf_dipole: PSpecBeamUV, vanilla_uvp_alternating_times: UVPSpec
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-def case_uvp_exact_wfs(uvp_example_data: UVPSpec, uvp_exact_wfs: UVPSpec) -> UVPSpec:
-    return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that the tests below are
+# parametrized over. Tests fetch them by name with request.getfixturevalue, so
+# each one is built only once; tests that modify the object must deepcopy it.
+ALL_UVPS = [
+    "vanilla_uvp",
+    "vanilla_uvp_with_beam",
+    "vanilla_uvp_w_ndlys",
+    "vanilla_uvp_delay_binned",
+    "vanilla_uvp_alternating_times",
+    "uvp_exact_wfs",
+]
+VANILLA_UVPS = [name for name in ALL_UVPS if "vanilla" in name]
 
 
 @pytest.fixture
@@ -62,7 +52,9 @@ def uvp_with_covariance(
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA with covariance computed (store_cov=True)."""
     uvd = copy.deepcopy(uvd_zen_even_xx)
 
-    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(
+        np.unique(uvd.freq_array) * units.Hz, pol="XX"
+    )
     uvd.data_array *= Jy_to_mK[None, :, None]
 
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[: uvd.Ntimes // 2], inplace=False)
@@ -74,7 +66,7 @@ def uvp_with_covariance(
     ds.rephase_to_dset(0)
 
     spws = utils.spw_range_from_freqs(
-        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)], bounds_error=True
+        uvd, freq_range=[(160e6, 165e6), (160e6, 165e6)] * units.Hz, bounds_error=True
     )
     antpos, ants = uvd.get_enu_data_ants()
     red_bls = redcal.get_pos_reds(dict(zip(ants, antpos)), bl_error_tol=1.0)
@@ -132,8 +124,9 @@ def test_param() -> None:
     parameter.PSpecParam("example", description="example", expected_type=int)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_eq(uvp: uvpspec.UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_eq(uvp_name: str, request: pytest.FixtureRequest) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     assert uvp == uvp
 
 
@@ -145,8 +138,11 @@ def test_eq(uvp: uvpspec.UVPSpec) -> None:
         (0, 101102101102, 1515),
     ],
 )
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-def test_get_data_key_formats(uvp: uvpspec.UVPSpec, key: tuple) -> None:
+@pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+def test_get_data_key_formats(
+    uvp_name: str, request: pytest.FixtureRequest, key: tuple
+) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     d = uvp.get_data(key)
     assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
     assert d.dtype == complex
@@ -161,13 +157,15 @@ def test_get_data_key_formats(uvp: uvpspec.UVPSpec, key: tuple) -> None:
         ("get_nsamples", (10,), (0,)),
     ],
 )
-@parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+@pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
 def test_get_array_funcs(
-    uvp: uvpspec.UVPSpec,
+    uvp_name: str,
+    request: pytest.FixtureRequest,
     method: str,
     expected_shape: tuple[int, ...],
     first_idx: tuple[int, ...],
 ) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
     result = getattr(uvp, method)(key)
     assert result.shape == expected_shape
@@ -176,57 +174,99 @@ def test_get_array_funcs(
 
 
 class TestGetFuncs:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_dlys(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ["vanilla_uvp", "vanilla_uvp_w_ndlys"])
+    def test_get_dlys(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        """Check get_dlys against the delays of the spectral window's frequencies."""
+        uvp = request.getfixturevalue(uvp_name)
         d = uvp.get_dlys(0)
-        assert len(d) == uvp.get_dlys(0).size
+        freqs = uvp.freq_array[uvp.spw_to_freq_indices(0)]
+        np.testing.assert_allclose(
+            d.to_value(units.s), utils.get_delays(freqs, n_dlys=uvp.Ndlys)
+        )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpair_seps(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpair_seps(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         blp = uvp.get_blpair_seps()
+        assert blp.unit == units.m
         assert len(blp) == 30
-        assert np.isclose(blp, 14.60, rtol=1e-1, atol=1e-1).all()
+        assert np.isclose(blp.to_value(units.m), 14.60, rtol=1e-1, atol=1e-1).all()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_kperps_and_kparas(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_kperps_and_kparas(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         k_perp, k_para = uvp.get_kperps(0), uvp.get_kparas(0)
         assert len(k_perp) == 30
         assert len(k_para) == uvp.get_dlys(0).size
+        # k is proportional to baseline length / delay, at the mean redshift,
+        # in the object's own length unit
+        z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(0)]))
+        length = uvp._default_length_unit()
+        np.testing.assert_allclose(
+            k_perp.to_value(1 / length),
+            uvp.get_blpair_seps().to_value(units.m)
+            * conversions.bl_to_kperp(z, uvp.cosmo, length).to_value(
+                1 / length / units.m
+            ),
+        )
+        np.testing.assert_allclose(
+            k_para.to_value(1 / length),
+            uvp.get_dlys(0).to_value(units.s)
+            * conversions.tau_to_kpara(z, uvp.cosmo, length).to_value(
+                1 / length / units.s
+            ),
+        )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_data_tuple_key(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_data_tuple_key(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that get_data accepts a (spw, blpair, polpair) tuple key."""
+        uvp = request.getfixturevalue(uvp_name)
         key = (0, ((1, 2), (1, 2)), ("xx", "xx"))
         d = uvp.get_data(key)
         assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_data_dict_key(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_data_dict_key(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that get_data accepts an equivalent {spw, blpair, polpair} dict key."""
+        uvp = request.getfixturevalue(uvp_name)
         key = {"spw": 0, "blpair": ((1, 2), (1, 2)), "polpair": ("xx", "xx")}
         d = uvp.get_data(key)
         assert d.shape == (uvp.Ntimes, uvp.get_dlys(0).size)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpairs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpairs(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         blps = uvp.get_blpairs()
         assert blps == [((1, 2), (1, 2)), ((2, 3), (2, 3)), ((1, 3), (1, 3))]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_blpair_blvecs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_blpair_blvecs(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check get_blpair_blvecs' output shape, and that use_second_bl gives the same vectors here."""
+        uvp = request.getfixturevalue(uvp_name)
         blp_vecs = uvp.get_blpair_blvecs()
         assert blp_vecs.shape == (uvp.Nblpairs, 3)
         blp_vecs2 = uvp.get_blpair_blvecs(use_second_bl=True)
         assert np.isclose(blp_vecs, blp_vecs2).all()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_polpairs(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_polpairs(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         polpairs = uvp.get_polpairs()
         assert polpairs == [("xx", "xx")]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_all_keys(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_all_keys(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         keys = uvp.get_all_keys()
         assert keys == [
             (0, ((1, 2), (1, 2)), ("xx", "xx")),
@@ -234,9 +274,12 @@ class TestGetFuncs:
             (0, ((1, 3), (1, 3)), ("xx", "xx")),
         ]
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_get_integrations_omit_flags(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_get_integrations_omit_flags(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that omit_flags drops zero-integration entries from the returned array."""
+        uvp = request.getfixturevalue(uvp_name)
         # deepcopy: case_* functions return the shared session-scoped fixture directly,
         # and this test mutates integration_array in place.
         uvp = copy.deepcopy(uvp)
@@ -339,11 +382,74 @@ class TestStatsArray:
         uvp.set_stats_slice("err", 50, 0, above=True, val=10)
         # ensure all dlys above 50 * 15 ns are set to 10 and all others set to 1
         assert np.isclose(
-            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) > 15 * 50], 10
+            uvp.get_stats("err", key)[
+                :, np.abs(uvp.get_dlys(0).to_value(units.ns)) > 15 * 50
+            ],
+            10,
         ).all()
         assert np.isclose(
-            uvp.get_stats("err", key)[:, np.abs(uvp.get_dlys(0) * 1e9) < 15 * 50], 1
+            uvp.get_stats("err", key)[
+                :, np.abs(uvp.get_dlys(0).to_value(units.ns)) < 15 * 50
+            ],
+            1,
         ).all()
+
+    @staticmethod
+    def _mk_littleh_uvp(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
+        uvp = copy.deepcopy(uvp)
+        uvp.vis_units = "mK"
+        uvp.norm_units = "Mpc3 / littleh3"
+        assert uvp.units == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        return uvp
+
+    def test_set_stats_quantity_in_pspec_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        """A Quantity in uvp.units is stored as its values; a plain array as given."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.arange(uvp.Ntimes * uvp.Ndlys, dtype=float).reshape(
+            uvp.Ntimes, uvp.Ndlys
+        )
+        uvp.set_stats("err", key, values * uvp.units)
+        stored = uvp.get_stats("err", key)
+        assert not isinstance(stored, units.Quantity)
+        np.testing.assert_array_equal(stored, values)
+        uvp.set_stats("plain", key, values)
+        np.testing.assert_array_equal(uvp.get_stats("plain", key), values)
+        # the uncalibrated, not cosmologically normalised vanilla object
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.set_stats("err", key, values * uvp.units)
+        np.testing.assert_array_equal(uvp.get_stats("err", key), values)
+
+    def test_set_stats_quantity_converted(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """A Quantity in an equivalent unit is converted to uvp.units."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.full((uvp.Ntimes, uvp.Ndlys), 2.5)
+        uvp.set_stats("err", key, values * units.K**2 * units.Mpc**3 / cu.littleh**3)
+        np.testing.assert_allclose(uvp.get_stats("err", key), values * 1e6, rtol=1e-15)
+
+    @pytest.mark.parametrize(
+        "bad_unit",
+        [
+            units.mK**2 * units.Mpc**3,  # no littleh: needs a cosmology, not converted
+            units.mK**2,
+            units.dimensionless_unscaled,
+        ],
+    )
+    def test_set_stats_quantity_wrong_unit(
+        self, vanilla_uvp: uvpspec.UVPSpec, bad_unit: units.UnitBase
+    ) -> None:
+        """A Quantity whose unit cannot be converted to uvp.units raises ValueError."""
+        uvp = self._mk_littleh_uvp(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        values = np.ones((uvp.Ntimes, uvp.Ndlys))
+        with pytest.raises(
+            ValueError, match="cannot be converted to the power spectrum"
+        ):
+            uvp.set_stats("err", key, values * bad_unit)
+        assert not hasattr(uvp, "stats_array") or "err" not in uvp.stats_array
 
 
 def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> None:
@@ -364,7 +470,9 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
     # testing
     dsq = uvp.convert_to_deltasq(inplace=False)
     for spw in uvp.spw_array:
-        k_perp, k_para = uvp.get_kperps(spw), uvp.get_kparas(spw)
+        k_unit = cu.littleh / units.Mpc
+        k_perp = uvp.get_kperps(spw).to_value(k_unit)
+        k_para = uvp.get_kparas(spw).to_value(k_unit)
         k_mag = np.sqrt(k_perp[:, None, None] ** 2 + k_para[None, :, None] ** 2)
         coeff = k_mag**3 / (2 * np.pi**2)
         # check data
@@ -381,7 +489,197 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
             dsq.cov_array_real[spw][0, :, :, 0].diagonal(),
             uvp.cov_array_real[spw][0, :, :, 0].diagonal() * coeff[0, :, 0] ** 2,
         ).all()
-    assert dsq.norm_units == uvp.norm_units + " k^3 / (2pi^2)"
+    # P(k) in mK^2 Mpc^3 / littleh^3 becomes Delta^2 in mK^2
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
+    assert dsq.norm_units == uvp.norm_units
+    assert dsq.norm_unit == units.dimensionless_unscaled
+    assert dsq.units == uvp.vis_unit**2
+    assert dsq.deltasq is True
+    assert uvp.deltasq is False
+
+
+LITTLEH_LENGTH = units.Mpc / cu.littleh
+
+
+def _with_norm_units(uvp: UVPSpec, norm_units: str) -> UVPSpec:
+    """Return a copy of uvp with its norm_units string replaced."""
+    uvp = copy.deepcopy(uvp)
+    uvp.norm_units = norm_units
+    return uvp
+
+
+def _expected_ks(uvp: UVPSpec, spw: int, length_unit) -> tuple[np.ndarray, np.ndarray]:
+    """k_perp and k_para in 1 / length_unit, from the conversion helpers."""
+    avg_z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
+    k_unit = 1 / length_unit
+    k_perp = uvp._blpair_seps_m() * conversions.bl_to_kperp(
+        avg_z, uvp.cosmo, length_unit
+    ).to_value(k_unit / units.m)
+    k_para = uvp.dly_array[uvp.spw_to_dly_indices(spw)] * conversions.tau_to_kpara(
+        avg_z, uvp.cosmo, length_unit
+    ).to_value(k_unit / units.s)
+    return k_perp, k_para
+
+
+class TestUnitGetters:
+    def test_get_dlys_seconds(self, vanilla_uvp: UVPSpec) -> None:
+        dlys = vanilla_uvp.get_dlys(0)
+        assert isinstance(dlys, units.Quantity)
+        assert dlys.unit == units.s
+        np.testing.assert_array_equal(
+            dlys.value, vanilla_uvp.dly_array[vanilla_uvp.spw_to_dly_indices(0)]
+        )
+
+    def test_get_blpair_seps_meters(self, vanilla_uvp: UVPSpec) -> None:
+        seps = vanilla_uvp.get_blpair_seps()
+        assert isinstance(seps, units.Quantity)
+        assert seps.unit == units.m
+        np.testing.assert_array_equal(seps.value, vanilla_uvp._blpair_seps_m())
+
+    def test_get_spw_ranges_hz(self, vanilla_uvp: UVPSpec) -> None:
+        spw_ranges = vanilla_uvp.get_spw_ranges()
+        assert spw_ranges == [
+            (start * units.Hz, stop * units.Hz, nfreqs, ndlys)
+            for start, stop, nfreqs, ndlys in vanilla_uvp._spw_ranges_hz()
+        ]
+        start, stop, nfreqs, ndlys = spw_ranges[0]
+        assert start.unit == units.Hz and stop.unit == units.Hz
+        assert isinstance(nfreqs, int) and isinstance(ndlys, int)
+        # the documented recipe gives the spw frequencies
+        freqs = np.linspace(*spw_ranges[0][:3], endpoint=False)
+        np.testing.assert_allclose(
+            freqs.to_value(units.Hz),
+            vanilla_uvp.freq_array[vanilla_uvp.spw_to_freq_indices(0)],
+            rtol=1e-15,
+        )
+        assert vanilla_uvp.get_spw_ranges(0) == spw_ranges[:1]
+
+    def test_spw_tuple_lookup(self, vanilla_uvp: UVPSpec) -> None:
+        """Quantity tuples and the old float tuples select the same spw."""
+        quantity_tuple = vanilla_uvp.get_spw_ranges()[0]
+        float_tuple = vanilla_uvp._spw_ranges_hz()[0]
+        mhz_tuple = (
+            quantity_tuple[0].to(units.MHz),
+            quantity_tuple[1].to(units.MHz),
+            *quantity_tuple[2:],
+        )
+        for method in ("spw_to_freq_indices", "spw_to_dly_indices", "spw_indices"):
+            expected = getattr(vanilla_uvp, method)(0)
+            for spw_tuple in (quantity_tuple, float_tuple, mhz_tuple):
+                np.testing.assert_array_equal(
+                    getattr(vanilla_uvp, method)(spw_tuple), expected
+                )
+
+    @pytest.mark.parametrize(
+        "norm_units, expected",
+        [
+            ("Hz sr", LITTLEH_LENGTH),
+            ("Mpc3 / littleh3", LITTLEH_LENGTH),
+            ("h^-3 Mpc^3", LITTLEH_LENGTH),
+            ("Mpc3", units.Mpc),
+            ("Mpc^3", units.Mpc),
+        ],
+    )
+    def test_default_length_unit(
+        self, vanilla_uvp: UVPSpec, norm_units: str, expected
+    ) -> None:
+        uvp = _with_norm_units(vanilla_uvp, norm_units)
+        assert uvp._default_length_unit() == expected
+        assert uvp.get_kperps(0).unit == 1 / expected
+        assert uvp.get_kparas(0).unit == 1 / expected
+
+    @pytest.mark.parametrize("norm_units", ["Hz sr", "Mpc3 / littleh3", "Mpc3"])
+    @pytest.mark.parametrize(
+        "length_unit", [LITTLEH_LENGTH, units.Mpc, "Mpc / littleh", "Mpc"]
+    )
+    def test_k_values(self, vanilla_uvp: UVPSpec, norm_units: str, length_unit) -> None:
+        """An explicit length_unit always wins over the object's own unit."""
+        uvp = _with_norm_units(vanilla_uvp, norm_units)
+        unit = unit_helpers.parse_unit_string(length_unit)
+        k_perp_expected, k_para_expected = _expected_ks(uvp, 0, unit)
+        k_perp = uvp.get_kperps(0, length_unit=length_unit)
+        k_para = uvp.get_kparas(0, length_unit=length_unit)
+        assert k_perp.unit == 1 / unit and k_para.unit == 1 / unit
+        np.testing.assert_array_equal(k_perp.value, k_perp_expected)
+        np.testing.assert_array_equal(k_para.value, k_para_expected)
+
+    def test_k_mpc_object_default(self, vanilla_uvp: UVPSpec) -> None:
+        """An Mpc3 object gives 1 / Mpc by default: littleh k times h."""
+        littleh_uvp = _with_norm_units(vanilla_uvp, "Mpc3 / littleh3")
+        mpc_uvp = _with_norm_units(vanilla_uvp, "Mpc3")
+        h = vanilla_uvp.cosmo.h
+        np.testing.assert_allclose(
+            mpc_uvp.get_kparas(0).to_value(1 / units.Mpc),
+            littleh_uvp.get_kparas(0).to_value(cu.littleh / units.Mpc) * h,
+            rtol=1e-14,
+        )
+        np.testing.assert_allclose(
+            mpc_uvp.get_kperps(0).to_value(1 / units.Mpc),
+            littleh_uvp.get_kperps(0).to_value(cu.littleh / units.Mpc) * h,
+            rtol=1e-14,
+        )
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_k_little_h_deprecated(self, vanilla_uvp: UVPSpec, little_h: bool) -> None:
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
+            expected = getter(0, length_unit=length_unit)
+            with pytest.warns(DeprecationWarning, match="little_h") as record:
+                old = getter(0, little_h=little_h)
+            # the warning points at the caller
+            assert record[0].filename == __file__
+            assert old.unit == expected.unit
+            np.testing.assert_array_equal(old.value, expected.value)
+            # agreeing values are accepted
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                both = getter(0, length_unit=length_unit, little_h=little_h)
+            np.testing.assert_array_equal(both.value, expected.value)
+            # a flag passed positionally in its old slot still works
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                positional = getter(0, little_h)
+            np.testing.assert_array_equal(positional.value, expected.value)
+
+    def test_k_bad_length_unit(self, vanilla_uvp: UVPSpec) -> None:
+        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
+            with pytest.warns(DeprecationWarning, match="little_h"):
+                with pytest.raises(ValueError, match="disagrees"):
+                    getter(0, length_unit=units.Mpc, little_h=True)
+            with pytest.raises(ValueError, match="length_unit must be a length"):
+                getter(0, length_unit=units.Hz)
+
+    def test_get_kparas_dlys(self, vanilla_uvp: UVPSpec) -> None:
+        dlys = np.linspace(-1e-6, 1e-6, 11)
+        floats = vanilla_uvp.get_kparas(0, dlys=dlys)
+        np.testing.assert_array_equal(
+            vanilla_uvp.get_kparas(0, dlys=dlys * units.s).value, floats.value
+        )
+        np.testing.assert_allclose(
+            vanilla_uvp.get_kparas(0, dlys=(dlys * units.s).to(units.ns)).value,
+            floats.value,
+            rtol=1e-14,
+        )
+        with pytest.raises(units.UnitConversionError):
+            vanilla_uvp.get_kparas(0, dlys=dlys * units.m)
+
+    def test_convert_to_deltasq_mpc_object(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+    ) -> None:
+        """An Mpc3 object is converted with k in 1 / Mpc."""
+        uvp = testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39), (52, 53)],
+            spw_ranges=[(20, 30)],
+            beam=beam_nf_dipole,
+        )
+        uvp = _with_norm_units(uvp, "Mpc3")
+        dsq = uvp.convert_to_deltasq(inplace=False)
+        k_perp = uvp.get_kperps(0).to_value(1 / units.Mpc)
+        k_para = uvp.get_kparas(0).to_value(1 / units.Mpc)
+        coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)
+        np.testing.assert_allclose(
+            dsq.data_array[0][..., 0], uvp.data_array[0][..., 0] * coeff, rtol=1e-12
+        )
+        assert dsq.norm_unit == units.dimensionless_unscaled
 
 
 def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
@@ -402,8 +700,11 @@ def test_blpair_conversions(vanilla_uvp: uvpspec.UVPSpec) -> None:
 
 
 class TestIndicesFuncs:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_key_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_key_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         spw, blpairts, pol = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
         assert spw == 0
         assert pol == 0
@@ -417,16 +718,22 @@ class TestIndicesFuncs:
             blpairts, np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
         ).min()
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_key_to_indices_polpair_formats_agree(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_key_to_indices_polpair_formats_agree(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that int, tuple, and single-pol-string polpair specs give the same indices."""
+        uvp = request.getfixturevalue(uvp_name)
         s1, b1, p1 = uvp.key_to_indices((0, ((1, 2), (1, 2)), 1515))
         s2, b2, p2 = uvp.key_to_indices((0, ((1, 2), (1, 2)), ("xx", "xx")))
         s3, b3, p3 = uvp.key_to_indices((0, ((1, 2), (1, 2)), "xx"))
         assert p1 == p2 == p3
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_spw_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_spw_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         spw1 = uvp.spw_to_dly_indices(0)
         assert len(spw1) == uvp.get_dlys(0).size
         spw2 = uvp.spw_to_freq_indices(0)
@@ -434,9 +741,12 @@ class TestIndicesFuncs:
         spw3 = uvp.spw_indices(0)
         assert len(spw3) == uvp.Nspws
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_spw_to_indices_accepts_spw_tuple(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_spw_to_indices_accepts_spw_tuple(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that feeding a spw tuple (from get_spw_ranges()) matches feeding the spw index."""
+        uvp = request.getfixturevalue(uvp_name)
         spw1b = uvp.spw_to_dly_indices(uvp.get_spw_ranges()[0])
         spw2b = uvp.spw_to_freq_indices(uvp.get_spw_ranges()[0])
         spw3b = uvp.spw_indices(uvp.get_spw_ranges()[0])
@@ -444,8 +754,11 @@ class TestIndicesFuncs:
         np.testing.assert_array_equal(uvp.spw_to_freq_indices(0), spw2b)
         np.testing.assert_array_equal(uvp.spw_indices(0), spw3b)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_polpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_polpair_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         pol = uvp.polpair_to_indices(("xx", "xx"))
         print(pol)
         assert len(pol) == 1
@@ -456,18 +769,22 @@ class TestIndicesFuncs:
         print(pol)
         assert len(pol) == 1
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_polpair_to_indices_raises_on_invalid_type(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         with pytest.raises(
             TypeError, match="polpair must be list of tuple or int or str"
         ):
             uvp.polpair_to_indices(3.14)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check blpair_to_indices for scalar int/tuple inputs, and that list-of-duplicates inputs agree with the scalar result."""
+        uvp = request.getfixturevalue(uvp_name)
         expected = np.array([0, 3, 6, 9, 12, 15, 18, 21, 24, 27])
         inds = uvp.blpair_to_indices(101102101102)
         assert np.isclose(inds, expected).min()
@@ -479,8 +796,11 @@ class TestIndicesFuncs:
         inds_tuple_list = uvp.blpair_to_indices([((1, 2), (1, 2)), ((1, 2), (1, 2))])
         np.testing.assert_array_equal(inds_tuple_list, inds_tuple)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_to_indices(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_to_indices(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         time = uvp.time_avg_array[5]
         blpair = 101102101102
         inds = uvp.time_to_indices(time=time)
@@ -495,8 +815,11 @@ class TestIndicesFuncs:
 
 
 class TestSelect:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_bl_group_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_bl_group_select(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp1.select(bls=[(1, 2)], inplace=True)
         assert uvp1.Nblpairs == 1
@@ -516,12 +839,15 @@ class TestSelect:
             "filter_factors": [1e-9],
         }
         r_params = {bl + ("xx",): rp for bl in bls}
+        # the data value checked below is from v0.x, with its default cosmology
+        beam = copy.deepcopy(beam_nf_dipole)
+        beam.cosmo = conversions.LEGACY_COSMOLOGY
 
         uvp1 = testing.uvpspec_from_data(
             uvd_zen_even_xx,
             bls,
             spw_ranges=[(20, 30), (60, 90)],
-            beam=beam_nf_dipole,
+            beam=beam,
             r_params=r_params,
         )
         uvp2 = uvp1.select(spws=0, inplace=False)
@@ -536,27 +862,33 @@ class TestSelect:
         for rpkey in uvp2.get_r_params():
             assert rpkey == (37, 38, "xx") or rpkey == (38, 39, "xx")
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp2 = uvp1.select(blpairs=[101102101102, 102103102103], inplace=False)
         assert uvp2.Nblpairs == 2
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_polpair_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_polpair_select(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(polpairs=[1515], inplace=False)
         assert uvp2.polpair_array[0] == 1515
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(times=np.unique(uvp.time_avg_array)[:1], inplace=False)
         assert uvp2.Ntimes == 1
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_blpair_and_polpair_select_preserves_stats_shape(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check that selecting on the full blpair/polpair set preserves data_array and stats_array shapes."""
+        uvp = request.getfixturevalue(uvp_name)
         Ndlys = uvp.get_dlys(0).size
         uvp1 = copy.deepcopy(uvp)
         uvp1.set_stats(
@@ -570,11 +902,12 @@ class TestSelect:
         assert uvp2.data_array[0].shape == (uvp1.Nbltpairs, Ndlys, 1)
         assert uvp2.stats_array["hi"][0].shape == (uvp1.Nbltpairs, Ndlys, 1)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_non_sliceable_select_single_blpair_multi_pol(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check select() on a non-sliceable combination of one blpair and a subset of polpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         Ndlys = uvp.get_dlys(0).size
         uvp2, uvp3, uvp4 = copy.deepcopy(uvp), copy.deepcopy(uvp), copy.deepcopy(uvp)
         uvp2.polpair_array[0] = 1414
@@ -586,17 +919,19 @@ class TestSelect:
         )
         assert uvp5.data_array[0].shape == (uvp.Ntimes * 1, Ndlys, 3)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_lst_select(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_lst_select(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Check that selecting on the full set of lsts is a no-op."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp2 = uvp.select(lsts=np.unique(uvp.lst_avg_array), inplace=False)
         assert uvp == uvp2
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
     def test_non_sliceable_select_multi_blpair_multi_pol(
-        self, uvp: uvpspec.UVPSpec
+        self, uvp_name: str, request: pytest.FixtureRequest
     ) -> None:
         """Check select() on a non-sliceable combination of multiple blpairs and multiple polpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         for i in [1414, 1313, 1212]:
             _uvp = copy.deepcopy(uvp)
@@ -613,8 +948,9 @@ def test_get_ENU_bl_vecs(vanilla_uvp: uvpspec.UVPSpec) -> None:
     assert np.isclose(bl_vecs[0], np.array([-14.6, 0.0, 0.0]), atol=1e-6).min()
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_check(uvp: uvpspec.UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_check(uvp_name: str, request: pytest.FixtureRequest) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     uvp = copy.deepcopy(uvp)
     uvp.check()
 
@@ -660,8 +996,11 @@ def test_get_r_params(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -> N
     assert r_params == uvp.get_r_params()
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_write_read_hdf5(
+    uvp_name: str, request: pytest.FixtureRequest, tmp_path: Path
+) -> None:
+    uvp = request.getfixturevalue(uvp_name)
     uvp = copy.deepcopy(uvp)
 
     out = tmp_path / "ex.hdf5"
@@ -690,8 +1029,266 @@ def test_write_read_hdf5(uvp: uvpspec.UVPSpec, tmp_path: Path) -> None:
     assert uvp.data_array[0].shape == (uvp.Nbltpairs, uvp.get_dlys(0).size, uvp.Npols)
 
 
+class TestSymmetricTaper:
+    @pytest.mark.parametrize("symmetric_taper", [True, False])
+    def test_round_trips_through_hdf5(
+        self, mutable_uvp: uvpspec.UVPSpec, tmp_path: Path, symmetric_taper: bool
+    ) -> None:
+        mutable_uvp.symmetric_taper = symmetric_taper
+        out = tmp_path / "ex.hdf5"
+        mutable_uvp.write_hdf5(out)
+
+        with h5py.File(out, "r") as f:
+            assert f.attrs["symmetric_taper"] == symmetric_taper
+
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper == symmetric_taper
+        assert uvp2 == mutable_uvp
+
+    def test_pspec_output_round_trips_through_hdf5(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
+    ) -> None:
+        uvp = testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39)],
+            spw_ranges=[(20, 30)],
+            beam=beam_nf_dipole,
+            symmetric_taper=False,
+        )
+        assert uvp.symmetric_taper is False
+
+        out = tmp_path / "ex.hdf5"
+        uvp.write_hdf5(out)
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper == False  # noqa: E712 (h5py returns np.bool_)
+
+    def test_legacy_file_without_attr_defaults_to_true(
+        self, mutable_uvp: uvpspec.UVPSpec, tmp_path: Path
+    ) -> None:
+        mutable_uvp.symmetric_taper = False
+        out = tmp_path / "ex.hdf5"
+        mutable_uvp.write_hdf5(out)
+        with h5py.File(out, "a") as f:
+            del f.attrs["symmetric_taper"]
+
+        uvp2 = uvpspec.UVPSpec()
+        uvp2.read_hdf5(out)
+        assert uvp2.symmetric_taper is True
+        uvp2.check()
+
+    def test_check_requires_symmetric_taper(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        del mutable_uvp.symmetric_taper
+        with pytest.raises(
+            AssertionError, match="required parameter symmetric_taper doesn't exist"
+        ):
+            mutable_uvp.check()
+
+    def test_check_casts_to_bool(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.symmetric_taper = np.bool_(False)
+        mutable_uvp.check()
+        assert mutable_uvp.symmetric_taper is False
+
+    def test_eq_detects_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(mutable_uvp)
+        uvp2.symmetric_taper = not mutable_uvp.symmetric_taper
+        assert mutable_uvp != uvp2
+
+    def test_combine_rejects_mismatch(self, uvp1_no_optionals: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(uvp1_no_optionals)
+        uvp2.polpair_array[0] = 1414
+        uvp2.symmetric_taper = not uvp1_no_optionals.symmetric_taper
+        with pytest.raises(AssertionError, match="'symmetric_taper' attribute"):
+            uvpspec.combine_uvpspec([uvp1_no_optionals, uvp2], verbose=False)
+
+
+EXPECTED_PARAM_UNITS = {
+    "freq_array": units.Hz,
+    "dly_array": units.s,
+    "lst_1_array": units.rad,
+    "lst_2_array": units.rad,
+    "lst_avg_array": units.rad,
+    "time_1_array": units.day,
+    "time_2_array": units.day,
+    "time_avg_array": units.day,
+    "integration_array": units.s,
+    "channel_width": units.Hz,
+    "telescope_location": units.m,
+    "bl_vecs": units.m,
+    "beam_freqs": units.Hz,
+    "OmegaP": units.sr,
+    "OmegaPP": units.sr,
+}
+
+# Parameters whose description contains a bracketed phrase that is not the
+# unit of the stored value.
+BRACKETS_NOT_UNITS = {"cov_model", "norm_units", "wgt_array"}
+
+
+class TestParamUnits:
+    def test_declared_units(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            assert uvp.get_param_unit(name) == EXPECTED_PARAM_UNITS.get(name), name
+
+    def test_unknown_param_raises(self) -> None:
+        uvp = uvpspec.UVPSpec()
+        with pytest.raises(KeyError, match="not_a_param"):
+            uvp.get_param_unit("not_a_param")
+
+    def test_descriptions_match_declared_units(self) -> None:
+        # Every description with a bracketed unit declares that unit, and
+        # every declared unit is written in its description.
+        uvp = uvpspec.UVPSpec()
+        for name in uvp._all_params:
+            if name in BRACKETS_NOT_UNITS:
+                continue
+            description = getattr(uvp, f"_{name}").description
+            has_bracket = re.search(r"\[[^\]]+\]", description) is not None
+            has_unit = uvp.get_param_unit(name) is not None
+            assert has_bracket == has_unit, name
+
+    def test_check_passes(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        vanilla_uvp.check()
+
+    def test_check_accepts_matching_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        freqs = mutable_uvp.freq_array * units.Hz
+        mutable_uvp.freq_array = freqs
+        mutable_uvp.check()
+        assert isinstance(mutable_uvp.freq_array, units.Quantity)
+        assert mutable_uvp.freq_array.unit == units.Hz
+        assert np.array_equal(mutable_uvp.freq_array, freqs)
+
+    def test_check_accepts_equivalent_quantity(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.dly_array = mutable_uvp.dly_array * units.ns
+        mutable_uvp.check()
+        assert mutable_uvp.dly_array.unit == units.ns
+
+    def test_check_rejects_wrong_unit(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.freq_array = mutable_uvp.freq_array * units.m
+        with pytest.raises(
+            ValueError, match="freq_array has unit 'm'.*declared unit 'Hz'"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_quantity_without_declared_unit(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.scalar_array = mutable_uvp.scalar_array * units.mK**2
+        with pytest.raises(
+            ValueError, match="scalar_array is a Quantity.*does not declare a unit"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_wrong_unit_in_dict(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.integration_array = {
+            spw: ints * units.Hz for spw, ints in mutable_uvp.integration_array.items()
+        }
+        with pytest.raises(ValueError, match="integration_array has unit 'Hz'"):
+            mutable_uvp.check()
+
+    def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        # the window k grids of an "Hz sr" object are in 1 / Mpc
+        assert mutable_uvp.window_k_unit() == units.Mpc ** (-1)
+        mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
+        mutable_uvp.check()
+        mutable_uvp.window_function_kperp = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        with pytest.raises(ValueError, match="window_function_kperp has unit"):
+            mutable_uvp.check()
+
+    def test_check_window_k_follows_norm_units(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.norm_units = "Mpc3 / littleh3"
+        mutable_uvp.window_function_kpara = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        mutable_uvp.check()
+        mutable_uvp.window_function_kpara = {0: np.ones((2, 2)) / units.Mpc}
+        with pytest.raises(ValueError, match="window_function_kpara has unit"):
+            mutable_uvp.check()
+
+
+class TestWindowKUnit:
+    @pytest.mark.parametrize(
+        ("norm_units", "k_unit", "default_length"),
+        [
+            ("Mpc3 / littleh3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("h^-3 Mpc^3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
+            ("Mpc3", units.Mpc ** (-1), units.Mpc),
+            ("Mpc^3", units.Mpc ** (-1), units.Mpc),
+            # documented difference for unnormalised spectra
+            ("Hz sr", units.Mpc ** (-1), units.Mpc / cu.littleh),
+        ],
+    )
+    def test_window_k_unit(
+        self, mutable_uvp: uvpspec.UVPSpec, norm_units: str, k_unit, default_length
+    ) -> None:
+        mutable_uvp.norm_units = norm_units
+        assert mutable_uvp.window_k_unit() == k_unit
+        assert mutable_uvp._default_length_unit() == default_length
+
+    def test_kgrid_without_exact_windows_raises(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        with pytest.raises(ValueError, match="no exact window functions"):
+            vanilla_uvp.get_window_function_kgrid(0)
+
+    def test_kgrid(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        uvp = uvp_exact_wfs
+        # an "Hz sr" object: its window functions are on a 1 / Mpc grid
+        assert uvp.window_k_unit() == units.Mpc ** (-1)
+        for spw in uvp.spw_array:
+            kperp, kpara = uvp.get_window_function_kgrid(spw)
+            assert kperp.unit == uvp.window_k_unit()
+            assert kpara.unit == uvp.window_k_unit()
+            np.testing.assert_array_equal(kperp.value, uvp.window_function_kperp[spw])
+            np.testing.assert_array_equal(kpara.value, uvp.window_function_kpara[spw])
+
+
+class TestTimeArrays:
+    @pytest.mark.parametrize("name", ["time_1_array", "time_2_array"])
+    def test_declared_as_param(self, name: str) -> None:
+        uvp = uvpspec.UVPSpec()
+        param = getattr(uvp, f"_{name}")
+        assert isinstance(param, parameter.PSpecParam)
+        assert param.name == name
+        assert name in uvp._all_params
+        assert name in uvp._req_params
+        assert name in uvp._ndarrays
+        assert name in uvp._meta_dsets
+        assert name not in uvp._meta_attrs
+
+    def test_check_requires_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        del mutable_uvp.time_2_array
+        with pytest.raises(
+            AssertionError, match="required parameter time_2_array doesn't exist"
+        ):
+            mutable_uvp.check()
+
+    def test_eq_detects_time_2_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        uvp2 = copy.deepcopy(mutable_uvp)
+        # __eq__ uses np.isclose with its default rtol, which on Julian Dates
+        # (~2.46e6) tolerates ~25 days, so the offset has to be large.
+        uvp2.time_2_array = uvp2.time_2_array + 100.0
+        assert mutable_uvp != uvp2
+
+    def test_clear_removes_time_2_array(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp._clear()
+        assert not hasattr(mutable_uvp, "time_2_array")
+
+
 class TestSense:
-    BASE_TSYS = 500
+    BASE_TSYS = 500 * units.K
     POLPAIR = ("xx", "xx")
 
     def test_basic_execution(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
@@ -710,7 +1307,7 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
         )
         P_N2 = mutable_uvp_with_beam.generate_noise_spectra(
-            0, self.POLPAIR, self.BASE_TSYS - 100, form="Pk", component="real"
+            0, self.POLPAIR, self.BASE_TSYS - 100 * units.K, form="Pk", component="real"
         )
         assert (P_N[101102101102] > P_N2[101102101102]).all()
 
@@ -736,7 +1333,9 @@ class TestSense:
             0, self.POLPAIR, self.BASE_TSYS, form="DelSq", component="real"
         )
         assert Dsq[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
-        assert Dsq[101102101102][0, 1] < P_N[101102101102][0, 1]
+        assert Dsq[101102101102].unit == units.mK**2
+        assert P_N[101102101102].unit == units.mK**2 * LITTLEH_LENGTH**3
+        assert Dsq[101102101102][0, 1].value < P_N[101102101102][0, 1].value
 
     def test_blpair_selection_and_int_polpair(
         self, mutable_uvp_with_beam: uvpspec.UVPSpec
@@ -769,8 +1368,11 @@ class TestSense:
 
 
 class TestAverageSpectra:
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_averaging(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         Ndlys = uvp1.get_dlys(0).size
         blpairs = uvp1.get_blpair_groups_from_bl_groups(
@@ -783,28 +1385,36 @@ class TestAverageSpectra:
         assert np.isclose(uvp2.get_nsamples((0, 101102101102, ("xx", "xx"))), 3.0).all()
         assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (10, Ndlys)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_blpair_averaging_with_weights(self, uvp: uvpspec.UVPSpec) -> None:
-        """Check that blpair_weights don't change the result here, since the weighted baselines hold identical data."""
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_blpair_averaging_with_weights(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        """Check that blpair_weights give the weighted mean of different blpairs."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
-        blpairs = [[101102101102, 101102101102]]
-        blpair_wgts = [[2.0, 0.0]]
-        uvp3a = uvp1.average_spectra(
-            blpair_groups=blpairs, time_avg=False, blpair_weights=None, inplace=False
-        )
-        uvp3b = uvp1.average_spectra(
-            blpair_groups=blpairs,
+        blps = [101102101102, 102103102103, 101103101103]
+        data = [uvp1.get_data((0, blp, ("xx", "xx"))) for blp in blps]
+        # the blpairs hold different data, so the weights matter
+        assert not np.allclose(data[0], data[1])
+        # Weights are normalized to sum to the number of blpairs in the group;
+        # these already do, so they are used as given.
+        uvp2 = uvp1.average_spectra(
+            blpair_groups=[blps],
             time_avg=False,
-            blpair_weights=blpair_wgts,
+            blpair_weights=[[2, 1, 0]],
             inplace=False,
         )
-        assert np.isclose(
-            uvp3a.get_data((0, 101102101102, ("xx", "xx"))),
-            uvp3b.get_data((0, 101102101102, ("xx", "xx"))),
-        ).all()
+        np.testing.assert_allclose(
+            uvp2.get_data((0, blps[0], ("xx", "xx"))),
+            (2 * data[0] + data[1]) / 3,
+            rtol=1e-12,
+        )
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_time_averaging(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_time_averaging(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         Ndlys = uvp1.get_dlys(0).size
         uvp2 = uvp1.average_spectra(time_avg=True, inplace=False)
@@ -814,9 +1424,12 @@ class TestAverageSpectra:
         ).all()
         assert uvp2.get_data((0, 101102101102, ("xx", "xx"))).shape == (1, Ndlys)
 
-    @parametrize_with_cases("uvp", cases=".", glob="*vanilla*")
-    def test_repeated_baselines_require_time_avg(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", VANILLA_UVPS)
+    def test_repeated_baselines_require_time_avg(
+        self, uvp_name: str, request: pytest.FixtureRequest
+    ) -> None:
         """Check that averaging repeated baselines without time_avg raises, but works (and collapses Nblpairs) with time_avg=True."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp1.blpair_array[uvp1.blpair_to_indices(102103102103)] = 101102101102
         with pytest.raises(ValueError):
@@ -869,6 +1482,27 @@ class TestGetExactWindowFunctions:
             ftbeam=self.FT_FILE, inplace=False
         )
         assert np.allclose(wf_array[0], uvp_exact_wfs.window_function_array[0])
+
+    def test_get_window_function_folded(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
+        """Check that get_window_function only slices the delay axis of folded exact window functions."""
+        uvp = copy.deepcopy(uvp_exact_wfs)
+        uvp.fold_spectra()
+        key = uvp.get_all_keys()[0]
+        spw, blpairts, polpair = uvp.key_to_indices(key)
+        Ndlys = np.count_nonzero(uvp.spw_dly_array == spw)
+        wf = uvp.get_window_function(key)
+        # delays fold to positive values; kperp and kpara grids are untouched
+        assert wf.shape == (
+            len(blpairts),
+            Ndlys - Ndlys // 2 - 1,
+            *uvp.window_function_array[spw].shape[2:-1],
+        )
+        np.testing.assert_array_equal(
+            wf,
+            uvp.window_function_array[spw][
+                blpairts, -(Ndlys - Ndlys // 2 - 1) :, :, :, polpair
+            ],
+        )
 
     def test_recompute_single_spw_warns(self, uvp_exact_wfs: uvpspec.UVPSpec) -> None:
         """Check that recomputing for one spw on an object with exact_windows already set warns."""
@@ -948,7 +1582,7 @@ class TestGetExactWindowFunctions:
         uvp = copy.deepcopy(uvp_exact_wfs)
         widths = -0.0343 * uvp.freq_array / 1e6 + 11.30
         gaussian_beam = uvwindow.FTBeam.gaussian(
-            freq_array=uvp.freq_array, widths=widths, pol="xx"
+            freq_array=uvp.freq_array * units.Hz, widths=widths * units.deg, pol="xx"
         )
         with pytest.warns(
             UserWarning, match="Exact window functions already computed, overwriting"
@@ -959,8 +1593,9 @@ class TestGetExactWindowFunctions:
 
 
 class TestFoldSpectra:
-    @parametrize_with_cases("uvp", cases=".")
-    def test_fold_spectra(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_fold_spectra(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
 
         uvp1.fold_spectra()
@@ -1020,18 +1655,157 @@ class TestFoldSpectra:
             rtol=1e-5,
         )
 
+        # Folding averages each positive delay with its negative counterpart,
+        # i.e. applies the linear map A (Ndlys//2 x Ndlys), so the folded data
+        # (which only hold the positive delays) are A d and the folded
+        # covariance is A C A^T.
+        key = (0, ((37, 38), (38, 39)), ("xx", "xx"))
+        data = uvp.get_data(key)
+        cov = uvp.get_cov(key)
+        Ndlys = data.shape[1]
+        assert Ndlys % 2 == 1
+        mid = Ndlys // 2
+        A = np.zeros((mid, Ndlys))
+        A[np.arange(mid), mid + 1 + np.arange(mid)] = 0.5
+        A[np.arange(mid), mid - 1 - np.arange(mid)] = 0.5
+        np.testing.assert_allclose(data_folded, data @ A.T, rtol=1e-10)
+        np.testing.assert_allclose(cov_folded, A @ cov @ A.T, rtol=1e-10)
+        # in the full arrays, the zero-delay bin is unchanged and the negative
+        # delays are emptied
+        np.testing.assert_array_equal(
+            uvp1.data_array[0][:, mid], uvp.data_array[0][:, mid]
+        )
+        assert np.all(uvp1.data_array[0][:, :mid] == 0)
+
 
 def test_str(vanilla_uvp: uvpspec.UVPSpec) -> None:
-    assert str(vanilla_uvp) != ""
+    s = str(vanilla_uvp)
+    assert f"Nblpairs: {vanilla_uvp.Nblpairs}\n" in s
+    assert f"blpair_array: shape {vanilla_uvp.blpair_array.shape}\n" in s
+    assert "history" not in s
+
+
+class TestScalarAndNoiseUnits:
+    POLPAIR = ("xx", "xx")
+    BLP = 101102101102
+
+    def test_compute_scalar_length_unit(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        default = uvp.compute_scalar(0, self.POLPAIR)
+        littleh = uvp.compute_scalar(0, self.POLPAIR, length_unit=LITTLEH_LENGTH)
+        mpc = uvp.compute_scalar(0, self.POLPAIR, length_unit="Mpc")
+        assert default.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        assert mpc.unit == units.Mpc**3 / (units.Hz * units.sr)
+        assert littleh == default
+        np.testing.assert_allclose(mpc.value, default.value / h**3, rtol=1e-12)
+        # the same physical quantity
+        np.testing.assert_allclose(
+            mpc.to_value(default.unit, equivalencies=cu.with_H0(uvp.cosmo.H0)),
+            default.value,
+            rtol=1e-12,
+        )
+        # an Mpc3 object gives an Mpc scalar by default
+        mpc_uvp = _with_norm_units(uvp, "Mpc3")
+        assert mpc_uvp.compute_scalar(0, self.POLPAIR) == mpc
+
+    @pytest.mark.parametrize("little_h", [True, False])
+    def test_compute_scalar_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec, little_h: bool
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        length_unit = conversions.length_unit_from_little_h(little_h)
+        expected = uvp.compute_scalar(0, self.POLPAIR, length_unit=length_unit)
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.compute_scalar(0, self.POLPAIR, little_h=little_h)
+        assert record[0].filename == __file__
+        assert old == expected
+        with pytest.warns(DeprecationWarning, match="little_h"):
+            with pytest.raises(ValueError, match="disagrees"):
+                uvp.compute_scalar(
+                    0,
+                    self.POLPAIR,
+                    little_h=little_h,
+                    length_unit=conversions.length_unit_from_little_h(not little_h),
+                )
+
+    def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        uvp = vanilla_uvp_with_beam
+        h = uvp.cosmo.h
+        pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
+        pk_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
+        )[self.BLP]
+        assert pk.unit == units.mK**2 * units.Mpc**3 / cu.littleh**3
+        assert pk_mpc.unit == units.mK**2 * units.Mpc**3
+        np.testing.assert_allclose(pk_mpc.value, pk.value / h**3, rtol=1e-12)
+        dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K, form="DelSq")[
+            self.BLP
+        ]
+        dsq_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, form="DelSq", length_unit=units.Mpc
+        )[self.BLP]
+        assert dsq.unit == units.mK**2 and dsq_mpc.unit == units.mK**2
+        # Delta^2 does not depend on the length unit
+        np.testing.assert_allclose(dsq_mpc.value, dsq.value, rtol=1e-12)
+
+    def test_noise_spectra_scalar_argument(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        scalar = uvp.compute_scalar(0, self.POLPAIR, num_steps=2000, noise_scalar=True)
+        computed = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
+        from_quantity = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=scalar
+        )[self.BLP]
+        from_float = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=scalar.value
+        )[self.BLP]
+        np.testing.assert_array_equal(from_quantity.value, computed.value)
+        np.testing.assert_array_equal(from_float.value, computed.value)
+        # a Quantity scalar is converted to the requested length unit's scalar unit
+        mpc_scalar = scalar.to(
+            units.Mpc**3 / (units.Hz * units.sr), equivalencies=cu.with_H0(uvp.cosmo.H0)
+        )
+        from_mpc = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=mpc_scalar, length_unit=units.Mpc
+        )[self.BLP]
+        np.testing.assert_allclose(
+            from_mpc.value * uvp.cosmo.h**3, computed.value, rtol=1e-12
+        )
+        with pytest.raises(units.UnitConversionError):
+            uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, scalar=scalar * units.s
+            )
+
+    def test_noise_spectra_little_h_deprecated(
+        self, vanilla_uvp_with_beam: UVPSpec
+    ) -> None:
+        uvp = vanilla_uvp_with_beam
+        expected = uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
+        )
+        with pytest.warns(DeprecationWarning, match="little_h") as record:
+            old = uvp.generate_noise_spectra(
+                0, self.POLPAIR, 500 * units.K, little_h=False
+            )
+        # one warning, pointing at the caller
+        assert len(record) == 1
+        assert record[0].filename == __file__
+        assert old[self.BLP].unit == expected[self.BLP].unit
+        np.testing.assert_array_equal(old[self.BLP].value, expected[self.BLP].value)
 
 
 def test_compute_scalar(
     vanilla_uvp: uvpspec.UVPSpec, vanilla_uvp_with_beam: uvpspec.UVPSpec
 ) -> None:
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
+    # the reference value is from v0.x, with its default cosmology
+    uvp.cosmo = conversions.LEGACY_COSMOLOGY
     # test basic execution
     s = uvp.compute_scalar(0, ("xx", "xx"), num_steps=1000, noise_scalar=False)
-    np.testing.assert_almost_equal(s / 553995277.90425551, 1.0, decimal=5)
+    assert s.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+    np.testing.assert_almost_equal(s.value / 553995277.90425551, 1.0, decimal=5)
 
     # test no cosmo
     uvp_no_cosmo = copy.deepcopy(vanilla_uvp_with_beam)
@@ -1050,21 +1824,38 @@ def test_set_cosmology(
     mutable_uvp_with_beam: uvpspec.UVPSpec, beam_nf_dipole: PSpecBeamUV
 ) -> None:
     uvp = mutable_uvp_with_beam
-    new_cosmo = conversions.Cosmo_Conversions(Om_L=0.0)
+    new_cosmo = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=0.0, Ob0=0.04911)
 
     # test no overwrite
     uvp.set_cosmology(new_cosmo, overwrite=False)
     assert uvp.cosmo != new_cosmo
 
-    # test setting cosmology
+    # test setting cosmology: the spectra are rescaled by the ratio of the
+    # new to the old scalar
+    data_old = uvp.data_array[0].copy()
+    scalar_old = uvp.scalar_array.copy()
     uvp.set_cosmology(new_cosmo, overwrite=True)
     assert uvp.cosmo == new_cosmo
-    assert uvp.norm_units == "h^-3 Mpc^3"
+    assert uvp.norm_units == "Mpc3 / littleh3"
+    assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert (uvp.scalar_array > 1.0).all()
+    assert not np.allclose(uvp.scalar_array, scalar_old)
+    np.testing.assert_allclose(
+        uvp.data_array[0],
+        data_old * (uvp.scalar_array[0] / scalar_old[0])[None, None, :],
+        rtol=1e-12,
+    )
+    # an unnormalised object gets a littleh scalar
+    np.testing.assert_array_equal(
+        uvp.scalar_array[0, 0],
+        uvp.compute_scalar(0, uvp.polpair_array[0]).to_value(
+            LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        ),
+    )
     assert (uvp.data_array[0] > 1e5).all()
 
     # test exception
-    new_cosmo2 = conversions.Cosmo_Conversions(Om_L=1.0)
+    new_cosmo2 = LambdaCDM(H0=67.27, Om0=0.31353, Ode0=1.0, Ob0=0.04911)
     del uvp.OmegaP
     uvp.set_cosmology(new_cosmo2, overwrite=True)
     assert uvp.cosmo != new_cosmo2
@@ -1073,6 +1864,135 @@ def test_set_cosmology(
     uvp.set_cosmology(new_cosmo2, overwrite=True, new_beam=beam_nf_dipole)
     assert uvp.cosmo == new_cosmo2
     assert hasattr(uvp, "OmegaP")
+
+
+@pytest.fixture(scope="module")
+def set_cosmology_uvps(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV
+) -> dict[str, uvpspec.UVPSpec]:
+    """pspec outputs normalised in Mpc3 / littleh3 and in Mpc3."""
+    return {
+        name: testing.uvpspec_from_data(
+            uvd_zen_even_xx,
+            [(37, 38), (38, 39), (52, 53)],
+            spw_ranges=[(20, 30), (60, 90)],
+            beam=beam_nf_dipole,
+            length_unit=length_unit,
+        )
+        for name, length_unit in (("littleh", LITTLEH_LENGTH), ("mpc", units.Mpc))
+    }
+
+
+@pytest.mark.parametrize(
+    "name, norm_units", [("littleh", "Mpc3 / littleh3"), ("mpc", "Mpc3")]
+)
+def test_set_cosmology_same_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec], name: str, norm_units: str
+) -> None:
+    """Re-setting the same cosmology keeps the data and the normalisation."""
+    uvp = copy.deepcopy(set_cosmology_uvps[name])
+    assert uvp.norm_units == norm_units
+    old = copy.deepcopy(uvp)
+    uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True, verbose=False)
+    assert uvp.norm_units == norm_units
+    # only the scalar's integration grid differs from pspec's (num_steps)
+    np.testing.assert_allclose(uvp.scalar_array, old.scalar_array, rtol=1e-4)
+    for spw in uvp.spw_array:
+        np.testing.assert_allclose(
+            uvp.data_array[spw], old.data_array[spw], rtol=1e-4, atol=0
+        )
+    # the scalar is in the object's own length unit
+    length_unit = LITTLEH_LENGTH if name == "littleh" else units.Mpc
+    for spw in uvp.spw_array:
+        np.testing.assert_array_equal(
+            uvp.scalar_array[spw, 0],
+            uvp.compute_scalar(
+                spw, uvp.polpair_array[0], length_unit=length_unit
+            ).to_value(length_unit**3 / (units.Hz * units.sr)),
+        )
+
+
+def test_set_cosmology_new_cosmology(
+    set_cosmology_uvps: dict[str, uvpspec.UVPSpec],
+) -> None:
+    """A new cosmology rescales the data by the scalar ratio, consistently
+    for littleh and Mpc objects."""
+    new_cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+    h_ratio = new_cosmo.h / conversions.DEFAULT_COSMOLOGY.h
+    ratios = {}
+    for name, original in set_cosmology_uvps.items():
+        uvp = copy.deepcopy(original)
+        uvp.set_cosmology(new_cosmo, overwrite=True, verbose=False)
+        assert uvp.norm_units == original.norm_units
+        ratios[name] = uvp.scalar_array / original.scalar_array
+        for spw in uvp.spw_array:
+            np.testing.assert_allclose(
+                uvp.data_array[spw],
+                original.data_array[spw] * ratios[name][spw],
+                rtol=1e-12,
+            )
+    # P in Mpc3 / littleh3 is P in Mpc3 times h^3
+    np.testing.assert_allclose(ratios["littleh"], ratios["mpc"] * h_ratio**3, rtol=1e-4)
+
+
+@pytest.mark.parametrize("form", ["astropy", "dict", "cosmo_conversions"])
+def test_set_cosmology_forms(mutable_uvp_with_beam: uvpspec.UVPSpec, form: str) -> None:
+    """set_cosmology takes an astropy object, a params dict or (deprecated) a
+    Cosmo_Conversions, and always stores an astropy object."""
+    uvp = mutable_uvp_with_beam
+    target = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
+    expected = copy.deepcopy(uvp)
+    expected.set_cosmology(target, overwrite=True, verbose=False)
+    if form == "astropy":
+        uvp.set_cosmology(target, overwrite=True, verbose=False)
+    elif form == "dict":
+        uvp.set_cosmology(
+            conversions.params_from_cosmology(target), overwrite=True, verbose=False
+        )
+    else:
+        with pytest.warns(DeprecationWarning):
+            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
+        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+            uvp.set_cosmology(old, overwrite=True, verbose=False)
+    assert isinstance(uvp.cosmo, FLRW)
+    assert uvp.cosmo.is_equivalent(target)
+    np.testing.assert_allclose(uvp.scalar_array, expected.scalar_array, rtol=1e-14)
+
+
+def test_cosmo_conversions_attribute_deprecated(vanilla_uvp: uvpspec.UVPSpec) -> None:
+    """A Cosmo_Conversions assigned to uvp.cosmo still works, with a warning,
+    and check() converts it to astropy."""
+    uvp = copy.deepcopy(vanilla_uvp)
+    # Cosmo_Conversions() is the v0.x default cosmology
+    expected = copy.deepcopy(vanilla_uvp)
+    expected.cosmo = conversions.LEGACY_COSMOLOGY
+    with pytest.warns(DeprecationWarning):
+        uvp.cosmo = conversions.Cosmo_Conversions()
+    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+        kperps = uvp.get_kperps(0)
+    np.testing.assert_allclose(kperps, expected.get_kperps(0), rtol=1e-15)
+    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
+        uvp.check()
+    assert isinstance(uvp.cosmo, FLRW)
+    assert uvp == expected
+    uvp.cosmo = [1.0]
+    with pytest.raises(AssertionError, match="cosmo"):
+        uvp.check()
+
+
+def test_eq_compares_cosmology_parameters(vanilla_uvp: uvpspec.UVPSpec) -> None:
+    """UVPSpec equality compares the cosmological parameters, not the name."""
+    # a cosmology without radiation, which its params dict represents exactly
+    legacy = copy.deepcopy(vanilla_uvp)
+    legacy.cosmo = conversions.LEGACY_COSMOLOGY
+    uvp = copy.deepcopy(legacy)
+    uvp.cosmo = conversions.cosmology_from_params(
+        conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
+    )
+    assert uvp.cosmo.name != conversions.LEGACY_COSMOLOGY.name
+    assert uvp == legacy
+    uvp.cosmo = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7)
+    assert uvp != legacy
 
 
 @pytest.fixture
@@ -1579,16 +2499,18 @@ class TestCombineUvpspecStd:
 
 
 class TestRecursiveCombineUvpspec:
-    @parametrize_with_cases("uvp", cases=".")
-    def test_single(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_single(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with a single UVPSpec object."""
+        uvp = request.getfixturevalue(uvp_name)
         uvps_list = [copy.deepcopy(uvp)]
         combined_recursive = uvpspec.recursive_combine_uvpspec(uvps_list)
         assert_uvpspec_equal(combined_recursive, uvp)
 
-    @parametrize_with_cases("uvp", cases=".")
-    def test_pair(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_pair(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with a pair of UVPSpec objects."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp_copy = copy.deepcopy(uvp)
         uvp_copy.polpair_array[0] = 1414  # Slight modification for differentiation
         uvps_list = [uvp, uvp_copy]
@@ -1600,9 +2522,10 @@ class TestRecursiveCombineUvpspec:
 
         assert_uvpspec_equal(combined_recursive, combined_standard)
 
-    @parametrize_with_cases("uvp", cases=".")
-    def test_multiple(self, uvp: uvpspec.UVPSpec) -> None:
+    @pytest.mark.parametrize("uvp_name", ALL_UVPS)
+    def test_multiple(self, uvp_name: str, request: pytest.FixtureRequest) -> None:
         """Test recursive_combine_uvpspec with multiple UVPSpec objects."""
+        uvp = request.getfixturevalue(uvp_name)
         uvp1 = copy.deepcopy(uvp)
         uvp2 = copy.deepcopy(uvp)
         uvp2.polpair_array[0] = 1414
@@ -1636,16 +2559,29 @@ def test_backwards_compatibility_read() -> None:
     # test read in of a static test file dated 8/2019
     uvp = uvpspec.UVPSpec()
     uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
-    for dattr in uvp._meta_deprecated:
-        with pytest.raises(AttributeError) as excinfo:
-            raise AttributeError("'UVPSpec' object has no attribute")
-        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
-    for dattr in uvp._meta_dsets_deprecated:
-        with pytest.raises(AttributeError) as excinfo:
-            raise AttributeError("'UVPSpec' object has no attribute")
-        assert "'UVPSpec' object has no attribute" in str(excinfo.value)
+    # deprecated attributes stored in the old file are not loaded
+    assert len(uvp._meta_deprecated) > 0
+    for dattr in uvp._meta_deprecated + uvp._meta_dsets_deprecated:
+        with pytest.raises(AttributeError, match="'UVPSpec' object has no attribute"):
+            getattr(uvp, dattr)
     # assert check does not fail
     uvp.check()
+
+
+def test_read_keeps_channel_width_param(tmp_path: Path) -> None:
+    """Reading must not replace the channel_width PSpecParam with an array."""
+    uvp = uvpspec.UVPSpec()
+    uvp.read_hdf5(DATA_PATH / "test_uvp.h5")
+    assert isinstance(uvp._channel_width, parameter.PSpecParam)
+    assert uvp.get_param_unit("channel_width") == units.Hz
+    # the 2019 file stores a scalar channel_width
+    np.testing.assert_array_equal(uvp.channel_width, [1562500.0])
+    # a read object can be written and read back
+    out = tmp_path / "rewritten.h5"
+    uvp.write_hdf5(out)
+    uvp2 = uvpspec.UVPSpec()
+    uvp2.read_hdf5(out)
+    assert uvp == uvp2
 
 
 def test_add_approximate_cov() -> None:

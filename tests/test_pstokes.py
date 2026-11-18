@@ -17,14 +17,6 @@ multipol_dset = DATA_PATH / "zen.2458116.31193.HH.uvh5"
 multipol_dset_cal = DATA_PATH / "zen.2458116.31193.HH.flagged_abs.calfits"
 
 
-def _load_uvd(path: str) -> pyuvdata.UVData:
-    uvd = pyuvdata.UVData()
-    uvd.read_miriad(path)
-    uvd.vis_units = "Jy"
-    uvd.pol_convention = "avg"
-    return uvd
-
-
 @pytest.fixture()
 def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
     uvd = copy.deepcopy(uvd_zen_all_xx)
@@ -34,8 +26,11 @@ def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
 
 
 @pytest.fixture()
-def uvd2() -> pyuvdata.UVData:
-    return _load_uvd(dset2)
+def uvd2(uvd_zen_all_yy: pyuvdata.UVData) -> pyuvdata.UVData:
+    uvd = copy.deepcopy(uvd_zen_all_yy)
+    uvd.vis_units = "Jy"
+    uvd.pol_convention = "avg"
+    return uvd
 
 
 @pytest.fixture(scope="module")
@@ -276,7 +271,12 @@ class TestConstructPstokes:
     def test_dual_pol_input(self, uvd1: pyuvdata.UVData, uvd2: pyuvdata.UVData) -> None:
         """Check that pI can be constructed from a single dual-polarization UVData object."""
         uvd3 = uvd1 + uvd2
-        pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes="pI")
+        uvdI = pstokes.construct_pstokes(dset1=uvd3, dset2=uvd3, pstokes="pI")
+        # same as constructing it from the two single-polarization objects
+        uvdI_ref = pstokes.construct_pstokes(dset1=uvd1, dset2=uvd2, pstokes="pI")
+        np.testing.assert_array_equal(uvdI.polarization_array, [1])
+        np.testing.assert_allclose(uvdI.data_array, uvdI_ref.data_array)
+        np.testing.assert_array_equal(uvdI.flag_array, uvdI_ref.flag_array)
 
     def test_raises_when_same_polarization_used_twice(
         self, uvd1: pyuvdata.UVData
@@ -322,12 +322,3 @@ def test_filter_dset_on_stokes_pol(
     dsets = [uvd2, uvd1]
     out2 = pstokes.filter_dset_on_stokes_pol(dsets, "pI")
     assert out == out2
-
-
-def test_generate_pstokes_argparser() -> None:
-    """Check that the pstokes argparser correctly parses input/output/pstokes/clobber arguments."""
-    ap = pstokes.generate_pstokes_argparser()
-    args = ap.parse_args(["input.uvh5", "--pstokes", "pI", "pQ", "--clobber"])
-    assert args.inputdata == "input.uvh5"
-    assert args.outputdata is None
-    assert args.clobber

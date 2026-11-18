@@ -34,11 +34,11 @@ def uvd_dual_pol(uvd_zen_even_xx: UVData) -> UVData:
 
 class TestBuildVanillaUvpspec:
     def test_default(self) -> None:
-        """Check that build_vanilla_uvpspec returns a UVPSpec/Cosmo_Conversions pair with the cosmology attached."""
+        """Check that build_vanilla_uvpspec returns a UVPSpec/cosmology pair with the cosmology attached."""
         uvp, cosmo = testing.build_vanilla_uvpspec()
         assert isinstance(uvp, uvpspec.UVPSpec)
-        assert isinstance(cosmo, conversions.Cosmo_Conversions)
-        assert uvp.cosmo == cosmo
+        assert cosmo is conversions.DEFAULT_COSMOLOGY
+        assert uvp.cosmo is cosmo
 
     def test_with_beam(self, beam_nf_dipole: PSpecBeamUV) -> None:
         """Check that the OmegaP array on the output UVPSpec matches the supplied beam's Omegas."""
@@ -186,6 +186,14 @@ class TestNoiseSim:
             inplace=False,
         )
         assert uvn.vis_units == "Jy"
+
+    def test_file_path_input(self, uvd_zen_even_xx: UVData) -> None:
+        """Check that a miriad file path gives the same noise as the equivalent UVData."""
+        uvn = testing.noise_sim(FNAME, 300.0, seed=0, whiten=True, inplace=False)
+        uvn2 = testing.noise_sim(
+            uvd_zen_even_xx, 300.0, seed=0, whiten=True, inplace=False
+        )
+        assert uvn == uvn2
 
     def test_tsys_scaling(self, uvd_dual_pol: UVData) -> None:
         """Check that doubling Tsys doubles the simulated noise amplitude."""

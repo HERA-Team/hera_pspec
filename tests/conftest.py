@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from astropy.cosmology import FLRW
 from astropy.utils import iers
 from pyuvdata import UVData
 
@@ -29,13 +30,14 @@ def pytest_configure(config):
 
 
 @pytest.fixture(scope="session")
-def cosmo() -> conversions.Cosmo_Conversions:
-    return conversions.Cosmo_Conversions()
+def cosmo() -> FLRW:
+    """The default cosmology (Planck18), as a separate (equal) astropy object."""
+    return copy.deepcopy(conversions.DEFAULT_COSMOLOGY)
 
 
 @pytest.fixture(scope="session")
-def beam_nf_dipole_wcosmo(cosmo: conversions.Cosmo_Conversions) -> PSpecBeamUV:
-    """PSpecBeamUV for HERA NF dipole with a Cosmo_Conversions instance wired in."""
+def beam_nf_dipole_wcosmo(cosmo: FLRW) -> PSpecBeamUV:
+    """PSpecBeamUV for HERA NF dipole with an astropy cosmology wired in."""
     beamfile = DATA_PATH / "HERA_NF_dipole_power.beamfits"
     return PSpecBeamUV(str(beamfile), cosmo=cosmo)
 
@@ -50,6 +52,12 @@ def beam_nf_dipole() -> PSpecBeamUV:
 def beam_nf_pstokes() -> PSpecBeamUV:
     beamfile = DATA_PATH / "HERA_NF_pstokes_power.beamfits"
     return PSpecBeamUV(beamfile)
+
+
+@pytest.fixture(scope="session")
+def beam_nf_efield() -> PSpecBeamUV:
+    """PSpecBeamUV for the HERA NF efield beam. Tests that modify it must deepcopy it."""
+    return PSpecBeamUV(DATA_PATH / "HERA_NF_efield.beamfits")
 
 
 @pytest.fixture(scope="session")
@@ -109,7 +117,7 @@ def uvp_example_data(uvd_zen_2458116: UVData) -> UVPSpec:
         taper="bh",
         verbose=False,
     )
-    uvp.cosmo = conversions.Cosmo_Conversions()
+    uvp.cosmo = conversions.DEFAULT_COSMOLOGY
     return uvp
 
 
@@ -148,12 +156,9 @@ def uvp_exact_wfs_wbeam(
         taper="bh",
         verbose=False,
     )
-    # uvp.cosmo = conversions.Cosmo_Conversions()
     ft_file = DATA_PATH / "FT_beam_HERA_dipole_test"
 
     uvp.get_exact_window_functions(ftbeam=ft_file, inplace=True)
-    # uvp.beam_freqs = beam_nf_dipole_wcosmo.beam_freqs
-    # uvp.OmegaP, uvp.OmegaPP = beam_nf_dipole_wcosmo.get_Omegas(uvp.polpair_array)
     uvp.check()
     return uvp
 
@@ -179,6 +184,14 @@ def uvd_zen_all_xx() -> UVData:
     """Session-cached UVData from zen.all.xx.LST.1.06964.uvA."""
     uvd = UVData()
     uvd.read_miriad(str(DATA_PATH / "zen.all.xx.LST.1.06964.uvA"))
+    return uvd
+
+
+@pytest.fixture(scope="session")
+def uvd_zen_all_yy() -> UVData:
+    """Session-cached UVData from zen.all.yy.LST.1.06964.uvA."""
+    uvd = UVData()
+    uvd.read_miriad(str(DATA_PATH / "zen.all.yy.LST.1.06964.uvA"))
     return uvd
 
 
