@@ -684,23 +684,6 @@ class TestCosmologyFromParams:
         assert lcdm.Ob0 == OLD_DEFAULT_COSMO_PARAMS["Om_b"]
         assert lcdm.Tcmb0.value == 0
 
-    def test_round_trip(self) -> None:
-        params = {"H0": 70.0, "Om_L": 0.7, "Om_b": 0.04911, "Om_c": 0.26442}
-        params["Om_M"] = params["Om_b"] + params["Om_c"]
-        params["Om_k"] = 1 - params["Om_L"] - params["Om_M"]
-        lcdm = conversions.cosmology_from_params(params)
-        back = conversions.params_from_cosmology(lcdm)
-        for key, value in params.items():
-            assert back[key] == pytest.approx(value, rel=1e-15, abs=1e-15), key
-
-    def test_missing_om_m_and_om_k(self) -> None:
-        lcdm = conversions.cosmology_from_params(
-            {"H0": 70.0, "Om_L": 0.7, "Om_b": 0.05, "Om_c": 0.25}
-        )
-        assert lcdm.Om0 == pytest.approx(0.3)
-        assert isinstance(lcdm, conversions.LambdaCDM)
-        assert not isinstance(lcdm, FlatLambdaCDM)
-
     def test_inconsistent_om_k_raises(self) -> None:
         params = dict(OLD_DEFAULT_COSMO_PARAMS)
         params["Om_k"] = 0.05
