@@ -32,7 +32,7 @@ import astropy.units as u
 import numpy as np
 import pytest
 from astropy import constants
-from astropy.cosmology import FlatLambdaCDM, LambdaCDM
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM, Planck18
 from hypothesis import assume, example, given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
@@ -49,6 +49,7 @@ from hera_pspec import (
     pspecbeam,
     pstokes,
     testing,
+    unit_helpers,
     utils,
     uvwindow,
 )
@@ -88,7 +89,8 @@ def cosmologies(draw, flat: bool = False) -> LambdaCDM:
 any_cosmologies = st.one_of(cosmologies(), cosmologies(flat=True))
 redshifts = st.floats(0.01, 20.0)
 LITTLEH_MPC = u.Mpc / cu.littleh
-length_units = st.sampled_from([u.Mpc, LITTLEH_MPC])
+LENGTH_UNITS = [u.Mpc, LITTLEH_MPC]
+length_units = st.sampled_from(LENGTH_UNITS)
 
 
 class TestCosmology:
@@ -209,6 +211,278 @@ class TestCosmology:
             np.testing.assert_allclose(
                 params[key], value, rtol=1e-5, atol=1e-12, err_msg=key
             )
+
+
+PARAM_KEYS = ["Om_L", "Om_b", "Om_c", "Om_M", "Om_k", "H0"]
+
+
+def full_params(Om_L: float, Om_b: float, Om_c: float, H0: float) -> dict:
+    """A hera_pspec cosmology dictionary, with Om_M = Om_b + Om_c and the
+    curvature Om_k = 1 - Om_L - Om_M."""
+    Om_M = Om_b + Om_c
+    return {
+        "Om_L": Om_L,
+        "Om_b": Om_b,
+        "Om_c": Om_c,
+        "Om_M": Om_M,
+        "Om_k": 1 - Om_L - Om_M,
+        "H0": H0,
+    }
+
+
+# Dictionaries that astropy can represent: Om_L in [0, 1] (so open, flat and
+# closed models), Om_b in (0, 0.2], Om_c in [0, 0.4] and H0 in [50, 100].
+cosmology_params = st.builds(
+    full_params,
+    Om_L=st.floats(0.0, 1.0),
+    Om_b=st.floats(1e-3, 0.2),
+    Om_c=st.floats(0.0, 0.4),
+    H0=st.floats(50.0, 100.0),
+)
+
+
+@st.composite
+def cosmology_kwargs(draw) -> tuple:
+    """The class and parameters of a cosmology drawn like cosmologies(), with
+    a baryon density Ob0 between 0.01 Om0 and Om0, or without one (astropy's
+    default). Building a cosmology takes ~15 ms, so the tests build as few as
+    they can."""
+    flat = draw(st.booleans())
+    kwargs = {
+        "H0": draw(st.floats(50.0, 100.0)),
+        "Om0": draw(st.floats(0.1, 0.5)),
+        "Tcmb0": draw(st.sampled_from([0.0, 2.7255])),
+    }
+    if not flat:
+        kwargs["Ode0"] = draw(st.one_of(st.just(0.0), st.floats(1e-10, 1.0)))
+    baryon_fraction = draw(st.one_of(st.none(), st.floats(0.01, 1.0)))
+    if baryon_fraction is not None:
+        kwargs["Ob0"] = baryon_fraction * kwargs["Om0"]
+    return (FlatLambdaCDM if flat else LambdaCDM), kwargs
+
+
+def build_cosmology(cls_and_kwargs: tuple):
+    """Build a cosmology drawn by cosmology_kwargs()."""
+    cls, kwargs = cls_and_kwargs
+    return cls(**kwargs)
+
+
+class TestCosmologyParams:
+    @settings(max_examples=15)
+    @given(
+        params=cosmology_params,
+        drop=st.sets(st.sampled_from(["Om_M", "Om_k"])),
+        none_or_missing=st.booleans(),
+    )
+    @example(
+        params=full_params(Om_L=0.7, Om_b=0.04911, Om_c=0.26442, H0=70.0),
+        drop=set(),
+        none_or_missing=False,
+    )
+    @example(
+        params=full_params(Om_L=0.7, Om_b=0.05, Om_c=0.25, H0=70.0),
+        drop={"Om_M", "Om_k"},
+        none_or_missing=False,
+    )
+    def test_params_round_trip(
+        self, params: dict, drop: set, none_or_missing: bool
+    ) -> None:
+        """A dictionary converts to an astropy LambdaCDM without radiation
+        (not a flat one, even when the curvature is zero) that gives the same
+        dictionary back. Om_M (taken as Om_b + Om_c) and Om_k (only checked)
+        may be missing or None; equal dictionaries give one shared cosmology."""
+        given_params = dict(params)
+        for key in drop:
+            if none_or_missing:
+                given_params[key] = None
+            else:
+                del given_params[key]
+        cosmo = conversions.cosmology_from_params(given_params)
+        assert type(cosmo) is LambdaCDM
+        assert cosmo.Tcmb0.value == 0
+        back = conversions.params_from_cosmology(cosmo)
+        assert list(back) == PARAM_KEYS
+        for key, value in params.items():
+            assert back[key] == pytest.approx(value, rel=1e-15, abs=1e-15), key
+        shared = conversions.as_astropy_cosmology(given_params)
+        assert conversions.as_astropy_cosmology(dict(given_params)) is shared
+        assert shared.is_equivalent(cosmo)
+
+    @given(
+        params=cosmology_params,
+        Om_k_offset=st.one_of(st.floats(-1.0, -2e-12), st.floats(2e-12, 1.0)),
+        Om_b=st.one_of(st.floats(-1.0, -1e-12), st.floats(0.5 + 1e-12, 1.0)),
+    )
+    def test_params_astropy_cannot_represent(
+        self, params: dict, Om_k_offset: float, Om_b: float
+    ) -> None:
+        """astropy derives the curvature from the matter and dark energy
+        densities, so a dictionary whose Om_k does not add up is rejected;
+        so is a baryon density that is negative or larger than Om_M."""
+        inconsistent = dict(params, Om_k=params["Om_k"] + Om_k_offset)
+        with pytest.raises(ValueError, match="Om_k"):
+            conversions.cosmology_from_params(inconsistent)
+        bad_baryons = dict(params, Om_b=Om_b, Om_M=0.5, Om_k=None)
+        with pytest.raises(ValueError, match="Om_b"):
+            conversions.cosmology_from_params(bad_baryons)
+
+    @settings(max_examples=15)
+    @given(cosmo=st.one_of(st.just(Planck18), cosmology_kwargs().map(build_cosmology)))
+    def test_params_from_cosmology(self, cosmo) -> None:
+        """The dictionary of an astropy cosmology holds its H0 and its matter,
+        dark energy and baryon densities (without a baryon density, Om_M is
+        split by the fixed fractions of Cosmo_Conversions), and the curvature
+        that makes them add up to one. It has no radiation term: rebuilt from
+        the dictionary, the cosmology has the same parameters but no
+        radiation, whose density is now curvature. A dictionary of a
+        cosmology rebuilt from a dictionary is that dictionary."""
+        params = conversions.params_from_cosmology(cosmo)
+        assert list(params) == PARAM_KEYS
+        assert all(type(value) is float for value in params.values())
+        assert params["H0"] == cosmo.H0.to_value(u.km / u.s / u.Mpc)
+        assert params["Om_M"] == cosmo.Om0
+        assert params["Om_L"] == cosmo.Ode0
+        if cosmo.Ob0:
+            assert params["Om_b"] == cosmo.Ob0
+            np.testing.assert_allclose(
+                params["Om_b"] + params["Om_c"], params["Om_M"], rtol=1e-15
+            )
+        else:
+            assert params["Om_b"] == cosmo.Om0 * 0.156635
+            assert params["Om_c"] == cosmo.Om0 * 0.843364
+        np.testing.assert_allclose(
+            params["Om_L"] + params["Om_M"] + params["Om_k"], 1.0, rtol=1e-15
+        )
+
+        rebuilt = conversions.cosmology_from_params(params)
+        assert rebuilt.H0 == cosmo.H0
+        assert rebuilt.Om0 == cosmo.Om0
+        assert rebuilt.Ode0 == cosmo.Ode0
+        assert rebuilt.Ob0 == params["Om_b"]
+        assert rebuilt.Tcmb0.value == 0
+        radiation = cosmo.Ogamma0 + cosmo.Onu0
+        np.testing.assert_allclose(
+            rebuilt.Ok0, cosmo.Ok0 + radiation, rtol=0, atol=1e-15
+        )
+        if cosmo.Ob0 and cosmo.Tcmb0.value == 0:
+            assert rebuilt.is_equivalent(cosmo)
+        if cosmo.Ob0:
+            assert conversions.params_from_cosmology(rebuilt) == params
+
+
+# The distance helpers that cache their results by redshift.
+CACHED_HELPERS = [
+    conversions.dRperp_dtheta,
+    conversions.dRpara_df,
+    conversions.bl_to_kperp,
+    conversions.tau_to_kpara,
+]
+
+
+# A changed value of each cosmological parameter.
+CHANGED = {
+    "H0": lambda kwargs: 1.1 * kwargs["H0"],
+    "Om0": lambda kwargs: 1.1 * kwargs["Om0"] + 0.01,
+    "Ode0": lambda kwargs: 1.1 * kwargs["Ode0"] + 0.01,
+    "Tcmb0": lambda kwargs: kwargs["Tcmb0"] + 0.5,
+    "Ob0": lambda kwargs: 0.5 * kwargs.get("Ob0", kwargs["Om0"]),
+}
+
+
+@st.composite
+def related_cosmologies(draw, all_changes: bool = False) -> list:
+    """A drawn cosmology, the same cosmology under another name, and the
+    cosmology with one parameter changed (only the changed parameter tells
+    it apart, which is what a cache keyed on the cosmology must notice);
+    with all_changes, one such cosmology for each parameter."""
+    cls, kwargs = draw(cosmology_kwargs())
+    # a flat cosmology has no Ode0 parameter (it is 1 - Om0 - radiation)
+    names = [name for name in CHANGED if name in kwargs or name == "Ob0"]
+    if not all_changes:
+        names = [draw(st.sampled_from(names))]
+    return [cls(**kwargs), cls(**kwargs, name="renamed")] + [
+        cls(**dict(kwargs, **{name: CHANGED[name](kwargs)})) for name in names
+    ]
+
+
+# The cosmology of hera_pspec v0.x, the same under another name, the same with
+# radiation (which leaves its parameter dictionary unchanged) and the same with
+# another dark energy density.
+LEGACY_PARAMS = {"H0": 67.27, "Om0": 0.31353, "Ode0": 0.6844, "Ob0": 0.04911}
+LEGACY_COSMOLOGIES = [
+    conversions.LEGACY_COSMOLOGY,
+    LambdaCDM(**LEGACY_PARAMS, name="renamed"),
+    LambdaCDM(**LEGACY_PARAMS, Tcmb0=2.7255, name="hera_pspec_default"),
+    LambdaCDM(**dict(LEGACY_PARAMS, Ode0=0.7)),
+]
+
+
+class TestCosmologyCaches:
+    @settings(max_examples=6)
+    @given(
+        cosmos=related_cosmologies(all_changes=True),
+        z=st.one_of(
+            redshifts, arrays(np.float64, st.integers(1, 5), elements=redshifts)
+        ),
+    )
+    @example(cosmos=LEGACY_COSMOLOGIES, z=8.0)
+    @example(cosmos=LEGACY_COSMOLOGIES, z=np.array([6.0, 8.0, 10.0]))
+    def test_cache_matches_uncached(self, cosmos: list, z) -> None:
+        """The distance helpers cache their results by redshift, cosmology
+        and length unit. Called in turn with the default arguments (Planck18
+        and h^-1 Mpc), and with Planck18, a drawn cosmology, the same one
+        under another name and ones that differ from it in a single
+        parameter, each in both length units, every call gives exactly what
+        the uncached helper gives; changing a returned value in place does
+        not change later results; and an array of redshifts gives the values
+        of each redshift on its own. Cosmologies share cache entries when
+        they are the same model with the same parameters, whatever their
+        names, and only then."""
+        cosmo, renamed, *changed = cosmos
+        key = conversions._CosmologyKey(cosmo)
+        assert key == conversions._CosmologyKey(renamed)
+        assert hash(key) == hash(conversions._CosmologyKey(renamed))
+        for other in changed:
+            assert key != conversions._CosmologyKey(other)
+            assert not other.is_equivalent(cosmo)
+
+        calls = [()] + [
+            (each, unit)
+            for each in [conversions.DEFAULT_COSMOLOGY, *cosmos]
+            for unit in LENGTH_UNITS
+        ]
+        for helper in CACHED_HELPERS:
+            for args in calls * 2:
+                expected = helper.__wrapped__(z, *args)
+                result = helper(z, *args)
+                assert result.unit == expected.unit
+                np.testing.assert_array_equal(result.value, expected.value)
+                result *= 2
+            if np.ndim(z):
+                for args in calls:
+                    np.testing.assert_allclose(
+                        helper(z, *args).value,
+                        [helper(zz, *args).value for zz in z],
+                        rtol=1e-14,
+                    )
+
+    @settings(max_examples=5)
+    @given(cosmos=related_cosmologies())
+    @example(cosmos=LEGACY_COSMOLOGIES)
+    def test_cosmo_attrs_for_writing(self, cosmos: list) -> None:
+        """The HDF5 attributes written for a cosmology (cached) are its
+        parameter dictionary and its YAML, which reads back as the same
+        cosmology; also after writing a cosmology that only differs in a
+        parameter the dictionary does not hold (here the CMB temperature of
+        the v0.x cosmology)."""
+        for cosmo in cosmos * 2:
+            params, yaml = unit_helpers.cosmo_attrs_for_writing(cosmo)
+            assert params == str(conversions.params_from_cosmology(cosmo))
+            assert yaml == cosmo.to_format("yaml")
+            read = unit_helpers.cosmology_from_yaml(yaml)
+            assert type(read) is type(cosmo)
+            assert read.name == cosmo.name
+            assert read.is_equivalent(cosmo)
 
 
 class TestNoise:
