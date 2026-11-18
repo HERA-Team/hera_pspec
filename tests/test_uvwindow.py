@@ -778,15 +778,14 @@ class TestUVWindowFromUvpspec:
     def test_kunits_follow_norm_units(
         self,
         uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec],
+        ft_beam_spw: uvwindow.FTBeam,
         norm_units: str,
         kunits,
     ) -> None:
         uvp = copy.deepcopy(uvp_for_uvwindow[0])
         uvp.norm_units = norm_units
         assert uvp.window_k_unit() == kunits
-        uvw = uvwindow.UVWindow.from_uvpspec(
-            uvp, ipol=0, spw=0, ftbeam=DATA_PATH / basename
-        )
+        uvw = uvwindow.UVWindow.from_uvpspec(uvp, ipol=0, spw=0, ftbeam=ft_beam_spw)
         assert uvw.kunits == kunits
         assert uvw.get_kpara_bins(uvw.freq_array * units.Hz).unit == kunits
 
