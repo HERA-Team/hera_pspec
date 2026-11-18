@@ -2207,3 +2207,48 @@ class TestUVWindowPhysics:
             DM = conversions.dRperp_dtheta(uvw.avg_z, uvw.cosmo, 1 / uvw.kunits)
             expected = (1 / (np.radians(width) * DM * units.rad)).to_value(uvw.kunits)
             np.testing.assert_allclose(spread, expected, rtol=0.1)
+
+    @pytest.mark.xfail(
+        strict=True,
+        raises=AssertionError,
+        reason=(
+            "The half-width of the k_perp grid of UVWindow._get_kgrid (0.02) is "
+            "a number in the k unit of the object, so the grid, the window "
+            "function and the default k_perp bins differ physically between "
+            "1 / Mpc and h / Mpc"
+        ),
+    )
+    def test_window_function_does_not_depend_on_k_unit(self) -> None:
+        """The window function says which physical modes (k_perp, k_para) a
+        delay probes, so computed in 1 / Mpc (little_h=False) it is the window
+        function computed in h / Mpc, on the same bins expressed in 1 / Mpc."""
+        ftbeam = uvwindow.FTBeam.gaussian(
+            freq_array=FT_FREQS * units.Hz, widths=7.0 * units.deg, pol="xx", npix=151
+        )
+        uvw_h, uvw_mpc = (
+            uvwindow.UVWindow(
+                ftbeam_obj=ftbeam, taper="blackman-harris", little_h=little_h
+            )
+            for little_h in [True, False]
+        )
+        to_mpc = cu.with_H0(uvw_h.cosmo.H0)
+        bl_lens = units.Quantity([self.BL_LEN])
+        kperp_h = uvw_h.get_kperp_bins(bl_lens)
+        kpara_h = uvw_h.get_kpara_bins(FT_FREQS * units.Hz)
+        kperp_mpc = kperp_h.to(1 / units.Mpc, equivalencies=to_mpc)
+        kpara_mpc = kpara_h.to(1 / units.Mpc, equivalencies=to_mpc)
+        np.testing.assert_allclose(
+            uvw_mpc.get_kpara_bins(FT_FREQS * units.Hz).value,
+            kpara_mpc.value,
+            rtol=1e-12,
+        )
+        wf_h = uvw_h.get_cylindrical_wf(
+            self.BL_LEN, kperp_bins=kperp_h, kpara_bins=kpara_h
+        )
+        wf_mpc = uvw_mpc.get_cylindrical_wf(
+            self.BL_LEN, kperp_bins=kperp_mpc, kpara_bins=kpara_mpc
+        )
+        np.testing.assert_allclose(wf_mpc, wf_h, rtol=0, atol=1e-10)
+        np.testing.assert_allclose(
+            uvw_mpc.get_kperp_bins(bl_lens).value, kperp_mpc.value, rtol=1e-12
+        )
