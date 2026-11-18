@@ -17,11 +17,21 @@ make sure that the tolerances are not tuned to a lucky draw.
 
 import copy
 
+import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
 import pytest
 
-from hera_pspec import PSpecBeamGauss, PSpecData, UVPSpec, grouping, testing, utils
+from hera_pspec import (
+    PSpecBeamFromArray,
+    PSpecBeamGauss,
+    PSpecData,
+    UVPSpec,
+    conversions,
+    grouping,
+    testing,
+    utils,
+)
 from hera_pspec.uvpspec import combine_uvpspec
 
 # Number of standard errors allowed between a sample mean and its expectation.
@@ -65,6 +75,54 @@ def untapered_scalar(white_noise_uvd, gauss_beam) -> float:
     ds.set_spw((0, NFREQ))
     # in h^-3 Mpc^3 / (Hz sr), the default unit of pspec's scalar
     return ds.scalar(("xx", "xx"), taper_override="none").value
+
+
+@pytest.fixture(scope="module")
+def chromatic_beam() -> PSpecBeamFromArray:
+    """Gaussian power beam of a fixed aperture, whose width scales as 1 / nu.
+
+    Its width is sigma = 0.085 rad at 150 MHz, so Omega_p = 2 pi sigma^2 and
+    Omega_pp = pi sigma^2 change by ~2% across the band of the synthetic data.
+    """
+    freqs = np.linspace(140e6, 170e6, 100)
+    sigma = 0.085 * 150e6 / freqs
+    return PSpecBeamFromArray(
+        {"xx": 2 * np.pi * sigma**2 * u.sr},
+        {"xx": np.pi * sigma**2 * u.sr},
+        freqs * u.Hz,
+    )
+
+
+@pytest.fixture(scope="module")
+def flat_spectrum_uvd(synthetic_uvd, chromatic_beam):
+    """Noise with a flat power spectrum, P(k) = 1 (visibility unit)^2 h^-3 Mpc^3,
+    on one baseline, NFREQ channels x NTIMES integrations.
+
+    In the response model of the one-step normalization, the band powers of a
+    flat P(k) add up to the visibility covariance C = diag(w) / dnu, with
+    w = (Omega_pp / Omega_p^2) / X2Y the inverse of the comoving volume per
+    unit bandwidth seen by the beam (tests/test_one_step.py,
+    TestFlatSpectrumExpectation, checks that one-step gives exactly 1 for this
+    covariance). The weights are computed here from the analytic beam and
+    conversions.X2Y, independently of hera_pspec.response.
+    """
+    probe = synthetic_uvd(nfreq=NFREQ, ntimes=1, antpairs=[(0, 1)])
+    freqs = probe.freq_array.ravel()
+    dnu = np.median(np.diff(freqs))
+    sigma = 0.085 * 150e6 / freqs
+    omega_ratio = (np.pi * sigma**2) / (2 * np.pi * sigma**2) ** 2
+    length_unit = u.Mpc / cu.littleh
+    x2y = conversions.X2Y(
+        conversions.f2z(freqs), chromatic_beam.cosmo, length_unit
+    ).to_value(length_unit**3 / (u.sr * u.Hz))
+    weights = omega_ratio / x2y
+    return synthetic_uvd(
+        nfreq=NFREQ,
+        ntimes=NTIMES,
+        antpairs=[(0, 1)],
+        freq_cov=np.diag(weights / dnu),
+        seed=NOISE_SEED,
+    )
 
 
 def auto_pspec(uvd, beam, **kwargs) -> UVPSpec:
@@ -118,7 +176,14 @@ XFAIL_H_FEWER_DELAYS_SAMPLING = pytest.mark.xfail(
 
 
 def _fewer_delays_cases():
-    """(norm, taper, sampling) cases with n_dlys < Nfreqs and their known failures."""
+    """(normalization, norm, taper, sampling, n_dlys) cases with n_dlys < Nfreqs
+    and the known failures of the two-step normalization.
+
+    One-step is run with top-hat delay bins only (sampling=False): these tile
+    the delay axis, so a flat P(k) is white noise for any n_dlys. Delta-function
+    bins (sampling=True) with n_dlys < Nfreqs repeat every n_dlys channels, so
+    a flat P(k) of that model is not white noise and the test does not apply.
+    """
     cases = []
     for norm in ["I", "H^-1", "V^-1/2"]:
         for taper in ["none", "bh"]:
@@ -133,13 +198,26 @@ def _fewer_delays_cases():
                     marks = []
                 cases.append(
                     pytest.param(
+                        "two-step",
                         norm,
                         taper,
                         sampling,
+                        NFREQ // 4,
                         marks=marks,
-                        id=f"{norm}-{taper}-sampling_{sampling}",
+                        id=f"two-step-{norm}-{taper}-sampling_{sampling}",
                     )
                 )
+            cases.extend(
+                pytest.param(
+                    "one-step",
+                    norm,
+                    taper,
+                    False,
+                    n_dlys,
+                    id=f"one-step-{norm}-{taper}-ndlys_{n_dlys}",
+                )
+                for n_dlys in [NFREQ // 2, NFREQ // 4]
+            )
     return cases
 
 
@@ -154,55 +232,97 @@ class TestWhiteNoiseCalibration:
     the normalization matrix M, a taper that is accounted for twice (or not at
     all) or mishandled flags would all change the amplitude. (The scalar itself
     is checked against its analytic form in test_pspecbeam.py.)
+
+    The one-step normalization (normalization="one-step") gives power spectra
+    in cosmological units directly, from the response of the data covariance to
+    the power in each delay bin. For noise whose covariance is that of a flat
+    P(k) = 1 in that model (flat_spectrum_uvd, with a frequency-dependent beam)
+    it must give E[P] = 1 in the same configurations, including those where the
+    two-step normalization is known to be biased (fewer delays than channels).
+
+    Every integration gives an independent spectrum, so the mean over the
+    NTIMES integrations is compared with its expectation within K_SIGMA
+    standard errors.
     """
 
+    @pytest.fixture(scope="class")
+    def inputs(
+        self,
+        white_noise_uvd,
+        gauss_beam,
+        untapered_scalar,
+        flat_spectrum_uvd,
+        chromatic_beam,
+    ) -> dict:
+        """Data, beam and expected power for each normalization."""
+        return {
+            "two-step": (white_noise_uvd, gauss_beam, untapered_scalar / NFREQ),
+            "one-step": (flat_spectrum_uvd, chromatic_beam, 1.0),
+        }
+
+    @staticmethod
+    def assert_calibrated(inputs, normalization, flagged_channels=(), **kwargs):
+        """The power spectrum of every integration, averaged over delays, has
+        the expected mean within K_SIGMA standard errors."""
+        uvd, beam, expected = inputs[normalization]
+        if flagged_channels:
+            uvd = uvd.copy()
+            uvd.flag_array[:, list(flagged_channels), :] = True
+        uvp = auto_pspec(uvd, beam, normalization=normalization, **kwargs)
+        power = uvp.data_array[0][:, :, 0].real / expected
+        assert power.shape[0] == NTIMES
+        mean, error = mean_and_error(power)
+        assert_within_errors(mean, 1.0, error)
+        # precise enough to resolve the known biases of the two-step
+        # normalization (~1.3x to ~4x) many times over
+        assert error < 0.02
+
+    @pytest.mark.parametrize("normalization", ["two-step", "one-step"])
     @pytest.mark.parametrize("sampling", [True, False])
     @pytest.mark.parametrize("taper", ["none", "bh", "blackman", "hann"])
     @pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
     def test_white_noise_power(
-        self, white_noise_uvd, gauss_beam, untapered_scalar, norm, taper, sampling
+        self, inputs, norm, taper, sampling, normalization
     ) -> None:
         """The calibrated white-noise power is correct for every normalization
         and taper, with one delay mode per channel."""
-        uvp = auto_pspec(
-            white_noise_uvd, gauss_beam, norm=norm, taper=taper, sampling=sampling
+        self.assert_calibrated(
+            inputs, normalization, norm=norm, taper=taper, sampling=sampling
         )
-        power = uvp.data_array[0][:, :, 0].real / untapered_scalar
-        mean, error = mean_and_error(power)
-        assert_within_errors(mean, 1 / NFREQ, error)
 
+    @pytest.mark.parametrize("normalization", ["two-step", "one-step"])
     @pytest.mark.parametrize("taper", ["none", "bh"])
     @pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
     def test_white_noise_power_with_flagged_channels(
-        self, white_noise_uvd, gauss_beam, untapered_scalar, norm, taper
+        self, inputs, norm, taper, normalization
     ) -> None:
         """Flagging a few channels removes data but does not change the
         calibrated power: the normalization accounts for the flagged
         channels."""
-        uvd = white_noise_uvd.copy()
-        uvd.flag_array[:, [3, 4, 5, 12], :] = True
-        uvp = auto_pspec(uvd, gauss_beam, norm=norm, taper=taper)
-        power = uvp.data_array[0][:, :, 0].real / untapered_scalar
-        mean, error = mean_and_error(power)
-        assert_within_errors(mean, 1 / NFREQ, error)
+        self.assert_calibrated(
+            inputs,
+            normalization,
+            flagged_channels=[3, 4, 5, 12],
+            norm=norm,
+            taper=taper,
+        )
 
-    @pytest.mark.parametrize("norm,taper,sampling", _fewer_delays_cases())
+    @pytest.mark.parametrize(
+        "normalization,norm,taper,sampling,n_dlys", _fewer_delays_cases()
+    )
     def test_white_noise_power_with_fewer_delays(
-        self, white_noise_uvd, gauss_beam, untapered_scalar, norm, taper, sampling
+        self, inputs, normalization, norm, taper, sampling, n_dlys
     ) -> None:
         """Estimating fewer delay modes than channels (wider delay bins) does
         not change the power of a flat spectrum."""
-        uvp = auto_pspec(
-            white_noise_uvd,
-            gauss_beam,
+        self.assert_calibrated(
+            inputs,
+            normalization,
             norm=norm,
             taper=taper,
             sampling=sampling,
-            n_dlys=[NFREQ // 4],
+            n_dlys=[n_dlys],
         )
-        power = uvp.data_array[0][:, :, 0].real / untapered_scalar
-        mean, error = mean_and_error(power)
-        assert_within_errors(mean, 1 / NFREQ, error)
 
 
 class TestColouredSpectrumIsUnbiased:

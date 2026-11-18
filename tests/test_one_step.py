@@ -13,7 +13,6 @@ import pytest
 import uvtools.dspec as dspec
 from astropy import units as u
 from astropy.cosmology import LambdaCDM, Planck18
-from pyuvdata import UVData
 from scipy.interpolate import interp1d
 
 from hera_pspec import (
@@ -679,88 +678,3 @@ class TestSetCosmology:
             np.testing.assert_array_equal(
                 uvp.cov_array_real[0], before.cov_array_real[0]
             )
-
-
-@pytest.fixture(scope="module")
-def noise_uvd():
-    uvd = UVData()
-    uvd.read_miriad(str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA"))
-    uvd.flag_array[:] = False
-    uvd.nsample_array[:] = 1.0
-    return uvd
-
-
-class TestWhiteNoiseMonteCarlo:
-    """pspec() on simulated data whose covariance is a flat P(k) = 1 in
-    the one-step response model, C = diag(w) / dnu (see
-    TestFlatSpectrumExpectation). Every one-step
-    estimator has expectation 1, so the mean power must agree for norm I and
-    H^-1, no taper and Blackman-Harris, Ndlys = Nfreqs and Nfreqs / 2 (the
-    configurations where the two-step path is, or was before v1.0, biased:
-    F2, F1).
-
-    The noise is drawn independently for every (baseline, time) and both
-    datasets hold the same realisation, so each baseline-pair x time gives an
-    independent estimate of the delay-averaged power. The test compares the
-    mean over the N = 45 x 10 x 3 = 1350 estimates with 1 to within five
-    standard errors, std / sqrt(N): a chance failure has probability
-    ~6e-7 per configuration (two-sided Gaussian tail, central limit theorem).
-    """
-
-    SPW = (20, 60)
-    N_REALISATIONS = 3
-
-    @pytest.fixture(scope="class")
-    def estimates(self, noise_uvd, beam_nf_dipole):
-        freqs = noise_uvd.freq_array.ravel()[self.SPW[0] : self.SPW[1]]
-        dnu = np.median(np.diff(freqs))
-        weights = channel_weights(beam_nf_dipole, "xx", freqs, beam_nf_dipole.cosmo)
-        # complex Gaussian with <x_i x_i^*> = w_i / dnu
-        sigma = np.sqrt(weights / dnu / 2.0)
-        rng = np.random.default_rng(329)
-        bls = [bl for bl in noise_uvd.get_antpairs() if bl[0] != bl[1]]
-        configs = [
-            (norm, taper, ndlys)
-            for norm in ("I", "H^-1")
-            for taper in TAPERS
-            for ndlys in (40, 20)
-        ]
-        samples = {config: [] for config in configs}
-        for _ in range(self.N_REALISATIONS):
-            uvd = copy.deepcopy(noise_uvd)
-            shape = uvd.data_array.shape
-            noise = rng.standard_normal(shape) + 1j * rng.standard_normal(shape)
-            uvd.data_array[:] = 0.0
-            uvd.data_array[:, self.SPW[0] : self.SPW[1]] = (
-                noise[:, self.SPW[0] : self.SPW[1]] * sigma[None, :, None]
-            )
-            ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
-            for norm, taper, ndlys in configs:
-                uvp = ds.pspec(
-                    bls,
-                    bls,
-                    (0, 1),
-                    [("xx", "xx")],
-                    spw_ranges=[self.SPW],
-                    n_dlys=[ndlys],
-                    norm=norm,
-                    taper=taper,
-                    store_window=False,
-                    normalization="one-step",
-                    verbose=False,
-                )
-                power = uvp.data_array[0][:, :, 0].real.mean(axis=1)
-                samples[(norm, taper, ndlys)].append(power)
-        return {config: np.concatenate(values) for config, values in samples.items()}
-
-    @pytest.mark.parametrize("norm", ["I", "H^-1"])
-    @pytest.mark.parametrize("taper", TAPERS)
-    @pytest.mark.parametrize("ndlys", [40, 20])
-    def test_mean_power_is_one(self, estimates, norm, taper, ndlys) -> None:
-        power = estimates[(norm, taper, ndlys)]
-        assert power.size == 45 * 10 * self.N_REALISATIONS
-        standard_error = power.std(ddof=1) / np.sqrt(power.size)
-        assert abs(power.mean() - 1.0) < 5.0 * standard_error
-        # the test resolves the two-step biases (x0.61, and x3.98 for H^-1
-        # with a taper before v1.0) many times over
-        assert standard_error < 0.02
