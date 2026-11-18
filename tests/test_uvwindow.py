@@ -2187,7 +2187,7 @@ class TestUVWindowPhysics:
             "The half-width of the k_perp grid of UVWindow._get_kgrid (0.02) is "
             "a number in the k unit of the object, so the grid, the window "
             "function and the default k_perp bins differ physically between "
-            "1 / Mpc and h / Mpc"
+            "1 / Mpc and h / Mpc, see #594"
         ),
     )
     def test_window_function_does_not_depend_on_k_unit(self) -> None:
