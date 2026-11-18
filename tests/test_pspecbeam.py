@@ -441,31 +441,6 @@ class TestPSpecBeamGauss:
         with pytest.raises(TypeError, match="pass analytic beams via the beam keyword"):
             pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs * u.Hz)
 
-    def test_omegas_match_numerical_integration(self) -> None:
-        """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
-
-        The closed forms are flat-sky results, so agreement is only expected
-        to ~0.5% for a narrow beam; they remain the authoritative values.
-        """
-        fwhm = 0.1
-        beam_freqs = np.array([150e6])
-        bgauss = pspecbeam.PSpecBeamGauss(fwhm * u.rad, beam_freqs * u.Hz)
-        nside = 128
-        uvb = bgauss.analytic_beam.to_uvbeam(
-            freq_array=beam_freqs,
-            beam_type="power",
-            pixel_coordinate_system="healpix",
-            nside=nside,
-        )
-        pixel_area = 4.0 * np.pi / (12 * nside**2)
-        beam_map = uvb.data_array[0, 0, 0]
-        np.testing.assert_allclose(
-            beam_map.sum() * pixel_area, bgauss.power_beam_int()[0], rtol=1e-2
-        )
-        np.testing.assert_allclose(
-            (beam_map**2).sum() * pixel_area, bgauss.power_beam_sq_int()[0], rtol=1e-2
-        )
-
 
 class TestPSpecBeamFromArray:
     def test_construction(self, gauss_beam: pspecbeam.PSpecBeamGauss) -> None:
@@ -845,7 +820,12 @@ class TestBeamPhysics:
         """PSpecBeamGauss describes a power beam B = exp(-theta^2 / 2 sigma^2)
         whose FWHM is fwhm, i.e. sigma = fwhm / sqrt(8 ln 2), and this is the
         power response of the pyuvdata GaussianBeam it holds. Its integrals over
-        the (flat) sky are Omega_p = 2 pi sigma^2 and Omega_pp = pi sigma^2."""
+        the (flat) sky are Omega_p = 2 pi sigma^2 and Omega_pp = pi sigma^2.
+
+        These closed forms are the values PSpecBeamGauss uses. On the curved
+        sky the integrals are smaller by ~sigma^2 / 3 and ~sigma^2 / 6 (0.5% and
+        0.3% here): a HEALPix map of the GaussianBeam sums to the full-sky
+        integrals, and so agrees with the closed forms to ~1%."""
         sigma = self.FWHM / np.sqrt(8 * np.log(2))
 
         def power_beam(theta):
@@ -864,6 +844,33 @@ class TestBeamPhysics:
         )
         np.testing.assert_allclose(beam.power_beam_int(), omega_p[0], rtol=1e-10)
         np.testing.assert_allclose(beam.power_beam_sq_int(), omega_pp[0], rtol=1e-10)
+
+        nside = 128
+        uvb = beam.analytic_beam.to_uvbeam(
+            freq_array=self.FREQS[:1],
+            beam_type="power",
+            pixel_coordinate_system="healpix",
+            nside=nside,
+        )
+        pixel_area = 4 * np.pi / (12 * nside**2)
+        beam_map = uvb.data_array[0, 0, 0].real
+        full_sky = [
+            integrate.quad(
+                lambda t, n=n: 2 * np.pi * np.sin(t) * power_beam(t) ** n, 0, np.pi
+            )[0]
+            for n in (1, 2)
+        ]
+        np.testing.assert_allclose(
+            [beam_map.sum() * pixel_area, (beam_map**2).sum() * pixel_area],
+            full_sky,
+            rtol=1e-3,
+        )
+        np.testing.assert_allclose(
+            beam_map.sum() * pixel_area, beam.power_beam_int()[0], rtol=1e-2
+        )
+        np.testing.assert_allclose(
+            (beam_map**2).sum() * pixel_area, beam.power_beam_sq_int()[0], rtol=1e-2
+        )
 
     def test_healpix_gaussian_beam_matches_analytic(self) -> None:
         """A HEALPix map of a Gaussian beam gives the beam integrals, and so the
