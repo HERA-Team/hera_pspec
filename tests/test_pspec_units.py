@@ -30,6 +30,13 @@ DATA_PATH = Path(DATA_PATH)
 MPC3_H3 = units.Mpc**3 / cu.littleh**3
 
 
+@pytest.fixture(scope="module")
+def noise_uvd(synthetic_uvd) -> UVData:
+    """Synthetic noise on antennas 37, 38 and 39, 14.6 m apart on an east-west
+    line, with the channels and baselines that _pspec uses."""
+    return synthetic_uvd(nfreq=30, ntimes=4, antpairs=[(37, 38), (38, 39)], seed=0)
+
+
 def _pspec(
     uvd: UVData, beam=None, vis_units: str | None = None, little_h: bool = True
 ) -> UVPSpec:
@@ -169,13 +176,13 @@ class TestPspecUnits:
     @pytest.mark.parametrize("little_h", [True, False])
     def test_with_beam(
         self,
-        uvd_zen_even_xx: UVData,
+        noise_uvd: UVData,
         beam_nf_dipole: PSpecBeamUV,
         vis_units,
         vis_unit,
         little_h: bool,
     ) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, vis_units, little_h=little_h)
+        uvp = _pspec(noise_uvd, beam_nf_dipole, vis_units, little_h=little_h)
         norm_unit = MPC3_H3 if little_h else units.Mpc**3
         assert uvp.vis_unit == vis_unit
         assert uvp.norm_unit == norm_unit
@@ -184,14 +191,14 @@ class TestPspecUnits:
         assert uvp.norm_units == ("Mpc3 / littleh3" if little_h else "Mpc3")
         assert uvp.deltasq is False
 
-    def test_without_beam(self, uvd_zen_even_xx: UVData) -> None:
-        uvp = _pspec(uvd_zen_even_xx, None, "mK")
+    def test_without_beam(self, noise_uvd: UVData) -> None:
+        uvp = _pspec(noise_uvd, None, "mK")
         assert uvp.norm_units == "Hz sr"
         assert uvp.vis_units == "mK"
         assert uvp.units == units.mK**2 * units.Hz * units.sr
 
-    def test_unknown_vis_units(self, uvd_zen_even_xx: UVData) -> None:
-        uvd = copy.deepcopy(uvd_zen_even_xx)
+    def test_unknown_vis_units(self, noise_uvd: UVData) -> None:
+        uvd = copy.deepcopy(noise_uvd)
         uvd.vis_units = "furlongs"
         ds = PSpecData(dsets=[uvd, uvd], wgts=[None, None])
         with pytest.raises(ValueError, match="furlongs"):
@@ -210,9 +217,9 @@ class TestPspecUnits:
 class TestDeltasq:
     @pytest.mark.parametrize("little_h", [True, False])
     def test_cosmological(
-        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, little_h: bool
+        self, noise_uvd: UVData, beam_nf_dipole: PSpecBeamUV, little_h: bool
     ) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK", little_h=little_h)
+        uvp = _pspec(noise_uvd, beam_nf_dipole, "mK", little_h=little_h)
         dsq = uvp.convert_to_deltasq(inplace=False)
         assert dsq.deltasq is True
         assert uvp.deltasq is False
@@ -229,8 +236,8 @@ class TestDeltasq:
             dsq.data_array[0][..., 0], uvp.data_array[0][..., 0] * coeff, rtol=1e-12
         )
 
-    def test_unnormalised(self, uvd_zen_even_xx: UVData) -> None:
-        uvp = _pspec(uvd_zen_even_xx, None, "mK")
+    def test_unnormalised(self, noise_uvd: UVData) -> None:
+        uvp = _pspec(noise_uvd, None, "mK")
         uvp.cosmo = conversions.DEFAULT_COSMOLOGY
         uvp.convert_to_deltasq()
         assert uvp.norm_units == "Hz sr"
@@ -246,9 +253,9 @@ class TestDeltasq:
             uvp.convert_to_deltasq(inplace=False)
 
     def test_hdf5_round_trip(
-        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
+        self, noise_uvd: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
     ) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK")
+        uvp = _pspec(noise_uvd, beam_nf_dipole, "mK")
         uvp.convert_to_deltasq()
         uvp.write_hdf5(tmp_path / "dsq.h5")
         with h5py.File(tmp_path / "dsq.h5", "r") as f:
@@ -407,8 +414,8 @@ class TestHdf5Units:
 
 
 class TestPlotLabels:
-    def test_delay_spectrum_label(self, uvd_zen_even_xx, beam_nf_dipole) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK")
+    def test_delay_spectrum_label(self, noise_uvd, beam_nf_dipole) -> None:
+        uvp = _pspec(noise_uvd, beam_nf_dipole, "mK")
         blps = [[uvp.blpair_to_antnums(blp) for blp in np.unique(uvp.blpair_array)]]
         fig = plot.delay_spectrum(
             uvp, blps, spw=0, pol=("xx", "xx"), average_blpairs=True, delay=False
