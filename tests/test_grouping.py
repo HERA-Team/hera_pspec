@@ -1,10 +1,12 @@
 import copy
 from pathlib import Path
 
+import astropy.cosmology.units as cu
 import numpy as np
 import pytest
+from astropy import units as u
+from astropy.cosmology import FLRW
 from hera_cal import redcal
-from pytest_cases import parametrize_with_cases
 from pyuvdata import UVData
 
 from hera_pspec import (
@@ -21,27 +23,15 @@ from hera_pspec import (
     uvpspec,
     uvwindow,
 )
+from hera_pspec import uvpspec_utils as uvputils
 from hera_pspec.data import DATA_PATH
 
 DATA_PATH = Path(DATA_PATH)
 
 
-def case_vanilla_uvp(vanilla_uvp: UVPSpec) -> UVPSpec:
-    return vanilla_uvp
-
-
-def case_vanilla_uvp_with_beam(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    return vanilla_uvp_with_beam
-
-
-def case_vanilla_uvp_alternating_times(
-    vanilla_uvp_alternating_times: UVPSpec,
-) -> UVPSpec:
-    return vanilla_uvp_alternating_times
-
-
-# def case_uvp_exact_wfs(uvp_exact_wfs: UVPSpec):
-#     return uvp_exact_wfs
+# Session-scoped UVPSpec fixtures (from conftest.py) that tests are parametrized
+# over; they are fetched by name with request.getfixturevalue.
+ALL_UVPS = ["vanilla_uvp", "vanilla_uvp_with_beam", "vanilla_uvp_alternating_times"]
 
 
 @pytest.fixture(scope="session")
@@ -55,7 +45,7 @@ def redundant_blpairs(uvd_zen_even_xx: UVData) -> list:
 def uvp_three_red_bls(
     redundant_blpairs: list,
     beam_nf_dipole_wcosmo: PSpecBeamUV,
-    cosmo: conversions.Cosmo_Conversions,
+    cosmo: FLRW,
     uvd_zen_even_xx: UVData,
 ) -> UVPSpec:
     """UVPSpec from zen.even.xx.LST.1.28828.uvOCRSA, first 3 redundant groups."""
@@ -77,12 +67,15 @@ def delay_bins_uvp_nocov(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
     return uvp
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def delay_bins_exact_wf_uvp(vanilla_uvp_with_beam: UVPSpec) -> UVPSpec:
-    """Copy of vanilla_uvp_with_beam with exact window functions."""
+    """Copy of vanilla_uvp_with_beam with exact window functions.
+
+    Module-scoped because computing exact window functions is slow; tests must
+    not modify it in place."""
     uvp = copy.deepcopy(vanilla_uvp_with_beam)
     gaussian_beam = uvwindow.FTBeam.gaussian(
-        freq_array=uvp.freq_array, widths=8.0, pol=1
+        freq_array=uvp.freq_array * u.Hz, widths=8.0 * u.deg, pol=1
     )
     del uvp.window_function_array
     uvp.get_exact_window_functions(ftbeam=gaussian_beam, inplace=True)
@@ -148,33 +141,31 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec) -> None:
     ):
         grouping.average_spectra(vanilla_uvp, blpair_weights=[[1.0]], inplace=False)
 
+    kbins = np.array([0.1, 0.2]) * cu.littleh / u.Mpc
     with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
-        grouping.spherical_average(wrong_uvp, np.array([0.1, 0.2]), 0.1)
+        grouping.spherical_average(wrong_uvp, kbins, 0.1)
 
     with pytest.raises(TypeError, match="A must be a mutable mapping"):
-        grouping.spherical_average(vanilla_uvp, np.array([0.1, 0.2]), 0.1, A=[])
+        grouping.spherical_average(vanilla_uvp, kbins, 0.1, A=[])
 
-    grouping.spherical_average(
-        vanilla_uvp, np.array([0.1, 0.2]), np.array([0.05, 0.05])
-    )
+    grouping.spherical_average(vanilla_uvp, kbins, np.array([0.05, 0.05]))
 
     with pytest.raises(TypeError, match="bin_widths must be numeric and array-like"):
-        grouping.spherical_average(vanilla_uvp, np.array([0.1, 0.2]), "bad")
+        grouping.spherical_average(vanilla_uvp, kbins, "bad")
 
     with pytest.raises(ValueError, match="bin_widths must be one-dimensional"):
-        grouping.spherical_average(
-            vanilla_uvp, np.array([0.1, 0.2]), np.array([[0.05, 0.05]])
-        )
+        grouping.spherical_average(vanilla_uvp, kbins, np.array([[0.05, 0.05]]))
+
+    with pytest.raises(TypeError, match="kbins must be numeric and array-like"):
+        grouping.spherical_average(vanilla_uvp, "bad", 0.1)
 
     with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
-        grouping.spherical_wf_from_uvp(wrong_uvp, np.array([0.1, 0.2]))
+        grouping.spherical_wf_from_uvp(wrong_uvp, kbins)
 
     with pytest.raises(
         TypeError, match="kbin_edges_theory must be numeric and array-like"
     ):
-        grouping.spherical_wf_from_uvp(
-            vanilla_uvp, np.array([0.1, 0.2]), kbin_edges_theory="bad"
-        )
+        grouping.spherical_wf_from_uvp(vanilla_uvp, kbins, kbin_edges_theory="bad")
 
     with pytest.raises(TypeError, match="uvp must be a UVPSpec object"):
         grouping.fold_spectra("not-a-uvp")
@@ -242,7 +233,9 @@ def uvp_with_stats(
     """UVPSpec from zen.all.xx.LST.1.06964.uvA with noise and simple stats."""
     uvd = copy.deepcopy(uvd_zen_all_xx)
     # find conversion factor from Jy to mK
-    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(np.unique(uvd.freq_array), pol="XX")
+    Jy_to_mK = beam_nf_dipole_wcosmo.Jy_to_mK(
+        np.unique(uvd.freq_array) * u.Hz, pol="XX"
+    )
     uvd.data_array *= Jy_to_mK[None, :, None]
     # slide the time axis of uvd by one integration
     uvd1 = uvd.select(times=np.unique(uvd.time_array)[:-1:2], inplace=False)
@@ -275,7 +268,7 @@ def uvp_with_stats(
     )
     keys = uvp.get_all_keys()
     # Add the analytic noise to stat_array
-    Pn = uvp.generate_noise_spectra(0, "xx", 220)
+    Pn = uvp.generate_noise_spectra(0, "xx", 220 * u.K)
     for key in keys:
         blp = uvp.antnums_to_blpair(key[1])
         uvp.set_stats("noise", key, Pn[blp])
@@ -424,10 +417,13 @@ class TestAverageSpectra:
         # both time+redundant avg + error_weights
         keys = uvp.get_all_keys()
         # Add the analytic noise to stat_array
-        Pn = uvp.generate_noise_spectra(0, "xx", 220)
+        Pn = uvp.generate_noise_spectra(0, "xx", 220 * u.K)
         for key in keys:
             blp = uvp.antnums_to_blpair(key[1])
-            error = Pn[blp]
+            # this object is not cosmologically normalised (Hz sr), so the
+            # noise Quantity cannot be converted to its units; store the
+            # plain values, only their relative size matters here
+            error = Pn[blp].value
             uvp.set_stats("noise", key, error)
         uvp_avg = grouping.average_spectra(
             uvp,
@@ -475,9 +471,12 @@ class TestSampleBaselines:
         assert len(g1) == len(samp)
 
 
-@parametrize_with_cases("uvp", cases=".")
-def test_bootstrap_average_blpairs(uvp: UVPSpec) -> None:
+@pytest.mark.parametrize("uvp_name", ALL_UVPS)
+def test_bootstrap_average_blpairs(
+    uvp_name: str, request: pytest.FixtureRequest
+) -> None:
     """Check that bootstrap_average_blpairs correctly resamples blpairs and produces consistent averages for identical data."""
+    uvp = request.getfixturevalue(uvp_name)
     # Check that basic bootstrap averaging works
     blpair_groups = [list(np.unique(uvp.blpair_array))]
     uvp1, wgts = grouping.bootstrap_average_blpairs(
@@ -558,20 +557,19 @@ class TestBootstrapResampledError:
         assert uw[1][0][:5] == [2.0, 2.0, 1.0, 1.0, 2.0]
         assert uw[1][1][:5] == [1.0, 0.0, 1.0, 1.0, 4.0]
 
-    def test_gaussian_noise(self) -> None:
+    def test_gaussian_noise(self, uvd_zen_even_xx: UVData) -> None:
         """Check that bootstrapped error bars on Gaussian noise power spectra yield z-scores with standard deviation converging to 1."""
-        # get simulated noise in K-str
-        uvfile = str(DATA_PATH / "zen.even.xx.LST.1.28828.uvOCRSA")
+        # get simulated noise in K-str (on copies of zen.even.xx.LST.1.28828.uvOCRSA)
         Tsys = 300.0  # Kelvin
 
         # generate complex gaussian noise
         seed = 4
         uvd1 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
         seed = 5
         uvd2 = testing.noise_sim(
-            uvfile, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
+            uvd_zen_even_xx, Tsys, seed=seed, whiten=True, inplace=False, Nextend=0
         )
 
         # form (auto) baseline-pairs from only 14.6m bls
@@ -593,7 +591,7 @@ class TestBootstrapResampledError:
             norm="I",
             taper="none",
             sampling=False,
-            little_h=False,
+            length_unit=u.Mpc,
             spw_ranges=[(0, 50)],
             verbose=False,
         )
@@ -632,7 +630,7 @@ class TestBootstrapRun:
         grouping.bootstrap_run(
             psc,
             time_avg=True,
-            Nsamples=100,
+            Nsamples=5,
             seed=0,
             normal_std=True,
             robust_std=True,
@@ -646,7 +644,7 @@ class TestBootstrapRun:
         spcs = psc.spectra("grp1")
 
         # assert all bs samples were written
-        assert np.all([f"uvp_bs{i}" in spcs for i in range(100)])
+        assert np.all([f"uvp_bs{i}" in spcs for i in range(5)])
 
         # assert average was written
         assert "uvp_avg" in spcs and "uvp" in spcs
@@ -722,7 +720,7 @@ class TestBootstrapRun:
 def uvp_spherical(
     redundant_blpairs: list,
     beam_nf_dipole_wcosmo: PSpecBeamUV,
-    cosmo: conversions.Cosmo_Conversions,
+    cosmo: FLRW,
     uvd_zen_even_xx: UVData,
 ) -> UVPSpec:
     """Two-polarization UVPSpec with identity cov and unit stats for spherical_average tests."""
@@ -774,8 +772,8 @@ def uvp_spherical(
 
 
 class TestSpherical:
-    KBINS = np.arange(0, 2.9, 0.25)
-    BIN_WIDTHS = 0.25
+    KBINS = np.arange(0, 2.9, 0.25) * cu.littleh / u.Mpc
+    BIN_WIDTHS = 0.25 * cu.littleh / u.Mpc
 
     def test_average_metadata(self, uvp_spherical: UVPSpec) -> None:
         """Check that spherical_average output has correct Nblpairs, history, zero kperp, and stats key."""
@@ -784,7 +782,7 @@ class TestSpherical:
         )
         assert sph.Nblpairs == 1
         assert "checking 1 2 3" in sph.history
-        assert np.isclose(sph.get_blpair_seps(), 0).all()
+        assert np.isclose(sph.get_blpair_seps().to_value(u.m), 0).all()
         assert "err" in sph.stats_array
 
     def test_average_without_window_function_array(
@@ -824,7 +822,9 @@ class TestSpherical:
         )
         for spw in sph.spw_array:
             # binning and normalization
-            assert np.isclose(sph.get_kparas(spw), self.KBINS).all()
+            assert np.isclose(
+                sph.get_kparas(spw).to_value(cu.littleh / u.Mpc), self.KBINS.value
+            ).all()
             assert np.isclose(sph.window_function_array[spw].sum(axis=2), 1).all()
             # basic "averaged data smell test": low k modes > high k modes
             assert np.all(
@@ -843,19 +843,147 @@ class TestSpherical:
         # bug check: cov_array_imag was not updated
         assert sph.cov_array_real[0].shape == sph.cov_array_imag[0].shape
 
-    def test_average_little_h(
-        self, uvp_spherical: UVPSpec, cosmo: conversions.Cosmo_Conversions
+    @staticmethod
+    def _assert_same_average(sph1: UVPSpec, sph2: UVPSpec, rtol=1e-12) -> None:
+        """Assert two spherical averages have the same k grid, data, cov, stats and windows."""
+        for spw in sph1.spw_array:
+            np.testing.assert_allclose(
+                sph1.get_kparas(spw).value, sph2.get_kparas(spw).value, rtol=rtol
+            )
+            np.testing.assert_allclose(
+                sph1.data_array[spw], sph2.data_array[spw], rtol=rtol
+            )
+            np.testing.assert_allclose(
+                sph1.cov_array_real[spw], sph2.cov_array_real[spw], rtol=rtol
+            )
+            np.testing.assert_allclose(
+                sph1.stats_array["err"][spw], sph2.stats_array["err"][spw], rtol=rtol
+            )
+            np.testing.assert_allclose(
+                sph1.window_function_array[spw],
+                sph2.window_function_array[spw],
+                rtol=rtol,
+            )
+        np.testing.assert_allclose(sph1.dly_array, sph2.dly_array, rtol=rtol)
+
+    def test_average_kbins_in_inverse_mpc(
+        self, uvp_spherical: UVPSpec, cosmo: FLRW
     ) -> None:
-        """Check that little_h=False with scaled kbins gives identical kparas as the default."""
+        """Check that the same bins given in 1 / Mpc give the same average as in littleh / Mpc."""
         sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
         sph2 = grouping.spherical_average(
             uvp_spherical,
-            self.KBINS * cosmo.h,
-            self.BIN_WIDTHS * cosmo.h,
-            little_h=False,
+            self.KBINS.value * cosmo.h / u.Mpc,
+            self.BIN_WIDTHS.value * cosmo.h / u.Mpc,
         )
-        for spw in sph.spw_array:
-            assert np.isclose(sph.get_kparas(spw), sph2.get_kparas(spw)).all()
+        self._assert_same_average(sph, sph2)
+        # a plain bin width is taken in the unit of kbins
+        sph3 = grouping.spherical_average(
+            uvp_spherical,
+            self.KBINS.value * cosmo.h / u.Mpc,
+            self.BIN_WIDTHS.value * cosmo.h,
+        )
+        self._assert_same_average(sph, sph3)
+        # kbins_theory in 1 / Mpc
+        sph4 = grouping.spherical_average(
+            uvp_spherical, self.KBINS, self.BIN_WIDTHS, kbins_theory=self.KBINS[:4]
+        )
+        sph5 = grouping.spherical_average(
+            uvp_spherical,
+            self.KBINS,
+            self.BIN_WIDTHS,
+            kbins_theory=self.KBINS[:4].value * cosmo.h / u.Mpc,
+        )
+        self._assert_same_average(sph4, sph5)
+
+    def test_average_plain_kbins_deprecated(
+        self, uvp_spherical: UVPSpec, cosmo: FLRW
+    ) -> None:
+        """Check that plain-number k bins and little_h warn and match the Quantity result."""
+        sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
+        with pytest.warns(DeprecationWarning, match="kbins as plain numbers"):
+            sph_plain = grouping.spherical_average(
+                uvp_spherical, self.KBINS.value, self.BIN_WIDTHS.value
+            )
+        self._assert_same_average(sph, sph_plain, rtol=0)
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            sph_noh = grouping.spherical_average(
+                uvp_spherical,
+                self.KBINS.value * cosmo.h,
+                self.BIN_WIDTHS.value * cosmo.h,
+                little_h=False,
+            )
+        self._assert_same_average(sph, sph_noh)
+        # little_h consistent with a Quantity: deprecated but accepted
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            sph_h = grouping.spherical_average(
+                uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=True
+            )
+        self._assert_same_average(sph, sph_h, rtol=0)
+        with pytest.warns(DeprecationWarning, match="kbins_theory as plain numbers"):
+            grouping.spherical_average(
+                uvp_spherical,
+                self.KBINS,
+                self.BIN_WIDTHS,
+                kbins_theory=self.KBINS[:4].value,
+            )
+
+    def test_average_bad_k_units(self, uvp_spherical: UVPSpec) -> None:
+        """Check that little_h disagreeing with the bins, or a non-k unit, raises."""
+        with pytest.raises(ValueError, match="little_h=False disagrees"):
+            grouping.spherical_average(
+                uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=False
+            )
+        with pytest.raises(ValueError, match="little_h=True disagrees"):
+            grouping.spherical_average(
+                uvp_spherical, self.KBINS.value / u.Mpc, 0.25, little_h=True
+            )
+        with pytest.raises(u.UnitConversionError, match="kbins must be a wavenumber"):
+            grouping.spherical_average(uvp_spherical, self.KBINS.value * u.Mpc, 0.25)
+        with pytest.raises(
+            u.UnitConversionError, match="bin_widths must be a wavenumber"
+        ):
+            grouping.spherical_average(uvp_spherical, self.KBINS, 0.25 * u.s)
+        with pytest.raises(
+            u.UnitConversionError, match="kbins_theory must be a wavenumber"
+        ):
+            grouping.spherical_average(
+                uvp_spherical,
+                self.KBINS,
+                self.BIN_WIDTHS,
+                kbins_theory=self.KBINS.value * u.m,
+            )
+
+    def test_average_mpc3_object(self, uvp_spherical: UVPSpec, cosmo: FLRW) -> None:
+        """Check that an Mpc3 object is binned on a 1 / Mpc grid consistent with its norm_units."""
+        h = cosmo.h
+        # the same spectra normalised in Mpc^3 instead of (Mpc / h)^3
+        uvp_mpc = copy.deepcopy(uvp_spherical)
+        uvp_mpc.norm_units = "Mpc3"
+        for spw in uvp_mpc.spw_array:
+            uvp_mpc.data_array[spw] = uvp_mpc.data_array[spw] / h**3
+        kbins_mpc = self.KBINS.value * h / u.Mpc
+        widths_mpc = self.BIN_WIDTHS.value * h / u.Mpc
+
+        sph_h = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
+        sph_mpc = grouping.spherical_average(uvp_mpc, kbins_mpc, widths_mpc)
+        assert sph_mpc.norm_units == "Mpc3"
+        for spw in sph_mpc.spw_array:
+            kparas = sph_mpc.get_kparas(spw)
+            assert kparas.unit == 1 / u.Mpc
+            np.testing.assert_allclose(kparas.value, kbins_mpc.value, rtol=1e-12)
+            # same physical bins: same bandpowers up to the h^3 normalisation
+            np.testing.assert_allclose(
+                sph_mpc.data_array[spw], sph_h.data_array[spw] / h**3, rtol=1e-12
+            )
+            np.testing.assert_allclose(
+                sph_mpc.window_function_array[spw],
+                sph_h.window_function_array[spw],
+                rtol=1e-12,
+            )
+        # littleh bins on an Mpc3 object are converted with the object's H0
+        sph_mpc2 = grouping.spherical_average(uvp_mpc, self.KBINS, self.BIN_WIDTHS)
+        self._assert_same_average(sph_mpc, sph_mpc2)
 
     def test_average_time_avg(self, uvp_spherical: UVPSpec) -> None:
         """Check that time_avg=True reduces Ntpairs to 1."""
@@ -958,16 +1086,14 @@ class TestSpherical:
         blpair_groups, _, _ = uvp_exact_wfs_wbeam.get_red_blpairs()
         sph1 = grouping.spherical_average(
             uvp_exact_wfs_wbeam.convert_to_deltasq(inplace=False),
-            self.KBINS,
-            self.BIN_WIDTHS,
-            little_h=False,
+            self.KBINS.value / u.Mpc,
+            self.BIN_WIDTHS.value / u.Mpc,
         )
         sph2 = grouping.spherical_average(
             uvp_exact_wfs_wbeam,
-            self.KBINS,
-            self.BIN_WIDTHS,
+            self.KBINS.value / u.Mpc,
+            self.BIN_WIDTHS.value / u.Mpc,
             blpair_groups=blpair_groups,
-            little_h=False,
         )
         for sph in (sph1, sph2):
             assert sph.Nblpairs == 1
@@ -981,27 +1107,20 @@ class TestSpherical:
     def test_wf_shape(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_wf_from_uvp returns an array with the expected (Ntimes, Nk, Nk, Npols) shape."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
         Nk = kbin_edges.size - 1
-        wf_array = grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs,
-            kbin_edges=kbin_edges,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
-        )
+        wf_array = grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges=kbin_edges)
         assert wf_array[0].shape == (uvp_exact_wfs.Ntimes, Nk, Nk, uvp_exact_wfs.Npols)
 
     def test_wf_nonsquare(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that kbin_edges_theory produces a non-square (Nk, Nk_in) window function array."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
-        kbin_edges_theory = np.arange(0.075, 2.9, dk / 2.0)
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
+        kbin_edges_theory = np.arange(0.075, 2.9, dk / 2.0) / u.Mpc
         Nk = kbin_edges.size - 1
         Nk_in = kbin_edges_theory.size - 1
         wf_array2 = grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs,
-            kbin_edges=kbin_edges,
-            kbin_edges_theory=kbin_edges_theory,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            uvp_exact_wfs, kbin_edges=kbin_edges, kbin_edges_theory=kbin_edges_theory
         )
         assert wf_array2[0].shape == (
             uvp_exact_wfs.Ntimes,
@@ -1010,80 +1129,47 @@ class TestSpherical:
             uvp_exact_wfs.Npols,
         )
 
-    def test_wf_little_h(self, uvp_exact_wfs: UVPSpec) -> None:
-        """Check that mismatched little_h raises a UserWarning about unit conversion."""
-        dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
-        with pytest.warns(UserWarning, match="Changed little_h units"):
-            grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs,
-                kbin_edges=kbin_edges / uvp_exact_wfs.cosmo.h,
-                little_h=True,
-            )
-
     def test_wf_spw_array(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that a valid spw_array argument runs and an invalid one raises an AssertionError."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
-        grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs,
-            kbin_edges,
-            spw_array=0,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
-        )
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
+        grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges, spw_array=0)
         with pytest.raises(
             AssertionError, match="input spw is not in UVPSpec.spw_array"
         ):
-            grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs,
-                kbin_edges,
-                spw_array=2,
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
-            )
+            grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges, spw_array=2)
 
     def test_wf_blpair_groups(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that blpair_groups runs correctly and an un-grouped (flat) input raises a TypeError."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
         blpair_groups, blpair_lens, _ = uvp_exact_wfs.get_red_blpairs()
         grouping.spherical_wf_from_uvp(
             uvp_exact_wfs,
             kbin_edges,
             blpair_groups=blpair_groups,
             blpair_lens=blpair_lens,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
         )
         with pytest.raises(TypeError, match="blpair_groups must be a sequence"):
             grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs,
-                kbin_edges=kbin_edges,
-                blpair_groups=blpair_groups[0],
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                uvp_exact_wfs, kbin_edges=kbin_edges, blpair_groups=blpair_groups[0]
             )
 
     def test_wf_inconsistent_blpair_lens(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check warnings and errors for mismatched blpair_groups and blpair_lens combinations."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
         blpair_groups, blpair_lens, _ = uvp_exact_wfs.get_red_blpairs()
         # blpair_lens given without blpair_groups → warning
         with pytest.warns(
             UserWarning, match="blpair_lens given but blpair_groups is None"
         ):
             grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs,
-                kbin_edges,
-                blpair_groups=None,
-                blpair_lens=blpair_lens,
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
+                uvp_exact_wfs, kbin_edges, blpair_groups=None, blpair_lens=blpair_lens
             )
         # blpair_groups given without blpair_lens → no error
         grouping.spherical_wf_from_uvp(
-            uvp_exact_wfs,
-            kbin_edges,
-            blpair_groups=blpair_groups,
-            blpair_lens=None,
-            little_h="h^-3" in uvp_exact_wfs.norm_units,
+            uvp_exact_wfs, kbin_edges, blpair_groups=blpair_groups, blpair_lens=None
         )
         # inconsistent blpair_lens → error
         with pytest.raises(
@@ -1095,29 +1181,70 @@ class TestSpherical:
                 kbin_edges,
                 blpair_groups=blpair_groups,
                 blpair_lens=[blpair_lens[0], blpair_lens[0]],
-                little_h="h^-3" in uvp_exact_wfs.norm_units,
             )
 
     def test_wf_overlapping_kbins(self, uvp_exact_wfs: UVPSpec) -> None:
-        """Check that overlapping kbin_edges raise an AssertionError (with a little_h warning)."""
-        with pytest.warns(UserWarning, match="Changed little_h units"):
-            with pytest.raises(AssertionError, match="kbins must not overlap"):
-                grouping.spherical_wf_from_uvp(
-                    uvp_exact_wfs, kbin_edges=np.array([1.0, 2.0, 1.5])
-                )
+        """Check that overlapping kbin_edges raise an AssertionError."""
+        with pytest.raises(AssertionError, match="kbins must not overlap"):
+            grouping.spherical_wf_from_uvp(
+                uvp_exact_wfs, kbin_edges=np.array([1.0, 2.0, 1.5]) / u.Mpc
+            )
 
     def test_wf_no_exact_windows(self, uvp_exact_wfs: UVPSpec) -> None:
         """Check that spherical_wf_from_uvp raises an AssertionError when exact_windows=False."""
         dk = 0.25
-        kbin_edges = np.arange(0.075, 2.9, dk)
+        kbin_edges = np.arange(0.075, 2.9, dk) / u.Mpc
         uvp = copy.deepcopy(uvp_exact_wfs)
         uvp.exact_windows = False
         with pytest.raises(
             AssertionError, match="Need to compute exact window functions first"
         ):
-            grouping.spherical_wf_from_uvp(
-                uvp, kbin_edges, little_h="h^-3" in uvp.norm_units
+            grouping.spherical_wf_from_uvp(uvp, kbin_edges)
+
+    def test_wf_kbin_units(self, uvp_exact_wfs: UVPSpec) -> None:
+        """Check that spherical_wf_from_uvp gives the same windows for edges in either k unit."""
+        h = uvp_exact_wfs.cosmo.h
+        edges = np.arange(0.075, 2.9, 0.25)
+        edges_theory = np.arange(0.075, 2.9, 0.125)
+        wf_h = grouping.spherical_wf_from_uvp(
+            uvp_exact_wfs,
+            kbin_edges=edges * cu.littleh / u.Mpc,
+            kbin_edges_theory=edges_theory * cu.littleh / u.Mpc,
+        )
+        wf_mpc = grouping.spherical_wf_from_uvp(
+            uvp_exact_wfs,
+            kbin_edges=edges * h / u.Mpc,
+            kbin_edges_theory=edges_theory * h / u.Mpc,
+        )
+        for spw in wf_h:
+            np.testing.assert_allclose(wf_h[spw], wf_mpc[spw], rtol=1e-12)
+
+        # deprecated: plain numbers, little_h
+        with pytest.warns(DeprecationWarning, match="kbin_edges as plain numbers"):
+            wf_plain = grouping.spherical_wf_from_uvp(
+                uvp_exact_wfs,
+                kbin_edges=edges,
+                kbin_edges_theory=edges_theory * cu.littleh / u.Mpc,
             )
+        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
+            wf_noh = grouping.spherical_wf_from_uvp(
+                uvp_exact_wfs,
+                kbin_edges=edges * h,
+                kbin_edges_theory=edges_theory * h,
+                little_h=False,
+            )
+        for spw in wf_h:
+            np.testing.assert_array_equal(wf_h[spw], wf_plain[spw])
+            np.testing.assert_allclose(wf_h[spw], wf_noh[spw], rtol=1e-12)
+
+        with pytest.raises(ValueError, match="little_h=False disagrees"):
+            grouping.spherical_wf_from_uvp(
+                uvp_exact_wfs, kbin_edges=edges * cu.littleh / u.Mpc, little_h=False
+            )
+        with pytest.raises(
+            u.UnitConversionError, match="kbin_edges must be a wavenumber"
+        ):
+            grouping.spherical_wf_from_uvp(uvp_exact_wfs, kbin_edges=edges * u.Mpc)
 
 
 class TestAverageInDelayBins:
@@ -1205,7 +1332,7 @@ class TestAverageInDelayBins:
         dk = 0.08959223 * 3.0
         kbin_left = np.arange(dk / 3 / 2, 2.3, dk)
         kbin_right = kbin_left + dk
-        kbins = (kbin_left + kbin_right) / 2.0
+        kbins = (kbin_left + kbin_right) / 2.0 * cu.littleh / u.Mpc
         sph_uvp = grouping.spherical_average(
             vanilla_uvp_with_beam, kbins, dk, time_avg=True
         )

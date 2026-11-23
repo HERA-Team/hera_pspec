@@ -6,13 +6,16 @@ import glob
 import logging
 import pickle
 import sys
+import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 from typing import Annotated, Literal
 
 import h5py
 import numpy as np
-from cyclopts import App, Parameter
+from astropy import units
+from astropy.cosmology import FlatLambdaCDM, LambdaCDM, realizations
+from cyclopts import App, Group, Parameter
 from rich.console import Console
 from rich.logging import RichHandler
 from tqdm import tqdm
@@ -25,7 +28,7 @@ app = App(name="pspec", version_flags=[], help_flags=["--help"])
 import pyuvdata  # noqa: E402
 from pyuvdata import UVData  # noqa: E402
 
-from . import container, grouping, pspecdata, pstokes, utils  # noqa: E402
+from . import container, conversions, grouping, pspecdata, pstokes, utils  # noqa: E402
 from .uvpspec import recursive_combine_uvpspec  # noqa: E402
 
 
@@ -158,6 +161,141 @@ def fast_merge_baselines(
         cns.print(f"Wrote {fname}")
 
 
+COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
+
+
+# Defaults of the --cosmo values, in COSMO_PARAM_ORDER (the defaults of the
+# former Cosmo_Conversions constructor; they give conversions.LEGACY_COSMOLOGY).
+_COSMO_PARAM_DEFAULTS = {
+    "Om_L": 0.68440,
+    "Om_b": 0.04911,
+    "Om_c": 0.26442,
+    "H0": 67.27,
+    "Om_M": None,
+    "Om_k": None,
+}
+
+
+def _validate_cosmo_values(type_, value) -> None:
+    """Reject more values than the six cosmological parameters."""
+    if value is not None and not 1 <= len(value) <= 6:
+        raise ValueError(
+            f"--cosmo takes 1 to 6 values in the order {COSMO_PARAM_ORDER}; "
+            f"got {len(value)}."
+        )
+
+
+def _cosmology_from_values(values):
+    """
+    Build an astropy cosmology from the positional --cosmo values.
+
+    Missing trailing values take their defaults; ``Om_M`` defaults to
+    ``Om_b + Om_c`` and ``Om_k`` to ``1 - Om_L - Om_M``.
+    """
+    params = dict(_COSMO_PARAM_DEFAULTS)
+    params.update(zip(_COSMO_PARAM_DEFAULTS, values))
+    if params["Om_M"] is None:
+        params["Om_M"] = params["Om_b"] + params["Om_c"]
+    if params["Om_k"] is None:
+        params["Om_k"] = 1 - params["Om_L"] - params["Om_M"]
+    return conversions.cosmology_from_params(params)
+
+
+# Name of conversions.LEGACY_COSMOLOGY, the default cosmology of hera_pspec v0.x
+LEGACY_COSMOLOGY_NAME = "hera_pspec_default"
+
+
+def _cosmology_names() -> tuple[str, ...]:
+    """Names accepted by ``pspec run --cosmology``."""
+    return (LEGACY_COSMOLOGY_NAME, *realizations.available)
+
+
+def _validate_cosmology_name(type_, value) -> None:
+    """Reject a --cosmology name that is not a known realization."""
+    if value is not None and value not in _cosmology_names():
+        raise ValueError(
+            f"unknown cosmology {value!r}; available: {', '.join(_cosmology_names())}."
+        )
+
+
+def _cosmology_from_name(name: str):
+    """Return the astropy cosmology named by ``pspec run --cosmology``."""
+    if name == LEGACY_COSMOLOGY_NAME:
+        return conversions.LEGACY_COSMOLOGY
+    return getattr(realizations, name)
+
+
+# The cosmology options of `pspec run`, in their CLI spelling. Only one of the
+# three ways of giving a cosmology may be used at a time.
+_COSMOLOGY_NAME_OPTION = "--cosmology"
+_COSMOLOGY_PARAM_OPTIONS = ("--h0", "--om0", "--ode0", "--ob0", "--tcmb0")
+_COSMOLOGY_REQUIRED_PARAM_OPTIONS = ("--h0", "--om0")
+_DEPRECATED_COSMO_OPTION = "--cosmo"
+
+
+def _validate_cosmology_options(argument_collection) -> None:
+    """Allow one of --cosmology, the parameter options or --cosmo."""
+    given = [arg.name for arg in argument_collection.filter_by(value_set=True)]
+    styles = []
+    if _COSMOLOGY_NAME_OPTION in given:
+        styles.append(_COSMOLOGY_NAME_OPTION)
+    if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
+        styles.append("/".join(_COSMOLOGY_PARAM_OPTIONS))
+    if _DEPRECATED_COSMO_OPTION in given:
+        styles.append(_DEPRECATED_COSMO_OPTION)
+    if len(styles) > 1:
+        raise ValueError(f"give the cosmology one way only; got {', '.join(styles)}.")
+    if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
+        missing = [
+            name for name in _COSMOLOGY_REQUIRED_PARAM_OPTIONS if name not in given
+        ]
+        if missing:
+            raise ValueError(
+                f"{' and '.join(missing)} must be given with the cosmological "
+                f"parameter options {'/'.join(_COSMOLOGY_PARAM_OPTIONS)}."
+            )
+
+
+COSMOLOGY_GROUP = Group(
+    "Cosmology (one of --cosmology, --h0/--om0/..., or --cosmo)",
+    validator=_validate_cosmology_options,
+    sort_key=1,
+)
+
+
+def _cosmology_from_parameters(H0, Om0, Ode0=None, Ob0=None, Tcmb0=None):
+    """
+    Build the astropy cosmology given by the --h0/--om0/... options.
+
+    ``LambdaCDM`` when ``Ode0`` is given, else ``FlatLambdaCDM``. ``Tcmb0``
+    defaults to 0 (no radiation), as in the v0.x default cosmology
+    (``conversions.LEGACY_COSMOLOGY``).
+    """
+    kwargs = {"H0": H0, "Om0": Om0, "Tcmb0": 0.0 if Tcmb0 is None else Tcmb0}
+    if Ob0 is not None:
+        kwargs["Ob0"] = Ob0
+    if Ode0 is None:
+        return FlatLambdaCDM(**kwargs)
+    return LambdaCDM(Ode0=Ode0, **kwargs)
+
+
+def _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo):
+    """Return the cosmology selected by the `pspec run` options, or None."""
+    if cosmology is not None:
+        return _cosmology_from_name(cosmology)
+    if H0 is not None:
+        return _cosmology_from_parameters(H0, Om0, Ode0=Ode0, Ob0=Ob0, Tcmb0=Tcmb0)
+    if cosmo is not None:
+        warnings.warn(
+            "--cosmo is deprecated and will be removed in a future version; use "
+            "--cosmology NAME or --h0/--om0/--ode0/--ob0/--tcmb0 instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return _cosmology_from_values(cosmo)
+    return None
+
+
 # `run` and `bootstrap` are thin wrappers: their parameters deliberately use the
 # wrapped library function's names so cyclopts maps each option's --help text from
 # the reused __doc__ (assigned just after each definition). Annotated
@@ -181,7 +319,71 @@ def run(
     norm: Literal["I", "H^-1", "V^-1/2"] = "I",
     taper: str = "none",
     beam: Path | None = None,
-    cosmo: list[float] | None = None,
+    cosmology: Annotated[
+        str | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help=(
+                "Named cosmology: an astropy realization "
+                f"({', '.join(realizations.available)}) or "
+                f"{LEGACY_COSMOLOGY_NAME} (the LambdaCDM default of hera_pspec "
+                "v0.x). Default is the beam's own cosmology (Planck18 unless "
+                "the beam sets another)."
+            ),
+            validator=_validate_cosmology_name,
+        ),
+    ] = None,
+    H0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP, help="Hubble constant in km/s/Mpc. Needs --om0."
+        ),
+    ] = None,
+    Om0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP, help="Matter density parameter today. Needs --h0."
+        ),
+    ] = None,
+    Ode0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help=(
+                "Dark energy density parameter today; gives a LambdaCDM. "
+                "If omitted, the cosmology is flat (FlatLambdaCDM)."
+            ),
+        ),
+    ] = None,
+    Ob0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help="Baryon density parameter today. Default: astropy's (0).",
+        ),
+    ] = None,
+    Tcmb0: Annotated[
+        float | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help="CMB temperature today in K. Default: 0 (no radiation).",
+        ),
+    ] = None,
+    cosmo: Annotated[
+        list[float] | None,
+        Parameter(
+            group=COSMOLOGY_GROUP,
+            help=(
+                "Deprecated: use --cosmology or --h0/--om0/... instead. "
+                "Cosmological parameters, in the order "
+                f"{COSMO_PARAM_ORDER}, used to build an astropy LambdaCDM. "
+                "Up to 6 values; omitted trailing values keep their defaults."
+            ),
+            validator=_validate_cosmo_values,
+            consume_multiple=True,
+            negative=(),
+        ),
+    ] = None,
     rephase_to_dset: int | None = None,
     trim_dset_lsts: bool = False,
     broadcast_dset_flags: bool = False,
@@ -212,7 +414,10 @@ def run(
     xant_flag_thresh: float = 0.95,
     store_window: bool = False,
     allow_fft: bool = False,
+    length_unit: Literal["Mpc / littleh", "Mpc"] = "Mpc / littleh",
+    normalization: Literal["two-step", "one-step"] = "two-step",
 ) -> None:
+    cosmo = _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo)
     pspecdata.pspec_run(
         dsets=[str(d) for d in dsets],
         filename=str(filename),
@@ -261,6 +466,8 @@ def run(
         xant_flag_thresh=xant_flag_thresh,
         store_window=store_window,
         allow_fft=allow_fft,
+        length_unit=length_unit,
+        normalization=normalization,
         history=" ".join(sys.argv),
     )
 
@@ -551,7 +758,11 @@ def compute_ft_beam(
             return
 
     ftbeam = FTBeam.from_beam(
-        beamfile=beam_file, pol=pol, freq_array=freq_array, mapsize=mapsize, npix=npix
+        beamfile=beam_file,
+        pol=pol,
+        freq_array=freq_array * units.Hz,
+        mapsize=mapsize * units.rad,
+        npix=npix,
     )
     out_path = Path(out_dir) / fname
     ftbeam.write_hdf5(
@@ -601,7 +812,7 @@ def _compute_one_wf(
     # load the FT beam on the exact frequency channels of the spectral
     # window (reads only the relevant channel range from disk)
     spw_freqs = np.unique(sub.freq_array)
-    ftbeam = FTBeam.from_file(ft_beam_file, freq_array=spw_freqs)
+    ftbeam = FTBeam.from_file(ft_beam_file, freq_array=spw_freqs * units.Hz)
 
     kperp, kpara, wf = sub.get_exact_window_functions(ftbeam=ftbeam, inplace=False)
     # after select, the only spectral window is index 0

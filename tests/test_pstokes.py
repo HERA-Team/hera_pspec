@@ -17,14 +17,6 @@ multipol_dset = DATA_PATH / "zen.2458116.31193.HH.uvh5"
 multipol_dset_cal = DATA_PATH / "zen.2458116.31193.HH.flagged_abs.calfits"
 
 
-def _load_uvd(path: str) -> pyuvdata.UVData:
-    uvd = pyuvdata.UVData()
-    uvd.read_miriad(path)
-    uvd.vis_units = "Jy"
-    uvd.pol_convention = "avg"
-    return uvd
-
-
 @pytest.fixture()
 def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
     uvd = copy.deepcopy(uvd_zen_all_xx)
@@ -34,8 +26,11 @@ def uvd1(uvd_zen_all_xx: pyuvdata.UVData) -> pyuvdata.UVData:
 
 
 @pytest.fixture()
-def uvd2() -> pyuvdata.UVData:
-    return _load_uvd(dset2)
+def uvd2(uvd_zen_all_yy: pyuvdata.UVData) -> pyuvdata.UVData:
+    uvd = copy.deepcopy(uvd_zen_all_yy)
+    uvd.vis_units = "Jy"
+    uvd.pol_convention = "avg"
+    return uvd
 
 
 @pytest.fixture(scope="module")

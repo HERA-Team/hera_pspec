@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from pyuvdata.utils import polnum2str, polstr2num
 
-from . import utils
+from . import unit_helpers, utils
 
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
@@ -49,10 +49,10 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     )
 
     # get metadata
-    spws1 = [spw for spw in uvp1.get_spw_ranges()]
+    spws1 = [spw for spw in uvp1._spw_ranges_hz()]
     polpairs1 = uvp1.polpair_array.tolist()
     blps1 = sorted(set(uvp1.blpair_array))
-    spws2 = [spw for spw in uvp2.get_spw_ranges()]
+    spws2 = [spw for spw in uvp2._spw_ranges_hz()]
 
     # iterate over spws
     for i, spw in enumerate(spws1):
@@ -323,9 +323,9 @@ def select_common(
     # Get common spectral windows (the entire window must match)
     # Each row of common_spws is a list of that spw's index in each UVPSpec
     if spws:
-        common_spws = uvp_list[0].get_spw_ranges()
+        common_spws = uvp_list[0]._spw_ranges_hz()
         has_spws = [
-            [x in uvp.get_spw_ranges() for x in common_spws] for uvp in uvp_list
+            [x in uvp._spw_ranges_hz() for x in common_spws] for uvp in uvp_list
         ]
         common_spws = [
             common_spws[i] for i, f in enumerate(np.all(has_spws, axis=0)) if f
@@ -367,7 +367,7 @@ def select_common(
         if polpairs:
             _pols = common_polpairs
         if spws:
-            _spws = [uvp.get_spw_ranges().index(j) for j in common_spws]
+            _spws = [uvp._spw_ranges_hz().index(j) for j in common_spws]
 
         _uvp = uvp.select(
             spws=_spws,
@@ -795,6 +795,13 @@ def _select(
             else:
                 statnames = []
 
+        # version 2 files store units on the per-spw datasets of parameters
+        # with a declared unit, and on the exact window function k grids
+        # (in uvp.window_k_unit()); older files have none
+        read_units = h5file is not None and "uvpspec_version" in h5file.attrs
+        if read_units and exact_windows:
+            window_k_unit = uvp.window_k_unit()
+
         # iterate over spws
         if spw_mapping is None:
             spw_mapping = uvp.spw_array
@@ -903,6 +910,28 @@ def _select(
                     stats[statname][s] = _stat[statname][blp_select, :, :][
                         :, :, polpair_select
                     ]
+
+            # convert per-spw arrays read from file to their declared units
+            if read_units:
+                ints[s] = unit_helpers.convert_from_stored_unit(
+                    ints[s],
+                    _ints.attrs.get("unit", None),
+                    uvp.get_param_unit("integration_array"),
+                    "integration_array",
+                )
+                if store_window and exact_windows:
+                    window_function_kperp[s] = unit_helpers.convert_from_stored_unit(
+                        window_function_kperp[s],
+                        _window_function_kperp.attrs.get("unit", None),
+                        window_k_unit,
+                        "window_function_kperp",
+                    )
+                    window_function_kpara[s] = unit_helpers.convert_from_stored_unit(
+                        window_function_kpara[s],
+                        _window_function_kpara.attrs.get("unit", None),
+                        window_k_unit,
+                        "window_function_kpara",
+                    )
 
         # assign arrays to uvp
         uvp.data_array = data
