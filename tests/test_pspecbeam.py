@@ -40,10 +40,6 @@ def efield_beam(beam_nf_efield: pspecbeam.PSpecBeamUV) -> pspecbeam.PSpecBeamUV:
     return beam
 
 
-def _leave_unchanged(primary_beam: UVBeam) -> None:
-    pass
-
-
 # A non-default cosmology for the constructor tests.
 CUSTOM_COSMO = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
 
@@ -200,60 +196,58 @@ class TestPSpecBeamUV:
         assert beam_res[0].ndim == 2
         assert np.shape(beam_res[0]) == (len(freq), (12 * nside**2))
 
-    @pytest.mark.parametrize(
-        "beam_name,mutate,pol,match",
-        [
-            pytest.param(
-                "beam_nf_dipole",
-                _leave_unchanged,
-                "ll",
-                "Do not have the right polarization",
-                id="unavailable_pol",
-            ),
-            pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "beam_type", "voltage"),
-                "xx",
-                "beam_type must be power",
-                id="non_power_beam",
-            ),
-            pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "Naxes_vec", 2),
-                "xx",
-                "Expect scalar for power beam",
-                id="vector_power_beam",
-            ),
-            pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb._data_normalization, "value", "area"),
-                "xx",
-                "beam must be peak normalized",
-                id="non_peak_normalized",
-            ),
-            pytest.param(
-                "efield_beam",
-                lambda pb: setattr(pb, "pixel_coordinate_system", "cartesian"),
-                "xx",
-                "only healpix format supported",
-                id="non_healpix_coords",
-            ),
-        ],
-    )
-    def test_beam_normalized_response_raises(
-        self,
-        beam_name: str,
-        mutate: Callable[[UVBeam], None],
-        pol: str,
-        match: str,
-        request: pytest.FixtureRequest,
+    def test_beam_normalized_response_raises_on_wrong_pol(
+        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
     ) -> None:
-        """Check that beams beam_normalized_response cannot handle raise a ValueError."""
-        beam = request.getfixturevalue(beam_name)
-        mutate(beam.primary_beam)
+        """Check that an unavailable polarization raises a ValueError."""
         freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
-        with pytest.raises(ValueError, match=match):
-            pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol=pol, freq=freq)
+        with pytest.raises(ValueError, match="Do not have the right polarization"):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(
+                beam_nf_dipole, pol="ll", freq=freq
+            )
+
+    def test_beam_normalized_response_raises_on_non_power_beam(
+        self, beam_nf_efield: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """Check that a non-power beam_type raises a ValueError."""
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
+        beam = copy.deepcopy(beam_nf_efield)
+        beam.primary_beam.beam_type = "voltage"
+        with pytest.raises(ValueError, match="beam_type must be power"):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(beam, pol="xx", freq=freq)
+
+    def test_beam_normalized_response_raises_on_wrong_axes(
+        self, efield_beam: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """Check that Naxes_vec > 1 raises a ValueError for a power beam."""
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
+        efield_beam.primary_beam.Naxes_vec = 2
+        with pytest.raises(ValueError, match="Expect scalar for power beam"):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(
+                efield_beam, pol="xx", freq=freq
+            )
+
+    def test_beam_normalized_response_raises_on_non_peak_normalization(
+        self, efield_beam: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """Check that a non-peak-normalized beam raises a ValueError."""
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
+        efield_beam.primary_beam._data_normalization.value = "area"
+        with pytest.raises(ValueError, match="beam must be peak normalized"):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(
+                efield_beam, pol="xx", freq=freq
+            )
+
+    def test_beam_normalized_response_raises_on_non_healpix_coords(
+        self, efield_beam: pspecbeam.PSpecBeamUV
+    ) -> None:
+        """Check that a non-healpix pixel coordinate system raises a ValueError."""
+        freq = np.linspace(130.0 * 1e6, 140.0 * 1e6, 10) * u.Hz
+        efield_beam.primary_beam.pixel_coordinate_system = "cartesian"
+        with pytest.raises(ValueError, match="only healpix format supported"):
+            pspecbeam.PSpecBeamUV.beam_normalized_response(
+                efield_beam, pol="xx", freq=freq
+            )
 
 
 @pytest.fixture(scope="module")
@@ -344,75 +338,42 @@ class TestPSpecBeamGauss:
             from_power.power_beam_sq_int(), from_efield.power_beam_sq_int()
         )
 
-    @pytest.mark.parametrize(
-        "build_beam,exc_type,match",
-        [
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(
-                    beam=GaussianBeam(diameter=14.0), beam_freqs=freqs
-                ),
-                ValueError,
-                "Diameter-specified",
-                id="diameter_specified_beam",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(
-                    beam=GaussianBeam(
-                        sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
-                    ),
-                    beam_freqs=freqs,
-                ),
-                NotImplementedError,
-                "Chromatic",
-                id="chromatic_beam",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(
-                    beam=AiryBeam(diameter=14.0), beam_freqs=freqs
-                ),
-                TypeError,
-                "must be a pyuvdata GaussianBeam",
-                id="non_gaussian_beam",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(
-                    fwhm=0.8 * u.rad, beam=GaussianBeam(sigma=0.1), beam_freqs=freqs
-                ),
-                ValueError,
-                "Exactly one of fwhm or beam",
-                id="fwhm_and_beam",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(beam_freqs=freqs),
-                ValueError,
-                "Exactly one of fwhm or beam",
-                id="neither_fwhm_nor_beam",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(fwhm=0.8 * u.rad),
-                ValueError,
-                "beam_freqs must be specified",
-                id="no_beam_freqs",
-            ),
-            pytest.param(
-                lambda freqs: pspecbeam.PSpecBeamGauss(GaussianBeam(sigma=0.1), freqs),
-                TypeError,
-                "pass analytic beams via the beam keyword",
-                id="analytic_beam_as_fwhm",
-            ),
-        ],
-    )
-    def test_raises_on_invalid_init_args(
-        self,
-        gauss_beam: pspecbeam.PSpecBeamGauss,
-        build_beam: Callable[[u.Quantity], pspecbeam.PSpecBeamGauss],
-        exc_type: type[Exception],
-        match: str,
+    def test_raises_on_unsupported_analytic_beams(
+        self, gauss_beam: pspecbeam.PSpecBeamGauss
     ) -> None:
-        """Check clear errors for unsupported analytic beams and for invalid
-        fwhm/beam/beam_freqs combinations."""
-        with pytest.raises(exc_type, match=match):
-            build_beam(gauss_beam.beam_freqs * u.Hz)
+        """Check clear errors for diameter-specified, chromatic, and non-Gaussian analytic beams."""
+        with pytest.raises(ValueError, match="Diameter-specified"):
+            pspecbeam.PSpecBeamGauss(
+                beam=GaussianBeam(diameter=14.0),
+                beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            )
+        with pytest.raises(NotImplementedError, match="Chromatic"):
+            pspecbeam.PSpecBeamGauss(
+                beam=GaussianBeam(
+                    sigma=0.1, spectral_index=-1.0, reference_frequency=150e6
+                ),
+                beam_freqs=gauss_beam.beam_freqs * u.Hz,
+            )
+        with pytest.raises(TypeError, match="must be a pyuvdata GaussianBeam"):
+            pspecbeam.PSpecBeamGauss(
+                beam=AiryBeam(diameter=14.0), beam_freqs=gauss_beam.beam_freqs * u.Hz
+            )
+
+    def test_raises_on_bad_argument_combinations(
+        self, gauss_beam: pspecbeam.PSpecBeamGauss
+    ) -> None:
+        """Check that fwhm and beam are mutually exclusive and beam_freqs is required."""
+        analytic = GaussianBeam(sigma=0.1)
+        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
+            pspecbeam.PSpecBeamGauss(
+                fwhm=0.8 * u.rad, beam=analytic, beam_freqs=gauss_beam.beam_freqs * u.Hz
+            )
+        with pytest.raises(ValueError, match="Exactly one of fwhm or beam"):
+            pspecbeam.PSpecBeamGauss(beam_freqs=gauss_beam.beam_freqs * u.Hz)
+        with pytest.raises(ValueError, match="beam_freqs must be specified"):
+            pspecbeam.PSpecBeamGauss(fwhm=0.8 * u.rad)
+        with pytest.raises(TypeError, match="pass analytic beams via the beam keyword"):
+            pspecbeam.PSpecBeamGauss(analytic, gauss_beam.beam_freqs * u.Hz)
 
     def test_omegas_match_numerical_integration(self) -> None:
         """Check the closed-form Omegas against healpix-integrated areas of the wrapped GaussianBeam.
