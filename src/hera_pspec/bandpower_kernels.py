@@ -79,29 +79,44 @@ def _as_indices(selection, n: int) -> np.ndarray:
     return np.atleast_1d(np.arange(n)[selection])
 
 
+def _row_fingerprints(bits: np.ndarray) -> np.ndarray:
+    """Two 64-bit fingerprints per row of a 2D uint64 array, shape ``(n, 2)``.
+
+    Integer dot products with fixed random odd multipliers: exact and wrapping
+    modulo 2**64 in any order, so identical rows always get identical
+    fingerprints. Odd multipliers are invertible, so a change in one element
+    always changes them, and folding the high bits into the low ones first stops
+    sign flips (a difference of 2**63) from cancelling in pairs, as they would for
+    rows that are negatives of each other.
+    """
+    multipliers = np.random.default_rng(0).integers(
+        0, 2**63, size=(bits.shape[1], 2), dtype=np.uint64
+    ) * np.uint64(2) + np.uint64(1)
+    return (bits ^ (bits >> np.uint64(31))) @ multipliers
+
+
 def _distinct_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Group the equal rows of a 2D array.
+    """Group the bit-identical rows of a 2D float64 array.
 
     Returns ``first``, the index of the first occurrence of each distinct row in
     order of appearance, and ``inverse``, the position in ``first`` of each row's
     group, so that ``rows[first][inverse]`` equals ``rows``.
 
-    Each row is projected onto two fixed random vectors and rows with equal
-    projections are grouped, which is much faster than sorting whole rows. Every
-    row is then checked against its group's first row, so rows are only merged if
-    they are equal; if any check fails (NaNs, or a vanishingly unlikely collision)
-    the rows are grouped by exact byte comparison instead.
+    Rows with equal :func:`_row_fingerprints` are grouped, which is much faster
+    than sorting whole rows. Every row is then compared with its group's first
+    row, so only bit-identical rows are merged; if a comparison fails (a
+    vanishingly unlikely collision) the rows are grouped by sorting their bytes
+    instead.
     """
     if len(rows) == 0:
         return np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp)
-    projection = np.random.default_rng(0).standard_normal((rows.shape[1], 2))
+    bits = np.ascontiguousarray(rows, dtype=np.float64).view(np.uint64)
     _, first, inverse = np.unique(
-        rows @ projection, axis=0, return_index=True, return_inverse=True
+        _row_fingerprints(bits), axis=0, return_index=True, return_inverse=True
     )
     inverse = inverse.reshape(-1)
-    if not np.array_equal(rows, rows[first[inverse]]):
-        rows = np.ascontiguousarray(rows)
-        as_bytes = rows.view(np.dtype((np.void, rows.itemsize * rows.shape[1])))
+    if not np.array_equal(bits, bits[first[inverse]]):
+        as_bytes = bits.view(np.dtype((np.void, bits.itemsize * bits.shape[1])))
         _, first, inverse = np.unique(
             as_bytes.reshape(-1), return_index=True, return_inverse=True
         )

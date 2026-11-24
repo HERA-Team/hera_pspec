@@ -2,8 +2,13 @@ import h5py
 import numpy as np
 import pytest
 
-from hera_pspec import BandpowerCovariance, BandpowerKernel, BandpowerWindow
-from hera_pspec.bandpower_kernels import window_from_dense
+from hera_pspec import (
+    BandpowerCovariance,
+    BandpowerKernel,
+    BandpowerWindow,
+    bandpower_kernels,
+)
+from hera_pspec.bandpower_kernels import _distinct_rows, window_from_dense
 
 NBLPAIRS, NTIMES, NPOLS, NDLYS = 3, 4, 2, 5
 NBLTPAIRS = NBLPAIRS * NTIMES
@@ -189,6 +194,33 @@ class TestStructure:
         np.testing.assert_array_equal(deduped.blocks, [[[1.0]], [[2.0]]])
         np.testing.assert_array_equal(deduped.block_index, [[0, 0], [0, 1]])
         assert deduped == kernel
+
+    def test_identical_rows_always_merge(self, rng):
+        """Identical rows are grouped together wherever they sit in the array."""
+        rows = np.repeat(rng.random((1, 2500)), 30, axis=0)
+        first, inverse = _distinct_rows(rows)
+        np.testing.assert_array_equal(first, [0])
+        np.testing.assert_array_equal(inverse, np.zeros(30))
+
+    def test_negated_rows_stay_apart(self, rng):
+        """Rows that are negatives of each other are different groups."""
+        row = rng.random(8) - 0.5
+        rows = np.stack([row, -row, row, -row])
+        first, inverse = _distinct_rows(rows)
+        np.testing.assert_array_equal(first, [0, 1])
+        np.testing.assert_array_equal(inverse, [0, 1, 0, 1])
+
+    def test_fingerprint_collisions_fall_back(self, rng, monkeypatch):
+        """If different rows share a fingerprint, exact grouping still separates them."""
+        monkeypatch.setattr(
+            bandpower_kernels,
+            "_row_fingerprints",
+            lambda bits: np.zeros((len(bits), 2), dtype=np.uint64),
+        )
+        a, b = rng.random(5), rng.random(5)
+        first, inverse = _distinct_rows(np.stack([b, a, b, a]))
+        np.testing.assert_array_equal(first, [0, 1])
+        np.testing.assert_array_equal(inverse, [0, 1, 0, 1])
 
     def test_deduplicate_empty(self):
         """A kernel with no entries deduplicates to no blocks."""
