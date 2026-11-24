@@ -290,34 +290,22 @@ class TestCalcPN:
                 scalar, 300 * u.K, 10.7 * u.s, form="DelSq", k=k * cu.littleh / u.Mpc
             )
 
-    @pytest.mark.parametrize(
-        "scalar, tsys, t_int, kwargs, exception, match",
-        [
-            (SCALAR, 300 * u.s, 10.7 * u.s, {}, u.UnitConversionError, "Tsys"),
-            (SCALAR, 300 * u.K, 10.7 * u.K, {}, u.UnitConversionError, "t_int"),
-            (
-                1.0 * u.s,
-                300 * u.K,
-                10.7 * u.s,
-                {},
-                u.UnitConversionError,
-                "scalar must be",
-            ),
-            # a k Quantity needs the length unit of a Quantity scalar
-            (
-                SCALAR,
-                300 * u.K,
-                10.7 * u.s,
-                {"form": "DelSq", "k": [1.0] / u.Mpc},
-                TypeError,
-                "scalar is a plain float",
-            ),
-        ],
-        ids=["tsys_unit", "t_int_unit", "scalar_unit", "k_quantity_plain_scalar"],
-    )
-    def test_errors(self, scalar, tsys, t_int, kwargs, exception, match):
-        with pytest.raises(exception, match=match):
-            noise.calc_P_N(scalar, tsys, t_int, **kwargs)
+    def test_wrong_units_raise(self):
+        """Check that Tsys, t_int and scalar in the wrong unit raise."""
+        with pytest.raises(u.UnitConversionError, match="Tsys"):
+            noise.calc_P_N(self.SCALAR, 300 * u.s, 10.7 * u.s)
+        with pytest.raises(u.UnitConversionError, match="t_int"):
+            noise.calc_P_N(self.SCALAR, 300 * u.K, 10.7 * u.K)
+        with pytest.raises(u.UnitConversionError, match="scalar must be"):
+            noise.calc_P_N(1.0 * u.s, 300 * u.K, 10.7 * u.s)
+
+    def test_k_quantity_needs_quantity_scalar(self):
+        """Check that a k Quantity with a plain-float scalar raises: k needs the
+        length unit that only a Quantity scalar carries."""
+        with pytest.raises(TypeError, match="scalar is a plain float"):
+            noise.calc_P_N(
+                self.SCALAR, 300 * u.K, 10.7 * u.s, form="DelSq", k=[1.0] / u.Mpc
+            )
 
 
 class TestSensitivity:
