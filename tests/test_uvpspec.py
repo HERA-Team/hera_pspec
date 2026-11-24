@@ -1,6 +1,5 @@
 import copy
 import re
-from collections.abc import Callable
 from pathlib import Path
 
 import astropy.cosmology.units as cu
@@ -1161,77 +1160,64 @@ class TestParamUnits:
     def test_check_accepts_quantity(
         self, mutable_uvp: uvpspec.UVPSpec, name: str, unit: units.UnitBase
     ) -> None:
+        """check() accepts and keeps a Quantity in the declared unit (Hz for
+        freq_array) or in an equivalent one (ns for dly_array, declared in s)."""
         quantity = getattr(mutable_uvp, name) * unit
         setattr(mutable_uvp, name, quantity)
         mutable_uvp.check()
-        assert isinstance(getattr(mutable_uvp, name), units.Quantity)
-        assert getattr(mutable_uvp, name).unit == unit
-        assert np.array_equal(getattr(mutable_uvp, name), quantity)
+        checked = getattr(mutable_uvp, name)
+        assert isinstance(checked, units.Quantity)
+        assert checked.unit == unit
+        assert np.array_equal(checked, quantity)
 
-    @pytest.mark.parametrize(
-        "name, to_quantity, match",
-        [
-            pytest.param(
-                "freq_array",
-                lambda freqs: freqs * units.m,
-                "freq_array has unit 'm'.*declared unit 'Hz'",
-                id="wrong_unit",
-            ),
-            pytest.param(
-                "scalar_array",
-                lambda scalar: scalar * units.mK**2,
-                "scalar_array is a Quantity.*does not declare a unit",
-                id="no_declared_unit",
-            ),
-            pytest.param(
-                "integration_array",
-                lambda ints: {spw: arr * units.Hz for spw, arr in ints.items()},
-                "integration_array has unit 'Hz'",
-                id="wrong_unit_in_dict",
-            ),
-        ],
-    )
-    def test_check_rejects_quantity(
-        self, mutable_uvp: uvpspec.UVPSpec, name: str, to_quantity: Callable, match: str
-    ) -> None:
-        setattr(mutable_uvp, name, to_quantity(getattr(mutable_uvp, name)))
-        with pytest.raises(ValueError, match=match):
+    def test_check_rejects_wrong_unit(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        mutable_uvp.freq_array = mutable_uvp.freq_array * units.m
+        with pytest.raises(
+            ValueError, match="freq_array has unit 'm'.*declared unit 'Hz'"
+        ):
             mutable_uvp.check()
 
-    @pytest.mark.parametrize(
-        "norm_units, name, kunit, wrong_kunit",
-        [
-            # the window k grids of an "Hz sr" object are in 1 / Mpc
-            pytest.param(
-                "Hz sr",
-                "window_function_kperp",
-                units.Mpc ** (-1),
-                cu.littleh / units.Mpc,
-                id="hz_sr_rejects_littleh",
-            ),
-            pytest.param(
-                "Mpc3 / littleh3",
-                "window_function_kpara",
-                cu.littleh / units.Mpc,
-                units.Mpc ** (-1),
-                id="littleh_rejects_inverse_mpc",
-            ),
-        ],
-    )
-    def test_check_window_k_follows_norm_units(
-        self,
-        mutable_uvp: uvpspec.UVPSpec,
-        norm_units: str,
-        name: str,
-        kunit: units.UnitBase,
-        wrong_kunit: units.UnitBase,
+    def test_check_rejects_quantity_without_declared_unit(
+        self, mutable_uvp: uvpspec.UVPSpec
     ) -> None:
-        mutable_uvp.norm_units = norm_units
-        assert mutable_uvp.window_k_unit() == kunit
-        setattr(mutable_uvp, name, {0: np.ones((2, 2)) * kunit})
+        mutable_uvp.scalar_array = mutable_uvp.scalar_array * units.mK**2
+        with pytest.raises(
+            ValueError, match="scalar_array is a Quantity.*does not declare a unit"
+        ):
+            mutable_uvp.check()
+
+    def test_check_rejects_wrong_unit_in_dict(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.integration_array = {
+            spw: ints * units.Hz for spw, ints in mutable_uvp.integration_array.items()
+        }
+        with pytest.raises(ValueError, match="integration_array has unit 'Hz'"):
+            mutable_uvp.check()
+
+    def test_check_rejects_littleh_mismatch(self, mutable_uvp: uvpspec.UVPSpec) -> None:
+        # the window k grids of an "Hz sr" object are in 1 / Mpc
+        assert mutable_uvp.window_k_unit() == units.Mpc ** (-1)
+        mutable_uvp.window_function_kperp = {0: np.ones((2, 2)) / units.Mpc}
         mutable_uvp.check()
-        setattr(mutable_uvp, name, {0: np.ones((2, 2)) * wrong_kunit})
-        with pytest.raises(ValueError, match=f"{name} has unit"):
+        mutable_uvp.window_function_kperp = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        with pytest.raises(ValueError, match="window_function_kperp has unit"):
+            mutable_uvp.check()
+
+    def test_check_window_k_follows_norm_units(
+        self, mutable_uvp: uvpspec.UVPSpec
+    ) -> None:
+        mutable_uvp.norm_units = "Mpc3 / littleh3"
+        # the window k grids of an "Mpc3 / littleh3" object are in littleh / Mpc
+        assert mutable_uvp.window_k_unit() == cu.littleh / units.Mpc
+        mutable_uvp.window_function_kpara = {
+            0: np.ones((2, 2)) * cu.littleh / units.Mpc
+        }
+        mutable_uvp.check()
+        mutable_uvp.window_function_kpara = {0: np.ones((2, 2)) / units.Mpc}
+        with pytest.raises(ValueError, match="window_function_kpara has unit"):
             mutable_uvp.check()
 
 
@@ -1308,28 +1294,11 @@ class TestSense:
     BASE_TSYS = 500 * units.K
     POLPAIR = ("xx", "xx")
 
-    @pytest.mark.parametrize(
-        "polpair,select_blpairs",
-        [(POLPAIR, lambda uvp: None), (1515, lambda uvp: uvp.get_blpairs()[:1])],
-        ids=["all_blpairs", "blpair_selection_and_int_polpair"],
-    )
-    def test_output_shape(
-        self,
-        mutable_uvp_with_beam: uvpspec.UVPSpec,
-        polpair: tuple | int,
-        select_blpairs: Callable[[uvpspec.UVPSpec], list | None],
-    ) -> None:
-        """Check that generate_noise_spectra returns a P_N array of shape
-        (Ntimes, Ndlys), also when blpairs= restricts the output and the
-        polpair is given as an integer code."""
+    def test_basic_execution(self, mutable_uvp_with_beam: uvpspec.UVPSpec) -> None:
+        """Check that generate_noise_spectra returns a P_N array of shape (Ntimes, Ndlys)."""
         Ndlys = mutable_uvp_with_beam.get_dlys(0).size
         P_N = mutable_uvp_with_beam.generate_noise_spectra(
-            0,
-            polpair,
-            self.BASE_TSYS,
-            form="Pk",
-            blpairs=select_blpairs(mutable_uvp_with_beam),
-            component="real",
+            0, self.POLPAIR, self.BASE_TSYS, form="Pk", component="real"
         )
         assert P_N[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
 
@@ -1370,6 +1339,17 @@ class TestSense:
         assert Dsq[101102101102].unit == units.mK**2
         assert P_N[101102101102].unit == units.mK**2 * LITTLEH_LENGTH**3
         assert Dsq[101102101102][0, 1].value < P_N[101102101102][0, 1].value
+
+    def test_blpair_selection_and_int_polpair(
+        self, mutable_uvp_with_beam: uvpspec.UVPSpec
+    ) -> None:
+        """Check that blpairs= restricts output and an integer polpair code is accepted."""
+        Ndlys = mutable_uvp_with_beam.get_dlys(0).size
+        blpairs = mutable_uvp_with_beam.get_blpairs()[:1]
+        P_N = mutable_uvp_with_beam.generate_noise_spectra(
+            0, 1515, self.BASE_TSYS, form="Pk", blpairs=blpairs, component="real"
+        )
+        assert P_N[101102101102].shape == (mutable_uvp_with_beam.Ntimes, Ndlys)
 
     def test_tsys_as_dict_of_arrays_captures_time_gradient(
         self, mutable_uvp_with_beam: uvpspec.UVPSpec
@@ -2152,6 +2132,8 @@ class TestCombineUvpspec:
     def test_concat_across_blpairts(
         self, pair_name: str, request: pytest.FixtureRequest
     ) -> None:
+        """Check that two objects with different baseline-pairs combine into one
+        with all of them, with and without a data_std."""
         uvp1, uvp2 = request.getfixturevalue(pair_name)
         out = uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
         assert out.Nblpairs == 4
@@ -2187,7 +2169,8 @@ class TestCombineUvpspec:
     def test_feed_as_strings(
         self, uvp1_uvp2_pols: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec], tmp_path: Path
     ) -> None:
-        """Check that combine_uvpspec accepts a list of HDF5 file paths instead of UVPSpec objects."""
+        """Check that combine_uvpspec accepts a list of HDF5 file paths instead of
+        UVPSpec objects (run with and without a data_std, see uvp1_uvp2_pols)."""
         uvp1, uvp2 = uvp1_uvp2_pols
         uvp1.write_hdf5(str(tmp_path / "uvp1.hdf5"), overwrite=True)
         uvp2.write_hdf5(str(tmp_path / "uvp2.hdf5"), overwrite=True)
@@ -2199,7 +2182,8 @@ class TestCombineUvpspec:
     def test_uvpspec_add_operator(
         self, uvp1_uvp2_pols: tuple[uvpspec.UVPSpec, uvpspec.UVPSpec]
     ) -> None:
-        """Check that the UVPSpec __add__ operator chains to combine more than two objects."""
+        """Check that the UVPSpec __add__ operator chains to combine more than two
+        objects (run with and without a data_std, see uvp1_uvp2_pols)."""
         uvp1, uvp2 = uvp1_uvp2_pols
         uvp3 = copy.deepcopy(uvp1)
         uvp3.polpair_array[0] = 1313
