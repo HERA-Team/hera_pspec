@@ -414,43 +414,11 @@ def test_get_delays(n_dlys: int | None) -> None:
     assert np.isclose(delays[0], -2.450e-07, atol=1e-10)
 
 
-def _no_extra_check(r: list, l: list, a: list) -> None:
-    pass
-
-
-def _assert_autos_group_first(r: list, l: list, a: list) -> None:
-    """The first group is the zero-length, zero-angle auto-correlation group."""
-    np.testing.assert_almost_equal(l[0], 0)
-    np.testing.assert_almost_equal(a[0], 0)
-
-
-def _assert_only_autos(r: list, l: list, a: list) -> None:
-    """The only group contains just auto-correlation baselines."""
-    assert len(r) == 1
-    for bl in r[0]:
-        assert bl[0] == bl[1]
-
-
 class TestGetReds:
-    @pytest.mark.parametrize(
-        "kwargs,n_groups,extra_check",
-        [
-            ({}, 104, _no_extra_check),
-            ({"add_autos": True}, 105, _assert_autos_group_first),
-            ({"autos_only": True, "add_autos": True}, 1, _assert_only_autos),
-        ],
-        ids=["basic_execution", "add_autos", "autos_only"],
-    )
-    def test_groups(
-        self,
-        kwargs: dict,
-        n_groups: int,
-        extra_check: Callable[[list, list, list], None],
-    ) -> None:
-        """Check that excluded antennas are absent from every redundant group, that
-        group counts match, and the effect of add_autos/autos_only."""
+    def test_basic_execution(self) -> None:
+        """Check that excluded antennas are absent from every redundant group, and group counts match."""
         xants = [0, 1, 2]
-        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants, **kwargs)
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants)
         assert np.all(
             [
                 np.all([bl[0] not in xants and bl[1] not in xants for bl in _r])
@@ -458,8 +426,7 @@ class TestGetReds:
             ]
         )
         assert len(r) == len(a) == len(l)
-        assert len(r) == n_groups
-        extra_check(r, l, a)
+        assert len(r) == 104
 
     @pytest.mark.parametrize("input_type", ["uvdata", "antpos_dict"])
     def test_input_types_are_equivalent(
@@ -497,10 +464,28 @@ class TestGetReds:
         assert len(l) == len(a) == 1
         assert np.isclose(a[0] % 180, 0, atol=1)
 
+    def test_add_autos(self) -> None:
+        """Check that add_autos prepends a zero-length, zero-angle auto-correlation group."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(ZEN_ALL_XX_PATH, xants=xants, add_autos=True)
+        np.testing.assert_almost_equal(l[0], 0)
+        np.testing.assert_almost_equal(a[0], 0)
+        assert len(r) == 105
+
     def test_raises_on_invalid_uvd_type(self) -> None:
         """Check that a non-UVData, non-path, non-dict input raises a TypeError."""
         with pytest.raises(TypeError, match="uvd must be a UVData object"):
             utils.get_reds([1.0, 2.0])
+
+    def test_autos_only(self) -> None:
+        """Check that autos_only restricts every returned group to auto-correlation baselines."""
+        xants = [0, 1, 2]
+        r, l, a = utils.get_reds(
+            ZEN_ALL_XX_PATH, xants=xants, autos_only=True, add_autos=True
+        )
+        assert len(r) == 1
+        for bl in r[0]:
+            assert bl[0] == bl[1]
 
 
 class TestConfigPspecBlpairs:
