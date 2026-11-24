@@ -21,20 +21,17 @@ def _from_astropy(cosmo) -> conversions.Cosmo_Conversions:
         return conversions.Cosmo_Conversions.from_astropy(cosmo)
 
 
+def _cosmo_with_H0(H0: float) -> conversions.Cosmo_Conversions:
+    """The reference cosmology of the distance/conversion checks, with the given H0."""
+    return _cosmo_conversions(
+        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=H0, Om_M=None, Om_k=None
+    )
+
+
 @pytest.fixture
 def cosmo_h100() -> conversions.Cosmo_Conversions:
     """Cosmology fixture with H0=100 used as the reference for distance/conversion checks."""
-    return _cosmo_conversions(
-        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0, Om_M=None, Om_k=None
-    )
-
-
-@pytest.fixture
-def cosmo_h25() -> conversions.Cosmo_Conversions:
-    """Cosmology fixture with H0=25.12, used to check little_h scaling against cosmo_h100."""
-    return _cosmo_conversions(
-        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=25.12, Om_M=None, Om_k=None
-    )
+    return _cosmo_with_H0(100.0)
 
 
 def test_units_match_astropy_constants() -> None:
@@ -58,32 +55,35 @@ def test_units_match_astropy_constants() -> None:
     assert conversions.F21 == si.f21 * u.Hz
 
 
-# (method, args, kwargs, expected) reference values for both test cosmologies
+# Reference values of the Cosmo_Conversions methods: (method, argument, keyword
+# arguments, expected value). Distances are in Mpc/h by default (little_h=True),
+# so these values hold for any H0.
 DISTANCE_CASES = [
-    ("f2z", (100e6,), {}, 13.20405751),
-    ("f2z", (0.1,), {"ghz": True}, 13.20405751),
-    ("z2f", (10.0,), {}, 129127795.54545455),
-    ("z2f", (10.0,), {"ghz": True}, 0.12912779554545455),
-    ("E", (10.0,), {}, 20.450997530682947),
-    ("DC", (10.0,), {}, 6499.708111027144),
-    ("DC", (10.0,), {"little_h": True}, 6499.708111027144),
-    ("DM", (10.0,), {}, 6510.2536925709637),
-    ("DM", (10.0,), {"little_h": True}, 6510.2536925709637),
-    ("DA", (10.0,), {}, 591.84124477917851),
-    ("DA", (10.0,), {"little_h": True}, 591.84124477917851),
-    ("dRperp_dtheta", (10.0,), {}, 6510.2536925709637),
-    ("dRperp_dtheta", (10.0,), {"little_h": True}, 6510.2536925709637),
-    ("dRpara_df", (10.0,), {}, 1.2487605057418872e-05),
-    ("dRpara_df", (10.0,), {"little_h": True}, 1.2487605057418872e-05),
-    ("dRpara_df", (10.0,), {"ghz": True}, 12487.605057418872),
-    ("dRpara_df", (10.0,), {"ghz": True, "little_h": True}, 12487.605057418872),
-    ("X2Y", (10.0,), {}, 529.26719942209002),
-    ("X2Y", (10.0,), {"little_h": True}, 529.26719942209002),
+    ("f2z", 100e6, {}, 13.20405751),
+    ("f2z", 0.1, {"ghz": True}, 13.20405751),
+    ("z2f", 10.0, {}, 129127795.54545455),
+    ("z2f", 10.0, {"ghz": True}, 0.12912779554545455),
+    ("E", 10.0, {}, 20.450997530682947),
+    ("DC", 10.0, {}, 6499.708111027144),
+    ("DC", 10.0, {"little_h": True}, 6499.708111027144),
+    ("DM", 10.0, {}, 6510.2536925709637),
+    ("DM", 10.0, {"little_h": True}, 6510.2536925709637),
+    ("DA", 10.0, {}, 591.84124477917851),
+    ("DA", 10.0, {"little_h": True}, 591.84124477917851),
+    ("dRperp_dtheta", 10.0, {}, 6510.2536925709637),
+    ("dRperp_dtheta", 10.0, {"little_h": True}, 6510.2536925709637),
+    ("dRpara_df", 10.0, {}, 1.2487605057418872e-05),
+    ("dRpara_df", 10.0, {"little_h": True}, 1.2487605057418872e-05),
+    ("dRpara_df", 10.0, {"ghz": True}, 12487.605057418872),
+    ("dRpara_df", 10.0, {"ghz": True, "little_h": True}, 12487.605057418872),
+    ("X2Y", 10.0, {}, 529.26719942209002),
+    ("X2Y", 10.0, {"little_h": True}, 529.26719942209002),
 ]
-
-
-def _case_id(method: str, args: tuple, kwargs: dict, expected: float) -> str:
-    return "-".join([method] + [f"{k}={v}" for k, v in kwargs.items()])
+# test ids such as "dRpara_df-ghz=True-little_h=True"
+DISTANCE_CASE_IDS = [
+    "-".join([method] + [f"{k}={v}" for k, v in kwargs.items()])
+    for method, _, kwargs, _ in DISTANCE_CASES
+]
 
 
 class TestCosmoConversions:
@@ -92,40 +92,23 @@ class TestCosmoConversions:
         C = _cosmo_conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
-    @pytest.mark.parametrize("cosmo_name", ["cosmo_h100", "cosmo_h25"])
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
     @pytest.mark.parametrize(
-        "method,args,kwargs,expected",
-        DISTANCE_CASES,
-        ids=[_case_id(*case) for case in DISTANCE_CASES],
+        "method,x,kwargs,expected", DISTANCE_CASES, ids=DISTANCE_CASE_IDS
     )
     def test_distances(
-        self,
-        cosmo_name: str,
-        method: str,
-        args: tuple,
-        kwargs: dict,
-        expected: float,
-        request: pytest.FixtureRequest,
+        self, H0: float, method: str, x: float, kwargs: dict, expected: float
     ) -> None:
-        """Check that distance/frequency conversion methods match reference values.
-
-        Distances are in Mpc/h by default (little_h=True), so they do not depend
-        on H0.
-        """
-        cosmo = request.getfixturevalue(cosmo_name)
-        result = getattr(cosmo, method)(*args, **kwargs)
+        """Check that distance/frequency conversion methods match reference
+        values, for two values of H0."""
+        cosmo = _cosmo_with_H0(H0)
+        result = getattr(cosmo, method)(x, **kwargs)
         np.testing.assert_almost_equal(result, expected)
 
-    @pytest.mark.parametrize(
-        "cosmo_name,H0",
-        [("cosmo_h100", 100.0), ("cosmo_h25", 25.12)],
-        ids=["cosmo_h100", "cosmo_h25"],
-    )
-    def test_little_h_false_scales_distances_by_h0_ratio(
-        self, cosmo_name: str, H0: float, request: pytest.FixtureRequest
-    ) -> None:
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_little_h_false_scales_distances_by_h0_ratio(self, H0: float) -> None:
         """Check that little_h=False distances scale by the H0 ratio relative to h=1."""
-        cosmo = request.getfixturevalue(cosmo_name)
+        cosmo = _cosmo_with_H0(H0)
         result = cosmo.DC(10.0, little_h=False)
         np.testing.assert_almost_equal(result, 6499.708111027144 * 100.0 / H0)
 
