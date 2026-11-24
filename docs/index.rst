@@ -25,6 +25,7 @@ Contents
    pspecbeam
    pspecdata
    uvpspec
+   bandpower_kernels
    container
    conversions
    response

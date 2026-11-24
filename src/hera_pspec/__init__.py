@@ -27,6 +27,9 @@ from . import testing as testing
 from . import unit_helpers as unit_helpers
 from . import utils as utils
 from . import uvpspec_utils as uvputils
+from .bandpower_kernels import BandpowerCovariance as BandpowerCovariance
+from .bandpower_kernels import BandpowerKernel as BandpowerKernel
+from .bandpower_kernels import BandpowerWindow as BandpowerWindow
 from .container import PSpecContainer as PSpecContainer
 from .parameter import PSpecParam as PSpecParam
 from .pspecbeam import PSpecBeamFromArray as PSpecBeamFromArray
@@ -40,6 +43,9 @@ from .uvwindow import UVWindow as UVWindow
 
 __all__ = [
     "__version__",
+    "BandpowerCovariance",
+    "BandpowerKernel",
+    "BandpowerWindow",
     "DelayResponse",
     "FTBeam",
     "PSpecBeamFromArray",
