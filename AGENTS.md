@@ -71,3 +71,13 @@ The library is organized around three persistent object types and a computation 
 - DO: keep documentation in scope. Docstrings and tutorials are *user facing* and should not refer to e.g. PR's or Issues, and should not refer to
   'history' e.g. "This method avoids previous errors where...". Comments are developer-facing and may refer to details, but should not be over-long.
 - DO: always consider refining the implementation to make it as easy to understand for humans as possible.
+
+### Writing tests
+
+Tests are read by people checking that the code is right, so they should read top to bottom without opening other code.
+
+- DO: parametrize only when the cases really are the same test with different inputs. Keep a table to about three parameters of plain values (numbers, strings, units), and give every case a readable `id`.
+- DON'T: put callables, expected error-message fragments or whole objects into a parametrize table to merge tests that differ in what they set up or check. Write two or three short separate tests instead.
+- DON'T: pass fixtures by name through `request.getfixturevalue` unless there is no simpler way.
+- DON'T: hide a test's assertions in a helper. A reader should see what is being checked in the test body.
+- DO: when merging or deleting tests, check that every assertion they made is still made somewhere, and say where in the PR description.
