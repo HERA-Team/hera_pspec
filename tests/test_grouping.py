@@ -1311,6 +1311,41 @@ class TestAverageInDelayBins:
             "Window functions wrongly propagated by grouping.fold_spectra"
         )
 
+    def test_fold_exact_windows_odd_ndlys(self, uvd_zen_2458116: UVData) -> None:
+        """Check that fold_spectra averages exact window functions about zero delay for odd Ndlys."""
+        ds = pspecdata.PSpecData(
+            dsets=[copy.deepcopy(uvd_zen_2458116)] * 2, wgts=[None, None]
+        )
+        bls1, bls2, _ = utils.construct_blpairs(
+            uvd_zen_2458116.get_antpairs()[1:3],
+            exclude_permutations=False,
+            exclude_auto_bls=True,
+        )
+        uvp = ds.pspec(
+            bls1,
+            bls2,
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            spw_ranges=(175, 194),
+            taper="bh",
+            verbose=False,
+        )
+        uvp.cosmo = conversions.DEFAULT_COSMOLOGY
+        uvp.get_exact_window_functions(
+            ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test", inplace=True
+        )
+        Ndlys = uvp.Ndlys
+        assert Ndlys % 2 == 1
+        window = uvp.window_function_array[0]
+        folded = copy.deepcopy(uvp)
+        grouping.fold_spectra(folded)
+        mid = Ndlys // 2
+        np.testing.assert_allclose(
+            folded.window_function_array[0][:, mid + 1 :],
+            0.5 * (window[:, :mid][:, ::-1] + window[:, mid + 1 :]),
+        )
+        assert not folded.window_function_array[0][:, :mid].any()
+
     def test_average_spectra_propagation(self, vanilla_uvp_with_beam: UVPSpec) -> None:
         """Check that average_spectra correctly propagates delay-binned window functions."""
         new = grouping.average_in_delay_bins(

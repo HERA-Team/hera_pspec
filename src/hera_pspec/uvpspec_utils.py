@@ -911,6 +911,11 @@ def _select(
                         stats[statname] = {}
                     _stat[statname] = uvp.stats_array[statname][s_old]
 
+            # the exact window function k grids have no blpair axis
+            if store_window and exact_windows:
+                window_function_kperp[s] = _window_function_kperp[:, polpair_select]
+                window_function_kpara[s] = _window_function_kpara[:, polpair_select]
+
             # slice data arrays and assign to dictionaries
             if sliceable:
                 # can slice in 1 step
@@ -918,9 +923,6 @@ def _select(
                 wgts[s] = _wgts[blp_select, :, :, polpair_select]
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
-                if store_window and exact_windows:
-                    window_function_kperp[s] = _window_function_kperp[:, polpair_select]
-                    window_function_kpara[s] = _window_function_kpara[:, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, polpair_select]
             else:
@@ -929,9 +931,6 @@ def _select(
                 wgts[s] = _wgts[blp_select, :, :, :][:, :, :, polpair_select]
                 ints[s] = _ints[blp_select, :][:, polpair_select]
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
-                if store_window and exact_windows:
-                    window_function_kperp[s] = _window_function_kperp[:, polpair_select]
-                    window_function_kpara[s] = _window_function_kpara[:, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, :][
                         :, :, polpair_select
