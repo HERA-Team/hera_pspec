@@ -71,4 +71,3 @@ The library is organized around three persistent object types and a computation 
 - DO: keep documentation in scope. Docstrings and tutorials are *user facing* and should not refer to e.g. PR's or Issues, and should not refer to
   'history' e.g. "This method avoids previous errors where...". Comments are developer-facing and may refer to details, but should not be over-long.
 - DO: always consider refining the implementation to make it as easy to understand for humans as possible.
-  
