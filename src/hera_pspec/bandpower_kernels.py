@@ -79,6 +79,40 @@ def _as_indices(selection, n: int) -> np.ndarray:
     return np.atleast_1d(np.arange(n)[selection])
 
 
+def _distinct_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Group the equal rows of a 2D array.
+
+    Returns ``first``, the index of the first occurrence of each distinct row in
+    order of appearance, and ``inverse``, the position in ``first`` of each row's
+    group, so that ``rows[first][inverse]`` equals ``rows``.
+
+    Each row is projected onto two fixed random vectors and rows with equal
+    projections are grouped, which is much faster than sorting whole rows. Every
+    row is then checked against its group's first row, so rows are only merged if
+    they are equal; if any check fails (NaNs, or a vanishingly unlikely collision)
+    the rows are grouped by exact byte comparison instead.
+    """
+    if len(rows) == 0:
+        return np.zeros(0, dtype=np.intp), np.zeros(0, dtype=np.intp)
+    projection = np.random.default_rng(0).standard_normal((rows.shape[1], 2))
+    _, first, inverse = np.unique(
+        rows @ projection, axis=0, return_index=True, return_inverse=True
+    )
+    inverse = inverse.reshape(-1)
+    if not np.array_equal(rows, rows[first[inverse]]):
+        rows = np.ascontiguousarray(rows)
+        as_bytes = rows.view(np.dtype((np.void, rows.itemsize * rows.shape[1])))
+        _, first, inverse = np.unique(
+            as_bytes.reshape(-1), return_index=True, return_inverse=True
+        )
+        inverse = inverse.reshape(-1)
+    # number the groups in order of first appearance
+    order = np.argsort(first)
+    rank = np.empty_like(order)
+    rank[order] = np.arange(len(order))
+    return first[order], rank[inverse]
+
+
 def _read_rows(dataset, rows: np.ndarray) -> np.ndarray:
     """Read ``dataset[rows]`` from an HDF5 dataset, reading as little as possible."""
     if rows.size == 0:
@@ -221,13 +255,14 @@ class BandpowerKernel:
         Blocks that are only proportional to each other are not merged.
         """
         used, entry_to_used = np.unique(self.block_index, return_inverse=True)
-        unique_blocks, used_to_unique = np.unique(
-            self.blocks[used].reshape(len(used), -1), axis=0, return_inverse=True
+        blocks = self.blocks[used]
+        first, used_to_unique = _distinct_rows(
+            blocks.reshape(len(used), int(np.prod(self.block_shape)))
         )
-        block_index = used_to_unique.reshape(-1)[entry_to_used.reshape(-1)]
+        block_index = used_to_unique[entry_to_used.reshape(-1)]
         return attrs.evolve(
             self,
-            blocks=unique_blocks.reshape(-1, *self.block_shape),
+            blocks=blocks[first],
             block_index=block_index.reshape(self.block_index.shape),
         )
 
@@ -641,3 +676,23 @@ class BandpowerCovariance(BandpowerKernel):
             block_index=block_index,
             scale=_read_rows(group["scale"], bltpairs)[:, pols],
         )
+
+
+def window_from_dense(array) -> BandpowerWindow:
+    """Build a :class:`BandpowerWindow` from a legacy dense window function array.
+
+    The legacy layout is ``(Nbltpairs, Nout, *in_shape, Npols)``. The input axes
+    are named from their number: one is ``("delay",)`` (analytic windows), two are
+    ``("kperp", "kpara")`` (exact cylindrical windows).
+
+    Parameters
+    ----------
+    array : array_like
+        Dense window functions, as in ``UVPSpec.window_function_array[spw]``.
+    """
+    array = np.asarray(array, dtype=np.float64)
+    n_in = array.ndim - 3
+    in_axes = {1: ("delay",), 2: ("kperp", "kpara")}.get(
+        n_in, tuple(f"in{i}" for i in range(n_in))
+    )
+    return BandpowerWindow.from_dense(array, in_axes=in_axes)

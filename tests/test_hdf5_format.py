@@ -385,7 +385,7 @@ class TestReadVersion2:
         with pytest.raises(ValueError, match="window_function_kperp"):
             _read(path)
 
-    @pytest.mark.parametrize("version", ["3", "2.1", "1"])
+    @pytest.mark.parametrize("version", ["4", "2.1", "1"])
     def test_unknown_version_raises(
         self, v2_file: Path, tmp_path: Path, version: str
     ) -> None:
@@ -439,6 +439,92 @@ class TestReadVersion2:
         meta = _read(path, just_meta=True)
         assert not hasattr(meta, "data_array")
         np.testing.assert_array_equal(meta.dly_array, uvp_windows.dly_array)
+
+
+class TestCompactVersion3:
+    """write_hdf5(compact=True): window functions and covariances as kernels."""
+
+    @pytest.mark.parametrize("fixture", ["uvp_windows", "vanilla_uvp_with_beam"])
+    def test_round_trip(self, request, fixture: str, tmp_path: Path) -> None:
+        """Compact files read back equal to the original, as format version 3."""
+        uvp = request.getfixturevalue(fixture)
+        path = tmp_path / "compact.h5"
+        uvp.write_hdf5(path, compact=True)
+        with h5py.File(path, "r") as f:
+            assert f.attrs["uvpspec_version"] == "3"
+            assert f["window_function_kernel_spw0"].attrs["kernel_type"] == (
+                "BandpowerWindow"
+            )
+            assert "window_function_spw0" not in f
+            for part in ("real", "imag"):
+                assert f[f"cov_{part}_kernel_spw0"].attrs["kernel_type"] == (
+                    "BandpowerCovariance"
+                )
+                assert f"cov_{part}_spw0" not in f
+        assert _read(path) == uvp
+
+    def test_cov_groups_carry_unit(self, uvp_windows: UVPSpec, tmp_path: Path) -> None:
+        """Covariance groups get the covariance unit, and a wrong one is rejected."""
+        src = tmp_path / "compact.h5"
+        uvp_windows.write_hdf5(src, compact=True)
+        with h5py.File(src, "r") as f:
+            assert unit_helpers.parse_pspec_unit(
+                f["cov_real_kernel_spw0"].attrs["unit"]
+            ) == (uvp_windows.units**2)
+
+        def edit(f):
+            f["cov_real_kernel_spw0"].attrs["unit"] = "Jy"
+
+        path = _edited_copy(src, tmp_path / "bad.h5", edit)
+        with pytest.raises(ValueError, match="cov_real_kernel_spw0"):
+            _read(path)
+
+    def test_smaller_than_dense(
+        self, vanilla_uvp_with_beam: UVPSpec, tmp_path: Path
+    ) -> None:
+        """Window functions shared across times are stored once, not per entry."""
+        dense = tmp_path / "dense.h5"
+        compact = tmp_path / "compact.h5"
+        vanilla_uvp_with_beam.write_hdf5(dense)
+        vanilla_uvp_with_beam.write_hdf5(compact, compact=True)
+        assert compact.stat().st_size < dense.stat().st_size / 3
+
+    def test_partial_read(self, vanilla_uvp_with_beam: UVPSpec, tmp_path: Path) -> None:
+        """Reading some blpairs of a compact file matches selecting them in memory."""
+        uvp = vanilla_uvp_with_beam
+        path = tmp_path / "compact.h5"
+        uvp.write_hdf5(path, compact=True)
+        blpairs = np.unique(uvp.blpair_array)[[0, 2]]
+        read = _read(path, blpairs=blpairs)
+        assert read == uvp.select(blpairs=blpairs, inplace=False)
+        assert read.window_functions[0].Nblocks == 1
+
+    def test_without_kernels_stays_version_2(
+        self, vanilla_uvp_with_beam: UVPSpec, tmp_path: Path
+    ) -> None:
+        """compact=True with nothing to compact writes an ordinary version 2 file."""
+        uvp = copy.deepcopy(vanilla_uvp_with_beam)
+        del uvp.window_functions, uvp.cov_real, uvp.cov_imag
+        path = tmp_path / "plain.h5"
+        uvp.write_hdf5(path, compact=True)
+        with h5py.File(path, "r") as f:
+            assert f.attrs["uvpspec_version"] == "2"
+        assert _read(path) == uvp
+
+    def test_dense_default_unchanged(
+        self, vanilla_uvp_with_beam: UVPSpec, tmp_path: Path
+    ) -> None:
+        """Without compact the window functions and covariances stay dense datasets."""
+        path = _write(vanilla_uvp_with_beam, tmp_path / "dense.h5")
+        with h5py.File(path, "r") as f:
+            assert f.attrs["uvpspec_version"] == "2"
+            np.testing.assert_array_equal(
+                f["window_function_spw0"][()],
+                vanilla_uvp_with_beam.window_function_array[0],
+            )
+            np.testing.assert_array_equal(
+                f["cov_real_spw0"][()], vanilla_uvp_with_beam.cov_array_real[0]
+            )
 
 
 class TestLegacyFiles:

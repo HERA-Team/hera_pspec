@@ -69,6 +69,11 @@ Breaking changes
 * Physical constants come from ``astropy.constants`` (CODATA 2018, was 2014).
   ``Jy_to_mK`` changes by -3.5e-7 relative, and spectra in mK² by about
   -7e-7.
+* ``uvp.window_function_array``, ``uvp.cov_array_real`` and
+  ``uvp.cov_array_imag`` are read-only (see `Window functions and
+  covariances`_). Modifying them in place raises ``ValueError``; assign a new
+  array instead. ``get_window_function`` and ``get_cov`` return copies, not
+  views of the stored arrays.
 
 
 Deprecations (removal planned for v2.0)
@@ -493,6 +498,35 @@ What to expect against two-step:
   the new cosmology to about 1e-5.
 
 Two-step stays the default in v1.0.
+
+
+Window functions and covariances
+--------------------------------
+
+``UVPSpec`` stores each distinct window function and covariance matrix once
+(see :doc:`bandpower_kernels`): ``uvp.window_functions[spw]`` is a
+``BandpowerWindow`` and ``uvp.cov_real[spw]`` / ``uvp.cov_imag[spw]`` are
+``BandpowerCovariance`` objects. Analytic window functions are the same at every
+time, so they take ``Ntimes`` times less memory than before.
+
+The v0.x attributes still work. ``uvp.window_function_array[spw]``,
+``uvp.cov_array_real[spw]`` and ``uvp.cov_array_imag[spw]`` give the same dense
+arrays as before, but read-only, and assigning to them stores new kernels:
+
+.. code-block:: python
+
+  uvp.window_functions[0]          # BandpowerWindow(Nbltpairs=..., Nblocks=..., ...)
+  uvp.window_function_array[0]     # dense (Nbltpairs, Ndlys, Ndlys, Npols), read-only
+  cov = np.array(uvp.cov_array_real[0])
+  cov *= 2
+  uvp.cov_array_real[0] = cov      # not: uvp.cov_array_real[0] *= 2
+
+Files keep the dense layout by default, so v0.x can read them. Pass
+``compact=True`` to ``write_hdf5`` to store the kernels instead (format
+version 3), which is much smaller when the matrices repeat across times or
+baselines. v0.x cannot read the window functions or covariances of a compact
+file; this version reads both layouts, and reads only the selected entries of a
+compact file.
 
 
 Reading old files

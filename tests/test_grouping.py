@@ -1048,7 +1048,10 @@ class TestSpherical:
         """Check that inserting inf into cov and stats arrays still produces a finite
         spherical average, and that error weighting gives the inf-error spectrum zero weight."""
         uvp2 = copy.deepcopy(uvp_spherical)
-        uvp2.cov_array_real[0][0], uvp2.cov_array_imag[0][0] = np.inf, np.inf
+        for name in ("cov_array_real", "cov_array_imag"):
+            cov = np.array(getattr(uvp2, name)[0])
+            cov[0] = np.inf
+            getattr(uvp2, name)[0] = cov
         uvp2.stats_array["err"][0][0] = np.inf
         for error_weights in (None, "err"):
             sph = grouping.spherical_average(

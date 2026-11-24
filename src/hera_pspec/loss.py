@@ -39,8 +39,10 @@ def apply_bias_correction(
         if total_bias is not None:
             uvp.data_array[spw] *= total_bias[spw]
             if hasattr(uvp, "cov_array_real"):
-                uvp.cov_array_real[spw] *= total_bias[spw] ** 2
-                uvp.cov_array_imag[spw] *= total_bias[spw] ** 2
+                # the dense arrays are read-only views: assign new ones
+                for name in ("cov_array_real", "cov_array_imag"):
+                    cov = getattr(uvp, name)
+                    cov[spw] = cov[spw] * total_bias[spw] ** 2
             if hasattr(uvp, "stats_array"):
                 for stat in uvp.stats_array:
                     # TODO: this is right for P_N but not quite right for P_SN

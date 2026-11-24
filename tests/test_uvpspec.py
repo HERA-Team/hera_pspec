@@ -12,6 +12,8 @@ from hera_cal import redcal
 from pyuvdata import UVData
 
 from hera_pspec import (
+    BandpowerCovariance,
+    BandpowerWindow,
     PSpecBeamUV,
     UVPSpec,
     conversions,
@@ -2606,3 +2608,114 @@ def test_add_approximate_cov() -> None:
     assert hasattr(uvp, "cov_array_real")
     assert np.allclose(np.diagonal(uvp.cov_array_real[0], axis1=1, axis2=2), 1.0)
     assert np.allclose(np.diagonal(uvp2.cov_array_real[0], axis1=1, axis2=2), 4.0)
+
+
+class TestKernelStorage:
+    """Window functions and covariances stored as BandpowerWindow/Covariance."""
+
+    def test_repeated_windows_stored_once(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """The vanilla window function, the same for every entry, is one block."""
+        window = vanilla_uvp.window_functions[0]
+        assert isinstance(window, BandpowerWindow)
+        assert window.Nblocks == 1
+        assert window.Nbltpairs == vanilla_uvp.Nbltpairs
+        assert isinstance(vanilla_uvp.cov_real[0], BandpowerCovariance)
+
+    def test_legacy_views_match_kernels(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """The dense legacy attributes expand the kernels, read-only."""
+        for legacy, kernels in [
+            ("window_function_array", "window_functions"),
+            ("cov_array_real", "cov_real"),
+            ("cov_array_imag", "cov_imag"),
+        ]:
+            view = getattr(vanilla_uvp, legacy)
+            assert list(view) == list(getattr(vanilla_uvp, kernels))
+            dense = view[0]
+            np.testing.assert_array_equal(
+                dense, getattr(vanilla_uvp, kernels)[0].to_dense()
+            )
+            assert not dense.flags.writeable
+            with pytest.raises(ValueError, match="read-only"):
+                dense[0] = 0.0
+
+    def test_legacy_assignment_converts(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """Assigning dense arrays, whole or per spw, stores kernels."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        doubled = 2 * np.array(uvp.cov_array_real[0])
+        uvp.cov_array_real[0] = doubled
+        assert isinstance(uvp.cov_real[0], BandpowerCovariance)
+        np.testing.assert_array_equal(uvp.cov_array_real[0], doubled)
+        uvp.window_function_array = {0: np.zeros_like(uvp.window_function_array[0])}
+        assert uvp.window_functions[0].Nblocks == 1
+        assert not uvp.window_function_array[0].any()
+        uvp.check()
+
+    def test_assigning_a_view_shares_kernels(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        """Copying one object's legacy attribute to another reuses its kernels."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.cov_array_imag = vanilla_uvp.cov_array_real
+        assert uvp.cov_imag[0] is vanilla_uvp.cov_real[0]
+
+    def test_missing_and_deleted(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """hasattr and del on the legacy names follow the kernels."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        del uvp.cov_array_real
+        assert not hasattr(uvp, "cov_real")
+        assert not hasattr(uvp, "cov_array_real")
+        with pytest.raises(AttributeError, match="cov_array_real"):
+            uvp.cov_array_real
+
+    def test_select_keeps_sharing(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """Selecting blpairs keeps one block and does not alias the original."""
+        blpairs = np.unique(vanilla_uvp.blpair_array)[:2]
+        sub = vanilla_uvp.select(blpairs=blpairs, inplace=False)
+        assert sub.window_functions[0].Nblocks == 1
+        assert sub.window_functions[0].Nbltpairs == sub.Nbltpairs
+        assert (
+            sub.window_functions[0].blocks is not vanilla_uvp.window_functions[0].blocks
+        )
+
+    def test_check_rejects_bad_kernels(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """check() wants the right kernel class and one entry per bltpair and pol."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.cov_real = {0: uvp.window_functions[0]}
+        with pytest.raises(AssertionError, match="cov_real"):
+            uvp.check()
+        uvp = copy.deepcopy(vanilla_uvp)
+        uvp.window_functions = {0: uvp.window_functions[0].select([0, 1])}
+        with pytest.raises(AssertionError, match=r"window_functions\[0\]"):
+            uvp.check()
+
+    def test_view_item_kernel_delete_and_repr(
+        self, vanilla_uvp: uvpspec.UVPSpec
+    ) -> None:
+        """A legacy view stores kernels as given, deletes spws and has a short repr."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        kernel = uvp.cov_real[0]
+        uvp.cov_array_imag[0] = kernel
+        assert uvp.cov_imag[0] is kernel
+        assert repr(uvp.cov_array_real) == "<dense view of cov_real: spws [0]>"
+        del uvp.cov_array_real[0]
+        assert len(uvp.cov_array_real) == 0
+
+    def test_get_cov_errors(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """get_cov rejects unknown components and objects without covariances."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        key = uvp.get_all_keys()[0]
+        with pytest.raises(ValueError, match="real and imag"):
+            uvp.get_cov(key, component="abs")
+        del uvp.cov_imag
+        with pytest.raises(AttributeError, match="No covariance"):
+            uvp.get_cov(key, component="imag")
+
+    def test_dense_cache_is_bounded(self, vanilla_uvp: uvpspec.UVPSpec) -> None:
+        """Reading many kernels' dense views keeps only a few expansions cached."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        for scale in range(2 * uvpspec._DENSE_CACHE_SIZE):
+            uvp.cov_array_real[0] = scale * np.array(vanilla_uvp.cov_array_real[0])
+            np.testing.assert_array_equal(
+                uvp.cov_array_real[0], scale * vanilla_uvp.cov_array_real[0]
+            )
+        assert len(uvpspec._DENSE_CACHE) <= uvpspec._DENSE_CACHE_SIZE

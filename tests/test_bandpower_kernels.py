@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 
 from hera_pspec import BandpowerCovariance, BandpowerKernel, BandpowerWindow
+from hera_pspec.bandpower_kernels import window_from_dense
 
 NBLPAIRS, NTIMES, NPOLS, NDLYS = 3, 4, 2, 5
 NBLTPAIRS = NBLPAIRS * NTIMES
@@ -188,6 +189,39 @@ class TestStructure:
         np.testing.assert_array_equal(deduped.blocks, [[[1.0]], [[2.0]]])
         np.testing.assert_array_equal(deduped.block_index, [[0, 0], [0, 1]])
         assert deduped == kernel
+
+    def test_deduplicate_empty(self):
+        """A kernel with no entries deduplicates to no blocks."""
+        kernel = BandpowerKernel(
+            blocks=np.ones((1, 2, 2)), block_index=np.zeros((0, 1))
+        )
+        assert kernel.deduplicate().Nblocks == 0
+
+    @pytest.mark.parametrize(
+        ("shape", "in_axes"),
+        [
+            ((4, 3, 3, 2), ("delay",)),
+            ((4, 3, 5, 6, 2), ("kperp", "kpara")),
+            ((4, 3, 2, 2, 2, 2), ("in0", "in1", "in2")),
+        ],
+    )
+    def test_window_from_dense(self, shape, in_axes):
+        """Legacy dense windows get input axes named by their number."""
+        dense = np.ones(shape)
+        window = window_from_dense(dense)
+        assert window.in_axes == in_axes
+        assert window.Nblocks == 1
+        np.testing.assert_array_equal(window.to_dense(), dense)
+
+    def test_deduplicate_with_nans(self):
+        """Blocks containing NaN merge only with bit-identical blocks."""
+        nan_block = np.array([[1.0, np.nan]])
+        blocks = np.stack([nan_block, nan_block, np.ones((1, 2)), nan_block + 1])
+        kernel = BandpowerKernel(blocks=blocks, block_index=[[0, 1], [2, 3]])
+        deduped = kernel.deduplicate()
+        assert deduped.Nblocks == 3
+        np.testing.assert_array_equal(deduped.block_index, [[0, 0], [1, 2]])
+        np.testing.assert_array_equal(deduped.to_dense(), kernel.to_dense())
 
     def test_select(self, window_dense):
         """Selecting entries keeps only the blocks they use."""
