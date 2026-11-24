@@ -207,13 +207,6 @@ def cosmological_kernel(ds, length_unit):
     )
 
 
-class BadShapeResponse:
-    """A user response whose matrices have the wrong number of delays."""
-
-    def matrices(self, freqs, delays, beam, pol, cosmo, length_unit):
-        return np.ones((3, 40, 40)) / length_unit**3
-
-
 class TestUserResponse:
     """Units of user responses, q_matrices, memory cap."""
 
@@ -254,29 +247,31 @@ class TestUserResponse:
         )
         assert_close(H_littleh, H_mpc / h**3)
 
-    @pytest.mark.parametrize(
-        "bad_response, exception, match",
-        [
-            pytest.param(
-                UserResponse(np.ones((40, 40)), u.Mpc**-2),
-                ValueError,
-                "not equivalent",
-                id="non_equivalent_unit",
-            ),
-            pytest.param(
-                UserResponse(np.ones((40, 40)), 1.0),
-                TypeError,
-                "Quantity",
-                id="not_a_quantity",
-            ),
-            pytest.param(BadShapeResponse(), ValueError, "shape", id="wrong_shape"),
-            pytest.param(object(), TypeError, "matrices", id="not_a_response"),
-        ],
-    )
-    def test_bad_response_raises(self, ds, bad_response, exception, match) -> None:
+    def test_non_equivalent_unit_raises(self, ds) -> None:
         configure(ds, 20, "none", "identity", True, (0, 0))
-        with pytest.raises(exception, match=match):
-            ds.get_response(KEY1, KEY2, bad_response, BEAM_POL)
+        kernel = np.ones((40, 40))
+        with pytest.raises(ValueError, match="not equivalent"):
+            ds.get_response(KEY1, KEY2, UserResponse(kernel, u.Mpc**-2), BEAM_POL)
+
+    def test_non_quantity_raises(self, ds) -> None:
+        configure(ds, 20, "none", "identity", True, (0, 0))
+        with pytest.raises(TypeError, match="Quantity"):
+            ds.get_response(KEY1, KEY2, UserResponse(np.ones((40, 40)), 1.0), BEAM_POL)
+
+    def test_wrong_shape_raises(self, ds) -> None:
+        configure(ds, 20, "none", "identity", True, (0, 0))
+
+        class BadShape:
+            def matrices(self, freqs, delays, beam, pol, cosmo, length_unit):
+                return np.ones((3, 40, 40)) / length_unit**3
+
+        with pytest.raises(ValueError, match="shape"):
+            ds.get_response(KEY1, KEY2, BadShape(), BEAM_POL)
+
+    def test_not_a_response_raises(self, ds) -> None:
+        configure(ds, 20, "none", "identity", True, (0, 0))
+        with pytest.raises(TypeError, match="matrices"):
+            ds.get_response(KEY1, KEY2, object(), BEAM_POL)
 
     def test_memory_cap(self, ds) -> None:
         configure(ds, 20, "none", "identity", True, (0, 0))
@@ -364,58 +359,34 @@ class TestQMatrices:
         expected = explicit_response(ds.R(KEY1), ds.R(KEY2), q_est, c_tensor)
         assert_close(H, expected)
 
-    @pytest.mark.parametrize(
-        "call, match",
-        [
-            pytest.param(
-                lambda ds, q_est: ds.q_hat(
-                    KEY1, KEY2, allow_fft=True, q_matrices=q_est
-                ),
-                "allow_fft",
-                id="q_hat_allow_fft",
-            ),
-            pytest.param(
-                lambda ds, q_est: ds.q_hat(
-                    KEY1, KEY2, exact_norm=True, q_matrices=q_est
-                ),
-                "exact_norm",
-                id="q_hat_exact_norm",
-            ),
-            pytest.param(
-                lambda ds, q_est: ds.get_unnormed_E(
-                    KEY1, KEY2, exact_norm=True, q_matrices=q_est
-                ),
-                "exact_norm",
-                id="get_unnormed_E_exact_norm",
-            ),
-            pytest.param(
-                lambda ds, q_est: ds.q_hat(KEY1, KEY2, q_matrices=q_est[:5]),
-                "shape",
-                id="wrong_shape",
-            ),
-            pytest.param(
-                lambda ds, q_est: ds.q_hat(KEY1, KEY2, q_matrices=q_est * u.s),
-                "dimensionless",
-                id="not_dimensionless",
-            ),
-            pytest.param(
-                lambda ds, q_est: ds.get_response(
-                    KEY1,
-                    KEY2,
-                    DelayResponse(convention="legacy-exact"),
-                    pol=BEAM_POL,
-                    q_matrices=q_est,
-                ),
-                "own estimator",
-                id="legacy_exact_response",
-            ),
-        ],
-    )
-    def test_errors(self, ds, call, match) -> None:
+    def test_q_matrices_with_incompatible_options_raise(self, ds) -> None:
+        """Check that q_matrices cannot be combined with the FFT, exact_norm or
+        the legacy-exact response, which use their own estimator."""
         configure(ds, 20, "none", "identity", True, (0, 0))
         q_est = ds.get_Q_alt_tensor()
-        with pytest.raises(ValueError, match=match):
-            call(ds, q_est)
+        with pytest.raises(ValueError, match="allow_fft"):
+            ds.q_hat(KEY1, KEY2, allow_fft=True, q_matrices=q_est)
+        with pytest.raises(ValueError, match="exact_norm"):
+            ds.q_hat(KEY1, KEY2, exact_norm=True, q_matrices=q_est)
+        with pytest.raises(ValueError, match="exact_norm"):
+            ds.get_unnormed_E(KEY1, KEY2, exact_norm=True, q_matrices=q_est)
+        with pytest.raises(ValueError, match="own estimator"):
+            ds.get_response(
+                KEY1,
+                KEY2,
+                DelayResponse(convention="legacy-exact"),
+                pol=BEAM_POL,
+                q_matrices=q_est,
+            )
+
+    def test_bad_q_matrices_raise(self, ds) -> None:
+        """Check that q_matrices of the wrong shape or with a unit raise."""
+        configure(ds, 20, "none", "identity", True, (0, 0))
+        q_est = ds.get_Q_alt_tensor()
+        with pytest.raises(ValueError, match="shape"):
+            ds.q_hat(KEY1, KEY2, q_matrices=q_est[:5])
+        with pytest.raises(ValueError, match="dimensionless"):
+            ds.q_hat(KEY1, KEY2, q_matrices=q_est * u.s)
 
 
 class TestDelayResponseKernel:
@@ -692,53 +663,33 @@ class TestPspecOneStepLegacy:
         uvp_exact = run_pspec(ds, exact_norm=True, store_cov=False)
         assert uvp_exact.normalization == "two-step-exact"
 
-    @pytest.mark.parametrize(
-        "kwargs, match",
-        [
-            pytest.param(
-                dict(normalization="three-step"),
-                "normalization must be",
-                id="unknown_normalization",
-            ),
-            pytest.param(
-                dict(response=DelayResponse(convention="legacy")),
-                "one-step",
-                id="response_without_one_step",
-            ),
-            pytest.param(
-                dict(q_matrices=np.zeros((40, 40, 40))),
-                "one-step",
-                id="q_matrices_without_one_step",
-            ),
-            pytest.param(
-                dict(
-                    normalization="one-step",
-                    response=DelayResponse(convention="legacy"),
-                    exact_norm=True,
-                ),
-                "exact_norm",
-                id="exact_norm",
-            ),
-            pytest.param(
-                dict(
-                    normalization="one-step",
-                    response=DelayResponse(convention="legacy"),
-                    allow_fft=True,
-                    q_matrices=np.zeros((40, 40, 40)),
-                ),
-                "allow_fft",
-                id="allow_fft_with_q_matrices",
-            ),
-            pytest.param(
-                dict(
-                    normalization="one-step",
-                    response=DelayResponse(convention="legacy-exact"),
-                ),
-                "legacy-exact",
-                id="legacy_exact_response",
-            ),
-        ],
-    )
-    def test_errors(self, ds, kwargs, match) -> None:
-        with pytest.raises(ValueError, match=match):
-            run_pspec(ds, **kwargs)
+    def test_bad_normalization_options_raise(self, ds) -> None:
+        """Check that an unknown normalization raises, and that a response or
+        q_matrices need normalization="one-step"."""
+        with pytest.raises(ValueError, match="normalization must be"):
+            run_pspec(ds, normalization="three-step")
+        with pytest.raises(ValueError, match="one-step"):
+            run_pspec(ds, response=DelayResponse(convention="legacy"))
+        with pytest.raises(ValueError, match="one-step"):
+            run_pspec(ds, q_matrices=np.zeros((40, 40, 40)))
+
+    def test_one_step_rejects_incompatible_options(self, ds) -> None:
+        """Check that one-step normalization rejects exact_norm, the FFT with
+        q_matrices, and the legacy-exact response."""
+        legacy = DelayResponse(convention="legacy")
+        with pytest.raises(ValueError, match="exact_norm"):
+            run_pspec(ds, normalization="one-step", response=legacy, exact_norm=True)
+        with pytest.raises(ValueError, match="allow_fft"):
+            run_pspec(
+                ds,
+                normalization="one-step",
+                response=legacy,
+                allow_fft=True,
+                q_matrices=np.zeros((40, 40, 40)),
+            )
+        with pytest.raises(ValueError, match="legacy-exact"):
+            run_pspec(
+                ds,
+                normalization="one-step",
+                response=DelayResponse(convention="legacy-exact"),
+            )
