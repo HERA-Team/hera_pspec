@@ -1434,160 +1434,127 @@ class TestAverageInDelayBins:
 
 
 class TestAverageBandpowerKernels:
-    """average_bandpower_window/covariance against a dense version of average_spectra."""
+    """average_bandpower_window/covariance on small cases with hand-computed results.
 
-    NBLPAIRS, NTIMES, NPOLS, NDLYS = 3, 4, 2, 5
-    NBLTPAIRS = NBLPAIRS * NTIMES
-    # Entries are time-major (row t * NBLPAIRS + b), so each group is one blpair's times.
-    TIME_GROUPS = list(np.arange(NBLTPAIRS).reshape(NTIMES, NBLPAIRS).T)
+    average_spectra averages window functions as ``W_out[d] = sum_k w_k[d] W_k[d] /
+    sum_k w_k[d]`` and covariances as
+    ``C_out[d, e] = sum_k w_k[d] w_k[e] C_k[d, e] / (W[d] W[e])`` with
+    ``W = sum_k w_k``; each expected value below is worked out from these by hand.
+    """
 
-    @pytest.fixture()
-    def rng(self) -> np.random.Generator:
-        return np.random.default_rng(7)
-
-    @pytest.fixture()
-    def window_dense(self, rng) -> np.ndarray:
-        """One window per (blpair, pol), the same at every time; shape (Nbltpairs, Ndly, Ndly, Npols)."""
-        per_blpair = rng.random((self.NBLPAIRS, self.NDLYS, self.NDLYS, self.NPOLS))
-        return np.tile(per_blpair, (self.NTIMES, 1, 1, 1))
-
-    @pytest.fixture()
-    def cov_dense(self, rng) -> np.ndarray:
-        """One symmetric covariance per (blpair, pol), the same at every time."""
-        m = rng.random((self.NBLPAIRS, self.NPOLS, self.NDLYS, self.NDLYS))
-        per_blpair = np.moveaxis(m @ np.swapaxes(m, -1, -2), 1, -1)
-        return np.tile(per_blpair, (self.NTIMES, 1, 1, 1))
-
-    @staticmethod
-    def dense_window_average(dense, groups, weights):
-        """Window averaging as average_spectra does it: sum w W / sum w, per row."""
-        out = []
-        for members in groups:
-            w = np.moveaxis(weights[members], 1, -1)  # (n, Nout, Npols)
-            wsum = w.sum(axis=0).clip(1e-40, np.inf)
-            out.append(
-                np.sum(dense[members] * w[:, :, None, :], axis=0) / wsum[:, None, :]
-            )
-        return np.array(out)
-
-    @staticmethod
-    def dense_cov_average(dense, groups, weights):
-        """Covariance averaging as average_spectra does it: sum w w^T C / (W W^T)."""
-        out = []
-        for members in groups:
-            w = np.moveaxis(weights[members], 1, -1)  # (n, Nout, Npols)
-            wsum = w.sum(axis=0).clip(1e-40, np.inf)
-            total = np.sum(dense[members] * w[:, :, None, :] * w[:, None, :, :], axis=0)
-            out.append(total / wsum[:, None, :] / wsum[None, :, :])
-        return np.array(out)
-
-    def test_window_shared_blocks_are_reused(self, window_dense, rng):
-        """Time-averaging a time-independent window stores no new blocks."""
-        window = BandpowerWindow.from_dense(window_dense)
-        weights = rng.random((self.NBLTPAIRS, self.NPOLS, self.NDLYS)) + 0.1
-        averaged = grouping.average_bandpower_window(window, self.TIME_GROUPS, weights)
-        assert averaged.Nbltpairs == self.NBLPAIRS
+    def test_window_identical_windows_unchanged(self):
+        """Averaging entries that share one window returns that window, stored once."""
+        rng = np.random.default_rng(7)
+        # 3 blpairs x 4 times, 2 pols; each (blpair, pol) has one window at all times
+        per_blpair = rng.random((3, 5, 5, 2))
+        window = BandpowerWindow.from_dense(np.tile(per_blpair, (4, 1, 1, 1)))
+        weights = rng.random((12, 2, 5)) + 0.1
+        time_groups = list(np.arange(12).reshape(4, 3).T)  # rows t * 3 + b
+        averaged = grouping.average_bandpower_window(window, time_groups, weights)
         assert averaged.Nblocks == window.Nblocks
-        np.testing.assert_allclose(
-            averaged.to_dense(),
-            self.dense_window_average(window_dense, self.TIME_GROUPS, weights),
-        )
+        np.testing.assert_allclose(averaged.to_dense(), per_blpair)
 
-    def test_window_mixed_blocks(self, rng):
-        """Groups mixing different windows give the weighted mean of their rows."""
-        dense = rng.random((self.NBLTPAIRS, self.NDLYS, self.NDLYS, self.NPOLS))
-        window = BandpowerWindow.from_dense(dense)
-        weights = rng.random((self.NBLTPAIRS, self.NPOLS, self.NDLYS))
-        groups = [[0, 1, 2], [3], [4, 7, 11]]
-        np.testing.assert_allclose(
-            grouping.average_bandpower_window(window, groups, weights).to_dense(),
-            self.dense_window_average(dense, groups, weights),
-        )
-
-    def test_window_keeps_input_axes(self, rng):
-        """Exact-style windows keep their in_axes and in_coords after averaging."""
+    def test_window_weighted_rows(self):
+        """Each row is the weighted mean of that row over the group."""
+        # two entries, one pol, 2 bandpowers: all-ones and all-threes windows
         window = BandpowerWindow(
-            blocks=rng.random((self.NPOLS, self.NDLYS, 3, 6)),
-            block_index=np.tile(np.arange(self.NPOLS), (self.NBLTPAIRS, 1)),
+            blocks=[np.ones((2, 2)), 3 * np.ones((2, 2))], block_index=[[0], [1]]
+        )
+        weights = np.array([[[1.0, 3.0]], [[1.0, 1.0]]])  # (Nbltpairs, Npols, Nout)
+        averaged = grouping.average_bandpower_window(window, [[0, 1]], weights)
+        # row 0: (1*1 + 1*3) / (1 + 1) = 2;  row 1: (3*1 + 1*3) / (3 + 1) = 1.5
+        np.testing.assert_allclose(averaged.get(0, 0), [[2.0, 2.0], [1.5, 1.5]])
+
+    def test_window_zero_weight_row(self):
+        """A row with no weight in the group comes out as zero, as in average_spectra."""
+        window = BandpowerWindow(blocks=[np.ones((2, 2))], block_index=[[0], [0]])
+        weights = np.array([[[1.0, 0.0]], [[1.0, 0.0]]])
+        averaged = grouping.average_bandpower_window(window, [[0, 1]], weights)
+        np.testing.assert_allclose(averaged.get(0, 0), [[1.0, 1.0], [0.0, 0.0]])
+
+    def test_window_keeps_input_axes(self):
+        """Exact-style windows keep their in_axes and in_coords after averaging."""
+        rng = np.random.default_rng(7)
+        window = BandpowerWindow(
+            blocks=rng.random((2, 5, 3, 6)),
+            block_index=np.tile(np.arange(2), (4, 1)),
             in_axes=("kperp", "kpara"),
-            in_coords={"kperp": rng.random((self.NPOLS, 3))},
+            in_coords={"kperp": rng.random((2, 3))},
         )
-        averaged = grouping.average_bandpower_window(
-            window, [np.arange(self.NBLTPAIRS)]
-        )
-        assert averaged.Nblocks == self.NPOLS
+        averaged = grouping.average_bandpower_window(window, [np.arange(4)])
+        assert averaged.Nblocks == 2
         assert averaged == window.select([0])
 
-    def test_window_zero_weights(self, window_dense):
-        """Rows with no weight in a group come out as zero, as in average_spectra."""
-        window = BandpowerWindow.from_dense(window_dense)
-        weights = np.ones((self.NBLTPAIRS, self.NPOLS, self.NDLYS))
-        weights[self.TIME_GROUPS[0], :, 2] = 0.0
-        averaged = grouping.average_bandpower_window(window, self.TIME_GROUPS, weights)
-        np.testing.assert_allclose(
-            averaged.to_dense(),
-            self.dense_window_average(window_dense, self.TIME_GROUPS, weights),
-        )
-        assert np.all(averaged.to_dense()[0, 2] == 0)
+    def test_covariance_equal_weights(self):
+        """Equal weights over N entries sharing covariance B give B / N, as a scale."""
+        block = np.array([[2.0, 1.0], [1.0, 2.0]])
+        cov = BandpowerCovariance(blocks=[block], block_index=np.zeros((4, 1)))
+        averaged = grouping.average_bandpower_covariance(cov, [[0, 1, 2, 3]])
+        assert averaged.Nblocks == 1
+        np.testing.assert_allclose(averaged.scale, [[0.25]])
+        np.testing.assert_allclose(averaged.get(0, 0), block / 4)
 
-    def test_covariance_time_only_weights_rescale(self, cov_dense, rng):
-        """Weights that are the same for every delay only change the scale."""
-        cov = BandpowerCovariance.from_dense(cov_dense)
-        weights = np.repeat(
-            rng.random((self.NBLTPAIRS, self.NPOLS, 1)) + 0.1, self.NDLYS, axis=-1
-        )
-        averaged = grouping.average_bandpower_covariance(cov, self.TIME_GROUPS, weights)
-        assert averaged.Nblocks == cov.Nblocks
-        np.testing.assert_allclose(
-            averaged.to_dense(),
-            self.dense_cov_average(cov_dense, self.TIME_GROUPS, weights),
-        )
+    def test_covariance_time_only_weights(self):
+        """Weights that are the same for every bandpower only change the scale."""
+        block = np.array([[2.0, 1.0], [1.0, 2.0]])
+        cov = BandpowerCovariance(blocks=[block], block_index=np.zeros((2, 1)))
+        weights = np.array([[[1.0, 1.0]], [[3.0, 3.0]]])
+        averaged = grouping.average_bandpower_covariance(cov, [[0, 1]], weights)
+        # (1^2 + 3^2) / (1 + 3)^2 = 10 / 16
+        assert averaged.Nblocks == 1
+        np.testing.assert_allclose(averaged.scale, [[0.625]])
+        np.testing.assert_allclose(averaged.get(0, 0), 0.625 * block)
 
-    def test_covariance_default_weights(self, cov_dense):
-        """Equal weights over N entries scale a shared covariance by 1/N."""
-        cov = BandpowerCovariance.from_dense(cov_dense)
-        averaged = grouping.average_bandpower_covariance(cov, self.TIME_GROUPS)
-        np.testing.assert_allclose(
-            averaged.scale, np.full((self.NBLPAIRS, self.NPOLS), 1 / self.NTIMES)
-        )
-
-    def test_covariance_per_bandpower_weights(self, cov_dense, rng):
-        """Delay-dependent weights give a new block equal to the dense result."""
-        cov = BandpowerCovariance.from_dense(cov_dense)
-        weights = rng.random((self.NBLTPAIRS, self.NPOLS, self.NDLYS))
-        groups = [[0, 3, 6], [1, 2], [5]]
-        np.testing.assert_allclose(
-            grouping.average_bandpower_covariance(cov, groups, weights).to_dense(),
-            self.dense_cov_average(cov_dense, groups, weights),
-        )
-
-    def test_covariance_existing_scale(self, cov_dense, rng):
-        """Existing per-entry scales are carried into the average."""
-        cov = BandpowerCovariance.from_dense(cov_dense)
+    def test_covariance_existing_scale(self):
+        """Per-entry scales are carried into the average."""
+        block = np.array([[2.0, 1.0], [1.0, 2.0]])
         cov = BandpowerCovariance(
-            blocks=cov.blocks,
-            block_index=cov.block_index,
-            scale=rng.random((self.NBLTPAIRS, self.NPOLS)) + 0.5,
+            blocks=[block], block_index=np.zeros((2, 1)), scale=[[2.0], [4.0]]
         )
-        weights = np.repeat(rng.random((self.NBLTPAIRS, self.NPOLS, 1)), self.NDLYS, -1)
-        np.testing.assert_allclose(
-            grouping.average_bandpower_covariance(
-                cov, self.TIME_GROUPS, weights
-            ).to_dense(),
-            self.dense_cov_average(cov.to_dense(), self.TIME_GROUPS, weights),
+        averaged = grouping.average_bandpower_covariance(cov, [[0, 1]])
+        # (1 * 2 + 1 * 4) / (1 + 1)^2 = 1.5
+        np.testing.assert_allclose(averaged.get(0, 0), 1.5 * block)
+
+    def test_covariance_per_bandpower_weights(self):
+        """Bandpower-dependent weights give a new block, element by element."""
+        cov = BandpowerCovariance(
+            blocks=[[[2.0, 1.0], [1.0, 2.0]], [[4.0, 0.0], [0.0, 4.0]]],
+            block_index=[[0], [1]],
         )
+        weights = np.array([[[1.0, 1.0]], [[1.0, 3.0]]])  # W = [2, 4]
+        averaged = grouping.average_bandpower_covariance(cov, [[0, 1]], weights)
+        # [0,0]: (1*1*2 + 1*1*4) / (2*2) = 1.5
+        # [0,1]: (1*1*1 + 1*3*0) / (2*4) = 0.125
+        # [1,1]: (1*1*2 + 3*3*4) / (4*4) = 2.375
+        np.testing.assert_allclose(averaged.get(0, 0), [[1.5, 0.125], [0.125, 2.375]])
+
+    def test_groups_and_pols_are_independent(self):
+        """Each output entry comes from its own group, separately for each pol."""
+        cov = BandpowerCovariance(
+            blocks=[np.eye(2), 2 * np.eye(2)], block_index=[[0, 1], [0, 1], [0, 1]]
+        )
+        averaged = grouping.average_bandpower_covariance(cov, [[0, 1], [2]])
+        np.testing.assert_allclose(averaged.get(0, 0), np.eye(2) / 2)
+        np.testing.assert_allclose(averaged.get(0, 1), 2 * np.eye(2) / 2)
+        np.testing.assert_allclose(averaged.get(1, 0), np.eye(2))
+        np.testing.assert_allclose(averaged.get(1, 1), 2 * np.eye(2))
 
     @pytest.mark.parametrize(
-        ("cls", "average"),
+        ("kernel", "average"),
         [
-            (BandpowerWindow, grouping.average_bandpower_window),
-            (BandpowerCovariance, grouping.average_bandpower_covariance),
+            (
+                BandpowerWindow(blocks=[np.eye(2)], block_index=[[0]]),
+                grouping.average_bandpower_window,
+            ),
+            (
+                BandpowerCovariance(blocks=[np.eye(2)], block_index=[[0]]),
+                grouping.average_bandpower_covariance,
+            ),
         ],
     )
-    def test_errors(self, cov_dense, cls, average):
+    def test_errors(self, kernel, average):
         """Wrongly shaped weights and empty groups raise."""
-        kernel = cls.from_dense(cov_dense)
         with pytest.raises(ValueError, match="weights must have shape"):
-            average(kernel, [[0]], weights=np.ones((self.NBLTPAIRS, self.NPOLS)))
+            average(kernel, [[0]], weights=np.ones((1, 1)))
         with pytest.raises(ValueError, match="empty group"):
             average(kernel, [[]])
