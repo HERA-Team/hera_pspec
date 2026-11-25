@@ -24,7 +24,10 @@ class TestPSpecParamUnit:
         ],
         ids=["string", "littleh_string", "composite_unit"],
     )
-    def test_accepts_unit_forms(self, unit, expected) -> None:
+    def test_accepts_unit_forms(
+        self, unit: str | u.UnitBase, expected: u.UnitBase
+    ) -> None:
+        """Check that a unit given as a string or as a composite unit is stored as a unit."""
         param = parameter.PSpecParam("example", unit=unit)
         assert param.unit == expected
 

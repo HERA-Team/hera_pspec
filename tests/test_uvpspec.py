@@ -1209,6 +1209,7 @@ class TestParamUnits:
     def test_check_window_k_follows_norm_units(
         self, mutable_uvp: uvpspec.UVPSpec
     ) -> None:
+        """Check that check() wants window k grids in the k unit set by norm_units."""
         mutable_uvp.norm_units = "Mpc3 / littleh3"
         # the window k grids of an "Mpc3 / littleh3" object are in littleh / Mpc
         assert mutable_uvp.window_k_unit() == cu.littleh / units.Mpc

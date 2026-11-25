@@ -300,8 +300,8 @@ class TestCalcPN:
             noise.calc_P_N(1.0 * u.s, 300 * u.K, 10.7 * u.s)
 
     def test_k_quantity_needs_quantity_scalar(self):
-        """Check that a k Quantity with a plain-float scalar raises: k needs the
-        length unit that only a Quantity scalar carries."""
+        """Check that k given as a Quantity needs the scalar as a Quantity too."""
+        # only a Quantity scalar carries the length unit that k must be in
         with pytest.raises(TypeError, match="scalar is a plain float"):
             noise.calc_P_N(
                 self.SCALAR, 300 * u.K, 10.7 * u.s, form="DelSq", k=[1.0] / u.Mpc

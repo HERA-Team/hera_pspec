@@ -162,6 +162,7 @@ def ft_beam_init_kwargs(ft_beam_spw: uvwindow.FTBeam) -> dict:
 
 class TestFTBeamInit:
     def test_from_array(self, ft_beam_init_kwargs: dict) -> None:
+        """Check that an FTBeam built from an array keeps that array and the pol."""
         test = uvwindow.FTBeam(
             **ft_beam_init_kwargs, verbose=False, x_orientation="east"
         )
@@ -183,6 +184,7 @@ class TestFTBeamInit:
             uvwindow.FTBeam(**dict(ft_beam_init_kwargs, data=data[:12, :, :]))
 
     def test_int_pol(self, ft_beam_init_kwargs: dict) -> None:
+        """Check that an integer pol code is stored as its polarization string."""
         test = uvwindow.FTBeam(**dict(ft_beam_init_kwargs, pol=-5))
         assert test.pol == uvutils.polnum2str(-5)
 
@@ -414,6 +416,7 @@ class TestFTBeamFromFile:
 
     @pytest.mark.parametrize("bad_spw", BAD_SPWS)
     def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
+        """Check that from_file rejects a malformed spw_range (a deprecated argument)."""
         with (
             pytest.warns(DeprecationWarning, match="spw_range"),
             pytest.raises(ValueError, match="Wrong spw range format"),
@@ -500,6 +503,7 @@ class TestFTBeamUpdateSpw:
         make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
         bad_spw: tuple[int, ...],
     ) -> None:
+        """Check that update_spw rejects a malformed spw_range (a deprecated argument)."""
         test = make_ft_beam_obj()
         with (
             pytest.warns(DeprecationWarning, match="select_freqs"),
@@ -665,6 +669,7 @@ class TestUVWindowFromUvpspec:
         assert uvw.cosmo == uvp.cosmo
 
     def test_crosspol(self, uvp_for_uvwindow: tuple[UVPSpec, UVPSpec, UVPSpec]) -> None:
+        """Check that a UVWindow built from a cross-pol UVPSpec inherits its properties."""
         _, _, uvp_crosspol = uvp_for_uvwindow
         uvw = uvwindow.UVWindow.from_uvpspec(
             uvp_crosspol, ipol=0, spw=0, verbose=True, ftbeam=DATA_PATH / basename
@@ -951,6 +956,8 @@ class TestUVWindowGetKperpBins:
     def test_array(
         self, uvwindow_obj: uvwindow.UVWindow, red_bl_lens: np.ndarray
     ) -> None:
+        """Check that kperp bins for an array of baseline lengths are evenly spaced
+        and cover the longest baseline."""
         kperps = uvwindow_obj.get_kperp_bins(red_bl_lens * units.m)
         assert uvwindow_obj.kunits.is_equivalent(kperps.unit)
         kperp_bins = kperps.value
@@ -976,6 +983,7 @@ class TestUVWindowGetKparaBins:
             )
 
     def test_happy_path(self, uvwindow_obj: uvwindow.UVWindow) -> None:
+        """Check that kpara bins are spaced by one delay step and cover the largest delay."""
         kparas = uvwindow_obj.get_kpara_bins(uvwindow_obj.freq_array * units.Hz)
         assert uvwindow_obj.kunits.is_equivalent(kparas.unit)
         kpara_bins = kparas.value
@@ -1505,6 +1513,7 @@ class TestUVWindowCheckKunits:
         kunits: units.UnitBase,
         bad_unit: units.UnitBase,
     ) -> None:
+        """Check that check_kunits rejects k bins in a unit that disagrees with little_h."""
         uvw = uvwindow.UVWindow(ftbeam_obj=ft_beam_spw, little_h=little_h)
         assert uvw.kunits == kunits
         with pytest.raises(ValueError, match="not consistent with kunits"):
