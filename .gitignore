@@ -20,3 +20,4 @@ out.h5
 coverage.xml
 .DS_Store
 .qodo
+.hypothesis/
