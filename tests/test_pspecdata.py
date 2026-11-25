@@ -3412,21 +3412,36 @@ class TestPspecRun:
         assert uvps["midpoint"].response_model == repr(DelayResponse(x2y="midpoint"))
         assert uvps["one_step"].norm_units == "Mpc3 / littleh3"
 
-    @pytest.mark.parametrize(
-        "kwargs, exception, match",
-        [
-            ({"normalization": "one step"}, ValueError, "normalization must be"),
-            ({"length_unit": "Hz"}, ValueError, "length_unit must be a length"),
-            ({"cosmo": [1.0, 2.0]}, TypeError, "got list"),
-        ],
-        ids=["normalization", "length_unit", "cosmo_type"],
-    )
-    def test_bad_argument_raises_before_reading(
-        self, tmp_path: Path, kwargs: dict, exception: type[Exception], match: str
-    ) -> None:
-        with pytest.raises(exception, match=match):
+    def test_unknown_normalization_raises_before_reading(self, tmp_path: Path) -> None:
+        """Check that pspec_run raises on an unknown normalization before reading data."""
+        with pytest.raises(ValueError, match="normalization must be"):
             pspecdata.pspec_run(
-                PSPEC_RUN_FNAMES, str(tmp_path / "out.h5"), verbose=False, **kwargs
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                normalization="one step",
+            )
+        assert not (tmp_path / "out.h5").exists()
+
+    def test_non_length_unit_raises_before_reading(self, tmp_path: Path) -> None:
+        """Check that pspec_run raises on a non-length length_unit before reading data."""
+        with pytest.raises(ValueError, match="length_unit must be a length"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                length_unit="Hz",
+            )
+        assert not (tmp_path / "out.h5").exists()
+
+    def test_cosmo_of_wrong_type_raises_before_reading(self, tmp_path: Path) -> None:
+        """Check that pspec_run raises on a cosmo given as a list before reading data."""
+        with pytest.raises(TypeError, match="got list"):
+            pspecdata.pspec_run(
+                PSPEC_RUN_FNAMES,
+                str(tmp_path / "out.h5"),
+                verbose=False,
+                cosmo=[1.0, 2.0],
             )
         assert not (tmp_path / "out.h5").exists()
 
