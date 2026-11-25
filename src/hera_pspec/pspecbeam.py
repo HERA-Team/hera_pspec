@@ -168,8 +168,7 @@ class PSpecBeamBase:
         ----------
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
-            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
-            is still accepted but deprecated.
+            ``conversions.DEFAULT_COSMOLOGY``.
         """
         self.cosmo = cosmo
 
@@ -178,8 +177,7 @@ class PSpecBeamBase:
         """
         Cosmology of the beam, an ``astropy.cosmology.FLRW``.
 
-        Setting it to None selects ``conversions.DEFAULT_COSMOLOGY``. A
-        ``Cosmo_Conversions`` object is converted (deprecated).
+        Setting it to None selects ``conversions.DEFAULT_COSMOLOGY``.
         """
         return self._cosmo
 
@@ -448,8 +446,7 @@ class PSpecBeamGauss(PSpecBeamBase):
 
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
-            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
-            is still accepted but deprecated.
+            ``conversions.DEFAULT_COSMOLOGY``.
 
         beam: pyuvdata.analytic_beam.GaussianBeam, optional
             Ready-made achromatic, sigma-specified GaussianBeam object.
@@ -577,8 +574,7 @@ class PSpecBeamUV(PSpecBeamBase):
 
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
-            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
-            is still accepted but deprecated.
+            ``conversions.DEFAULT_COSMOLOGY``.
         """
         # setup uvbeam object
         if isinstance(uvbeam, str | Path):
@@ -757,8 +753,7 @@ class PSpecBeamFromArray(PSpecBeamBase):
 
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
-            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
-            is still accepted but deprecated.
+            ``conversions.DEFAULT_COSMOLOGY``.
 
         x_orientation : str, optional
             Orientation in cardinal direction east or north of X dipole.

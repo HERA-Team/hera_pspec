@@ -5271,8 +5271,7 @@ def pspec_run(
     cosmo : astropy.cosmology.FLRW, optional
         Cosmology to use when normalizing the power spectra. Default is None,
         which keeps the beam's own cosmology (conversions.DEFAULT_COSMOLOGY
-        unless the beam sets one). A ``Cosmo_Conversions`` object is still
-        accepted but deprecated.
+        unless the beam sets one).
 
     interleave_times : bool
         Only applicable if Ndsets == 1. If True, copy dset[0] into
@@ -5456,9 +5455,6 @@ def pspec_run(
 
     # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
     accepted_cosmo_types = (FLRW,)
-    if isinstance(cosmo, conversions.Cosmo_Conversions):
-        # deprecated: converted with a DeprecationWarning
-        cosmo = conversions.as_astropy_cosmology(cosmo)
     if cosmo is not None and not isinstance(cosmo, accepted_cosmo_types):
         accepted_names = ", ".join(t.__name__ for t in accepted_cosmo_types)
         raise TypeError(

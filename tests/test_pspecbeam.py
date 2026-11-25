@@ -674,16 +674,6 @@ class TestBeamCosmology:
         beam = _beam_from_constructor(name, None)
         assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
 
-    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
-    def test_cosmo_conversions_deprecated(self, name: str) -> None:
-        """A Cosmo_Conversions is converted to astropy with a DeprecationWarning."""
-        with pytest.warns(DeprecationWarning):
-            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            beam = _beam_from_constructor(name, old)
-        assert isinstance(beam.cosmo, FLRW)
-        assert beam.cosmo.is_equivalent(old.to_astropy())
-
     def test_set_cosmo(self) -> None:
         """Setting beam.cosmo accepts astropy, dicts and None; rejects others."""
         beam = pspecbeam.PSpecBeamBase()
@@ -700,9 +690,7 @@ class TestBeamCosmology:
 
 
 def test_vectorised_x2y_matches_loop() -> None:
-    """The vectorised X2Y gives the per-frequency Cosmo_Conversions values."""
-    with pytest.warns(DeprecationWarning):
-        old = conversions.Cosmo_Conversions()
+    """The vectorised X2Y gives the same values as one call per frequency."""
     freqs = np.linspace(LOWER_FREQ.to_value(u.Hz), UPPER_FREQ.to_value(u.Hz), 200)
     redshifts = conversions.f2z(freqs)
     for little_h in (True, False):
@@ -710,7 +698,12 @@ def test_vectorised_x2y_matches_loop() -> None:
         new = conversions.X2Y(
             redshifts, conversions.LEGACY_COSMOLOGY, length_unit
         ).to_value(length_unit**3 / (u.sr * u.Hz))
-        loop = np.array([old.X2Y(z, little_h=little_h) for z in redshifts])
+        loop = np.array(
+            [
+                conversions.X2Y(z, conversions.LEGACY_COSMOLOGY, length_unit).value
+                for z in redshifts
+            ]
+        )
         np.testing.assert_allclose(new, loop, rtol=1e-14)
 
 

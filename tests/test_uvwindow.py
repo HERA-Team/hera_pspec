@@ -608,14 +608,6 @@ class TestUVWindowInit:
             conversions.DEFAULT_COSMOLOGY
         )
 
-    def test_cosmo_conversions_deprecated(self, ft_beam_spw: uvwindow.FTBeam) -> None:
-        with pytest.warns(DeprecationWarning):
-            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            test = uvwindow.UVWindow(cosmo=old, ftbeam_obj=ft_beam_spw)
-        assert isinstance(test.cosmo, FLRW)
-        assert test.cosmo.is_equivalent(old.to_astropy())
-
     def test_cosmo_factor_cache_follows_cosmology(
         self, ft_beam_spw: uvwindow.FTBeam
     ) -> None:

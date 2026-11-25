@@ -2,8 +2,8 @@ Migrating to v1.0
 =================
 
 hera_pspec 1.0 uses ``astropy`` for units and cosmology. Most v0.x code still
-runs. Old arguments (``little_h=``, plain numbers for physical inputs,
-``Cosmo_Conversions``) keep working but emit a ``DeprecationWarning`` that says
+runs. Old arguments (``little_h=``, plain numbers for physical inputs) keep
+working but emit a ``DeprecationWarning`` that says
 what to use instead. Python hides these warnings by default; to see them, run
 with ``python -W default::DeprecationWarning`` or add
 ``warnings.simplefilter("default", DeprecationWarning)`` to your script.
@@ -71,6 +71,14 @@ Breaking changes
   -7e-7.
 
 
+Removed in v1.0
+---------------
+
+* ``conversions.Cosmo_Conversions`` no longer exists, and no function accepts
+  one. Use an ``astropy.cosmology`` object with the functions of
+  ``hera_pspec.conversions`` (see `Cosmology`_).
+
+
 Deprecations (removal planned for v2.0)
 ---------------------------------------
 
@@ -82,8 +90,6 @@ Deprecations (removal planned for v2.0)
   ``utils.uvp_noise_error``, ``grouping.spherical_average``,
   and ``grouping.spherical_wf_from_uvp``. ``UVWindow(little_h=...)`` is not
   deprecated: it keeps its v0.x name, position and meaning.
-* ``conversions.Cosmo_Conversions``: creating one, or passing one anywhere a
-  cosmology is accepted.
 * Plain-number k bins in ``spherical_average`` (``kbins``, ``kbins_theory``)
   and ``spherical_wf_from_uvp`` (``kbin_edges``, ``kbin_edges_theory``).
   ``UVWindow`` k bins in hour/Mpc are read as littleh/Mpc, with a warning.
@@ -251,7 +257,7 @@ default, ``hera_pspec.conversions.DEFAULT_COSMOLOGY``, is
 ``astropy.cosmology.Planck18``: a flat ``FlatLambdaCDM`` with H0 = 67.66,
 Om0 = 0.30966, radiation (Tcmb0 = 2.7255 K) and a massive neutrino.
 
-The v0.x default, the model of ``Cosmo_Conversions()``, is
+The v0.x default cosmology is
 ``hera_pspec.conversions.LEGACY_COSMOLOGY``: a ``LambdaCDM`` with H0 = 67.27,
 Om0 = 0.31353, Ode0 = 0.6844 and Tcmb0 = 0 (no radiation), slightly open
 (Ok0 = 0.00207). Use it to reproduce results of v0.x.
@@ -293,8 +299,6 @@ a cosmology and a length unit and return Quantities: ``f2z``, ``z2f``,
 
 If you have the old parameter dictionary (for example from a v0.x file),
 ``conversions.cosmology_from_params`` builds the astropy object.
-``conversions.as_astropy_cosmology`` also takes a ``Cosmo_Conversions``
-object, with a ``DeprecationWarning``.
 
 .. code-block:: python
 

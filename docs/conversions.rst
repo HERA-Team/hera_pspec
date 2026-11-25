@@ -77,7 +77,4 @@ The ``conversions`` module
 
 .. autofunction:: hera_pspec.conversions.length_unit_from_little_h
 
-.. autoclass:: hera_pspec.conversions.Cosmo_Conversions
-  :members:
-
 .. autofunction:: hera_pspec.unit_helpers.parse_pspec_unit

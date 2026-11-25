@@ -237,8 +237,7 @@ def uvpspec_from_data(
         Optional tapering applied to the data before OQE. Default: 'none'.
 
     cosmo : astropy.cosmology.FLRW, optional
-        Cosmology. A ``Cosmo_Conversions`` object is still accepted but
-        deprecated.
+        Cosmology.
 
     n_dlys : int, optional
         Number of delay bins to use. Default: None (uses as many delay bins as

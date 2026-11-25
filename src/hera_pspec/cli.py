@@ -165,7 +165,7 @@ COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
 
 
 # Defaults of the --cosmo values, in COSMO_PARAM_ORDER (the defaults of the
-# former Cosmo_Conversions constructor; they give conversions.LEGACY_COSMOLOGY).
+# hera_pspec v0.x cosmology constructor; they give conversions.LEGACY_COSMOLOGY).
 _COSMO_PARAM_DEFAULTS = {
     "Om_L": 0.68440,
     "Om_b": 0.04911,

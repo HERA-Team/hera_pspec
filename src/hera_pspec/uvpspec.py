@@ -2726,8 +2726,7 @@ class UVPSpec:
         new_cosmo : astropy.cosmology.FLRW or dict
             Astropy cosmology, or cosmological parameter dictionary (see
             ``conversions.cosmology_from_params``). The new cosmology you
-            want to adopt for this UVPSpec object. A ``Cosmo_Conversions``
-            object is still accepted but deprecated.
+            want to adopt for this UVPSpec object.
 
         overwrite : bool, optional
             If True, overwrite self.cosmo if it already exists. Default: False.
@@ -3077,8 +3076,8 @@ class UVPSpec:
                             assert issubclass(
                                 getattr(self, p)[k].dtype.type, a.expected_type
                             ), err_msg
-                    # cosmology: convert a deprecated Cosmo_Conversions (or a
-                    # parameter dict) instead of the generic cast below
+                    # cosmology: convert a parameter dict instead of the generic
+                    # cast below
                     elif p == "cosmo":
                         try:
                             self.cosmo = conversions.as_astropy_cosmology(self.cosmo)

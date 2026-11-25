@@ -774,8 +774,7 @@ class UVWindow:
             lengths in h^-1 Mpc); if False, in 1 / Mpc. See :attr:`kunits`.
         cosmo : astropy.cosmology.FLRW, optional
             Cosmology. Default: None, which uses
-            ``conversions.DEFAULT_COSMOLOGY``. A ``Cosmo_Conversions`` object
-            is still accepted but deprecated.
+            ``conversions.DEFAULT_COSMOLOGY``.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
 

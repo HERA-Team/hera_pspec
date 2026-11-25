@@ -3484,31 +3484,6 @@ class TestPspecRun:
             )
         assert not (tmp_path / "out.h5").exists()
 
-    def test_cosmo_conversions_deprecated(
-        self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV
-    ) -> None:
-        with pytest.warns(DeprecationWarning):
-            old = conversions.Cosmo_Conversions(Om_L=0.0)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            pspecdata.pspec_run(
-                PSPEC_RUN_FNAMES,
-                str(tmp_path / "out.h5"),
-                beam=beam_nf_dipole,
-                blpairs=[((37, 38), (37, 38))],
-                pol_pairs=[("xx", "xx")],
-                spw_ranges=[(50, 60)],
-                verbose=False,
-                overwrite=True,
-                cosmo=old,
-            )
-        psc = container.PSpecContainer(str(tmp_path / "out.h5"), keep_open=False)
-        group = psc.groups()[0]
-        uvp = psc.get_pspec(group, psc.spectra(group)[0])
-        assert isinstance(uvp.cosmo, FLRW)
-        assert uvp.cosmo.is_equivalent(old.to_astropy())
-        # the beam passed in keeps its own cosmology
-        assert beam_nf_dipole.cosmo is conversions.DEFAULT_COSMOLOGY
-
     def test_jy2mk_blpairs_cosmo_cov_array_spw_ranges_dset_labeling(
         self, tmp_path: Path, beam_nf_dipole: PSpecBeamUV
     ) -> None:

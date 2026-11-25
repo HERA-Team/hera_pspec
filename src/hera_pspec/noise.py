@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .pspecbeam import PSpecBeamBase
 
 PowerSpectrum = float | npt.NDArray[np.floating[Any]]
-CosmologyInput = FLRW | str | dict[str, Any] | conversions.Cosmo_Conversions
+CosmologyInput = FLRW | str | dict[str, Any]
 
 
 def calc_P_N(
@@ -198,8 +198,7 @@ class Sensitivity:
         cosmo : astropy.cosmology.FLRW, self.cosmo_params string, or dictionary
             The cosmology, or its parameter dictionary (see
             ``conversions.cosmology_from_params``) or that dictionary's
-            ``str()``. A ``Cosmo_Conversions`` object is still accepted but
-            deprecated.
+            ``str()``.
         """
         if isinstance(cosmo, str):
             cosmo = ast.literal_eval(cosmo)

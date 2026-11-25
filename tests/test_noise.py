@@ -39,18 +39,6 @@ class TestSensitivity:
         sense.set_cosmology(params)
         assert sense.cosmo.is_equivalent(C)
 
-    def test_set_cosmology_cosmo_conversions_deprecated(self) -> None:
-        """A Cosmo_Conversions object still works, with a DeprecationWarning."""
-        sense = noise.Sensitivity()
-        with pytest.warns(DeprecationWarning):
-            C = conversions.Cosmo_Conversions(Om_L=0.7, Om_c=0.25)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            sense.set_cosmology(C)
-        assert isinstance(sense.cosmo, FLRW)
-        assert conversions.params_from_cosmology(sense.cosmo) == pytest.approx(
-            C.get_params(), rel=1e-12
-        )
-
     def test_set_beam_with_cosmo(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that set_beam aligns the beam's cosmology with self.cosmo when both are present."""
         sense = noise.Sensitivity()

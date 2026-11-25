@@ -20,7 +20,7 @@ from tests import legacy_fixtures as lf
 
 DATA_PATH = Path(DATA_PATH)
 
-# Cosmo_Conversions().get_params() of hera_pspec v0.x, i.e. the "cosmo"
+# The cosmology parameters of hera_pspec v0.x, i.e. the "cosmo"
 # attribute of files written with its default cosmology (LEGACY_COSMOLOGY).
 OLD_DEFAULT_COSMO_PARAMS = {
     "Om_L": 0.6844,
@@ -211,30 +211,6 @@ class TestWriteVersion2:
         uvp_read = _read(path)
         assert not isinstance(uvp_read.dly_array, units.Quantity)
         assert uvp_read == vanilla_uvp
-
-    def test_inconsistent_om_k_cosmo_conversions_rejected(
-        self, vanilla_uvp: UVPSpec, tmp_path: Path
-    ) -> None:
-        # astropy cannot represent an Om_k inconsistent with Om_L and Om_M
-        uvp = copy.deepcopy(vanilla_uvp)
-        with pytest.warns(DeprecationWarning):
-            uvp.cosmo = conversions.Cosmo_Conversions(Om_k=0.05)
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(AssertionError, match="Om_k"),
-        ):
-            uvp.check()
-
-    def test_cosmo_conversions_converted_on_write(
-        self, vanilla_uvp: UVPSpec, tmp_path: Path
-    ) -> None:
-        uvp = copy.deepcopy(vanilla_uvp)
-        with pytest.warns(DeprecationWarning):
-            uvp.cosmo = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            path = _write(uvp, tmp_path / "uvp.h5")
-        assert isinstance(uvp.cosmo, FLRW)
-        assert _read(path).cosmo == uvp.cosmo
 
     @pytest.mark.parametrize(
         "cosmo",

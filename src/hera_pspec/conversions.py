@@ -12,7 +12,6 @@ import warnings
 import astropy.cosmology.units as cu
 import astropy.units as u
 import numpy as np
-import scipy.integrate as integrate
 from astropy import constants
 from astropy.cosmology import FLRW, LambdaCDM, Planck18
 
@@ -82,8 +81,8 @@ LEGACY_COSMOLOGY = LambdaCDM(
 """
 Default cosmology of hera_pspec v0.x, as an ``astropy.cosmology.LambdaCDM``.
 
-Same parameters as ``Cosmo_Conversions()``: Planck 2015 TT,TE,EE+lowP
-(Table 4 of https://doi.org/10.1051/0004-6361/201525830) with
+Planck 2015 TT,TE,EE+lowP (Table 4 of
+https://doi.org/10.1051/0004-6361/201525830) with
 H0 = 67.27 km/s/Mpc, Om0 = 0.31353, Ode0 = 0.6844 and Ob0 = 0.04911.
 ``Tcmb0`` is 0, so there is no radiation term, and the model is slightly
 open (Ok0 = 1 - Om0 - Ode0 = 0.00207). Pass it as ``cosmo`` (or
@@ -101,8 +100,7 @@ def cosmology_from_params(params):
     """
     Build an astropy ``LambdaCDM`` from a hera_pspec cosmology dictionary.
 
-    The dictionary has the keys of ``Cosmo_Conversions.get_params()``, as
-    stored in the ``cosmo`` attribute of HDF5 files: ``H0``, ``Om_L``,
+    The dictionary has the keys stored in the ``cosmo`` attribute of HDF5 files: ``H0``, ``Om_L``,
     ``Om_M``, ``Om_b``, ``Om_c`` and ``Om_k``. The result has ``H0``,
     ``Om0 = Om_M``, ``Ode0 = Om_L``, ``Ob0 = Om_b`` and ``Tcmb0 = 0`` (no
     radiation). ``Om_M`` defaults to ``Om_b + Om_c`` when missing or None.
@@ -146,7 +144,7 @@ def cosmology_from_params(params):
 
 
 # Fractions of Om_M given to baryons and cold dark matter when a cosmology
-# has no baryon density (the split rule of Cosmo_Conversions).
+# has no baryon density (the split rule of hera_pspec v0.x).
 _OM_B_FRACTION = 0.156635
 _OM_C_FRACTION = 0.843364
 
@@ -155,8 +153,8 @@ def params_from_cosmology(cosmo):
     """
     Return the hera_pspec cosmology dictionary of an astropy cosmology.
 
-    The dictionary has the keys and values that ``Cosmo_Conversions.get_params()``
-    gives for the same cosmology: ``Om_L``, ``Om_b``, ``Om_c``, ``Om_M``,
+    The dictionary has the keys and values that hera_pspec v0.x stored for the
+    same cosmology: ``Om_L``, ``Om_b``, ``Om_c``, ``Om_M``,
     ``Om_k`` and ``H0``, as plain floats. This is the form stored in the
     ``cosmo`` attribute of HDF5 files (readable by hera_pspec v0.x).
 
@@ -179,7 +177,7 @@ def params_from_cosmology(cosmo):
         ``Om_c = Om0 - Ob0``, ``Om_k = 1 - Om_L - Om_M`` and ``H0`` in
         km/s/Mpc. If ``Ob0`` is unset (None or 0, astropy's default from
         version 7), ``Om_M`` is split into ``Om_b`` and ``Om_c`` with the
-        fixed fractions 0.156635 / 0.843364, as ``Cosmo_Conversions`` does.
+        fixed fractions 0.156635 / 0.843364, as hera_pspec v0.x did.
     """
     Om_M = float(cosmo.Om0)
     Om_L = float(cosmo.Ode0)
@@ -227,11 +225,10 @@ def as_astropy_cosmology(cosmo):
 
     Parameters
     ----------
-    cosmo : astropy.cosmology.FLRW, dict or Cosmo_Conversions
-        An astropy cosmology (returned as is), a hera_pspec cosmology
+    cosmo : astropy.cosmology.FLRW or dict
+        An astropy cosmology (returned as is), or a hera_pspec cosmology
         dictionary with the keys of :func:`params_from_cosmology` (see
-        :func:`cosmology_from_params`), or a deprecated
-        :class:`Cosmo_Conversions`, which emits a ``DeprecationWarning``.
+        :func:`cosmology_from_params`).
 
     Returns
     -------
@@ -248,15 +245,6 @@ def as_astropy_cosmology(cosmo):
     """
     if isinstance(cosmo, FLRW):
         return cosmo
-    if isinstance(cosmo, Cosmo_Conversions):
-        warnings.warn(
-            "Passing a Cosmo_Conversions object is deprecated; pass an "
-            "astropy.cosmology object instead (e.g. "
-            "hera_pspec.conversions.DEFAULT_COSMOLOGY).",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return _cosmology_from_params_cached(cosmo.get_params())
     if isinstance(cosmo, dict):
         return _cosmology_from_params_cached(cosmo)
     raise TypeError(
@@ -597,495 +585,3 @@ def tau_to_kpara(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     kpara = 2 * np.pi / dRpara_df(z, cosmo, length_unit)
     return kpara.to(1 / length_unit / u.s)
-
-
-class Cosmo_Conversions:
-    """
-    Cosmo_Conversions class for mathematical conversion functions,
-    some of which require a cosmological model, others of which
-    do not require a predefined cosmology.
-
-    .. deprecated:: 1.0
-        Use an ``astropy.cosmology`` object (e.g. ``DEFAULT_COSMOLOGY``, or
-        ``cosmology_from_params``) with the module functions ``f2z``,
-        ``z2f``, ``dRperp_dtheta``, ``dRpara_df``, ``X2Y``, ``bl_to_kperp``
-        and ``tau_to_kpara`` instead. This class is kept for the v1.x series.
-
-    Default parameter values are Planck 2015 TT,TE,EE+lowP.
-    (Table 4 of https://doi.org/10.1051/0004-6361/201525830)
-
-    Distance measures come from:
-    Hogg 1999 (astro-ph/9905116)
-    Furlanetto 2006 (2006PhR...433..181F)
-
-    The distance methods are computed by an equivalent
-    ``astropy.cosmology.LambdaCDM`` (``self.lcdm``, Tcmb0 = 0). The one
-    exception is an explicit ``Om_k`` that differs from
-    ``1 - Om_L - Om_M``, which astropy cannot represent; such instances
-    keep the original closed-form/quadrature formulas.
-
-    """
-
-    # Largest |Om_k - (1 - Om_L - Om_M)| treated as consistent.
-    _om_k_atol = _OM_K_ATOL
-
-    def __init__(
-        self,
-        Om_L=0.68440,
-        Om_b=0.04911,
-        Om_c=0.26442,
-        H0=67.27,
-        Om_M=None,
-        Om_k=None,
-        **kwargs,
-    ):
-        """
-        Default parameter values are Planck 2015 TT,TE,EE+lowP.
-        (Table 4 of https://doi.org/10.1051/0004-6361/201525830)
-
-        Parameters:
-        -----------
-        Om_L : float, Omega Lambda naught, default=0.68440
-            cosmological constant energy density fraction at z=0
-
-        Om_b : float, Omega baryon naught, default=0.04911
-            baryon energy density fraction at z=0
-
-        Om_c : float, Omega cold dark matter naught, default=0.26442
-            cdm energy density fraction at z=0
-
-        H0 : float, Hubble constant, default=67.31 km s-1 Mpc-1
-
-        Om_M : float, Omega matter naught, default=None [optional]
-            matter energy density faction at z=0
-
-        Om_k : float, Omega curvature naught, default=None [optional]
-            curvature energy density at z=0
-
-        """
-        warnings.warn(
-            "Cosmo_Conversions is deprecated and will be removed in a future "
-            "version; use an astropy.cosmology object instead, e.g. "
-            "hera_pspec.conversions.DEFAULT_COSMOLOGY or "
-            "hera_pspec.conversions.cosmology_from_params(...), with the "
-            "module functions of hera_pspec.conversions.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # Setup parameters
-        if Om_M is not None:
-            if np.isclose(Om_b + Om_c, Om_M, atol=1e-5) is False:
-                Om_b = Om_M * 0.156635
-                Om_c = Om_M * 0.843364
-        else:
-            Om_M = Om_b + Om_c
-
-        if Om_k is None:
-            Om_k = 1 - Om_L - Om_M
-
-        ### TODO add radiation component to class and to distance functions
-        self.Om_L = Om_L
-        self.Om_b = Om_b
-        self.Om_c = Om_c
-        self.Om_M = Om_M
-        self.Om_k = Om_k
-        self.H0 = H0
-        self.h = self.H0 / 100.0
-
-        self.params = ["Om_L", "Om_b", "Om_c", "Om_M", "Om_k", "H0"]
-
-        # Equivalent astropy cosmology. When Om_k is inconsistent with
-        # Om_L and Om_M, astropy cannot represent the model, so the distance
-        # methods fall back to the original formulas (_use_lcdm = False).
-        self._use_lcdm = self._om_k_is_consistent()
-        self.lcdm = self._build_lcdm()
-
-    def _om_k_is_consistent(self):
-        """Whether Om_k equals 1 - Om_L - Om_M (as astropy assumes)."""
-        return bool(np.abs(self.Om_k - (1 - self.Om_L - self.Om_M)) <= self._om_k_atol)
-
-    def _build_lcdm(self):
-        """Build the LambdaCDM object without checking Om_k."""
-        Ob0 = self.Om_b if 0 <= self.Om_b <= self.Om_M else 0.0
-        return LambdaCDM(H0=self.H0, Om0=self.Om_M, Ode0=self.Om_L, Ob0=Ob0)
-
-    def to_astropy(self):
-        """
-        Return the equivalent ``astropy.cosmology.LambdaCDM``.
-
-        The result has ``H0``, ``Om0 = Om_M``, ``Ode0 = Om_L``,
-        ``Ob0 = Om_b`` and ``Tcmb0 = 0`` (no radiation, as in this class).
-        Its curvature is derived by astropy as ``Ok0 = 1 - Om0 - Ode0``.
-
-        Returns
-        -------
-        cosmo : astropy.cosmology.LambdaCDM
-
-        Raises
-        ------
-        ValueError
-            If ``Om_k`` differs from ``1 - Om_L - Om_M``, or ``Om_b`` is not
-            between 0 and ``Om_M``; astropy cannot represent either case.
-        """
-        return cosmology_from_params(self.get_params())
-
-    def _astropy_for_writing(self):
-        """
-        Return the astropy cosmology to store in files, or None.
-
-        Gives the same cosmology as :meth:`to_astropy`, or None where that
-        raises. It reuses ``self.lcdm`` when that still matches the
-        parameters, instead of building a new ``LambdaCDM``: building one
-        leaves a reference cycle that holds the calling frames (and so any
-        open HDF5 objects in them) alive until the garbage collector runs.
-        """
-        if not self._om_k_is_consistent() or not 0 <= self.Om_b <= self.Om_M:
-            return None
-        lcdm = self.lcdm
-        if (
-            lcdm.H0.value == self.H0
-            and lcdm.Om0 == self.Om_M
-            and lcdm.Ode0 == self.Om_L
-            and lcdm.Ob0 == self.Om_b
-        ):
-            return lcdm
-        return self.to_astropy()
-
-    @classmethod
-    def from_astropy(cls, cosmo):
-        """
-        Build a ``Cosmo_Conversions`` from an astropy ``LambdaCDM``.
-
-        Reads ``H0``, ``Om0``, ``Ode0`` and ``Ob0``. If ``Ob0`` is unset (None,
-        or 0, which is astropy's default from version 7), the matter density
-        is split into baryons and cold dark matter with the fixed fractions
-        0.156635 / 0.843364 (the split rule in ``__init__``).
-
-        Parameters
-        ----------
-        cosmo : astropy.cosmology.LambdaCDM
-            Cosmology to convert (``FlatLambdaCDM`` is accepted too).
-
-        Returns
-        -------
-        Cosmo_Conversions
-
-        Raises
-        ------
-        TypeError
-            If ``cosmo`` is not a ``LambdaCDM`` (other dark energy models
-            have no equivalent here).
-        ValueError
-            If ``cosmo`` has a non-zero ``Tcmb0``. ``Cosmo_Conversions`` has
-            no radiation term, so the distances would not match.
-        """
-        if not isinstance(cosmo, LambdaCDM):
-            raise TypeError(
-                "from_astropy needs an astropy LambdaCDM or FlatLambdaCDM, "
-                f"got {type(cosmo).__name__}."
-            )
-        if cosmo.Tcmb0.to_value(u.K) != 0:
-            raise ValueError(
-                f"cosmo has Tcmb0={cosmo.Tcmb0}; Cosmo_Conversions has no "
-                "radiation term, so only Tcmb0=0 cosmologies can be converted."
-            )
-        Om_M = float(cosmo.Om0)
-        if not cosmo.Ob0:
-            Om_b = Om_M * 0.156635
-            Om_c = Om_M * 0.843364
-        else:
-            Om_b = float(cosmo.Ob0)
-            Om_c = Om_M - Om_b
-        return cls(
-            Om_L=float(cosmo.Ode0),
-            Om_b=Om_b,
-            Om_c=Om_c,
-            H0=float(cosmo.H0.to_value(u.km / u.s / u.Mpc)),
-            Om_M=Om_M,
-        )
-
-    def _hubble_distance(self, little_h):
-        """Hubble distance c / H0 as a float, in Mpc or h^-1 Mpc."""
-        if little_h:
-            return units.ckm / 100.0
-        return units.ckm / self.H0
-
-    def _mpc_to_output(self, value, little_h):
-        """Scale a float in Mpc to h^-1 Mpc if little_h."""
-        return value * self.h if little_h else value
-
-    def get_params(self):
-        """
-        Return a dictionary with cosmological parameters.
-        """
-        return dict([(p, getattr(self, p)) for p in self.params])
-
-    def f2z(self, freq, ghz=False):
-        """
-        Convert frequency to redshift for 21cm line.
-
-        Parameters:
-        -----------
-        freq : float
-            Frequency in Hz (or GHz if ghz=True).
-
-        ghz : bool, optional
-            If True: assume freq is GHz. Default: False.
-
-        Output:
-        -------
-        z : float
-            Redshift
-        """
-        if ghz:
-            freq = freq * 1e9
-
-        return units.f21 / freq - 1
-
-    @staticmethod
-    def z2f(z, ghz=False):
-        """
-        Convert redshift to frequency in Hz for 21cm line.
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        ghz : bool, optional
-            If True: convert to GHz. Default: False.
-
-        Output:
-        -------
-        freq : float
-            Frequency in Hz (or GHz if ghz=True)
-        """
-        freq = units.f21 / (z + 1)
-        if ghz:
-            freq /= 1e9
-        return freq
-
-    def E(self, z):
-        """
-        Ratio of hubble parameters: H(z) / H(z=0)
-        (Hogg99 Eqn. 14)
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-        """
-        if self._use_lcdm:
-            return self.lcdm.efunc(z)
-        return np.sqrt(self.Om_M * (1 + z) ** 3 + self.Om_k * (1 + z) ** 2 + self.Om_L)
-
-    def DC(self, z, little_h=True):
-        """
-        Line-of-sight comoving distance in Mpc.
-        (Hogg99 Eqn. 15)
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-        """
-        if self._use_lcdm:
-            return self._mpc_to_output(
-                self.lcdm.comoving_distance(z).to_value(u.Mpc), little_h
-            )
-        d = integrate.quad(lambda z: 1 / self.E(z), 0, z)[0]
-        if little_h:
-            return d * units.ckm / 100.0
-        else:
-            return d * units.ckm / self.H0
-
-    def DM(self, z, little_h=True):
-        """
-        Transverse comoving distance in Mpc.
-        (Hogg99 Eqn. 16)
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-        """
-        if self._use_lcdm:
-            return self._mpc_to_output(
-                self.lcdm.comoving_transverse_distance(z).to_value(u.Mpc), little_h
-            )
-        DH = self._hubble_distance(little_h)
-
-        if self.Om_k > 0:
-            DM = (
-                DH
-                * np.sinh(np.sqrt(self.Om_k) * self.DC(z, little_h=little_h) / DH)
-                / np.sqrt(self.Om_k)
-            )
-        elif self.Om_k < 0:
-            DM = (
-                DH
-                * np.sin(
-                    np.sqrt(np.abs(self.Om_k)) * self.DC(z, little_h=little_h) / DH
-                )
-                / np.sqrt(np.abs(self.Om_k))
-            )
-        else:
-            DM = self.DC(z, little_h=little_h)
-
-        return DM
-
-    def DA(self, z, little_h=True):
-        """
-        Angular diameter (proper) distance in Mpc.
-        (Hogg99 Eqn. 18)
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-        """
-        if self._use_lcdm:
-            return self._mpc_to_output(
-                self.lcdm.angular_diameter_distance(z).to_value(u.Mpc), little_h
-            )
-        return self.DM(z, little_h=little_h) / (1 + z)
-
-    def dRperp_dtheta(self, z, little_h=True):
-        """
-        Conversion factor from angular size (radian) to transverse
-        comoving distance (Mpc) at a specific redshift: [Mpc / radians]
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-        """
-        return self.DM(z, little_h=little_h)
-
-    def dRpara_df(self, z, ghz=False, little_h=True):
-        """
-        Conversion from frequency bandwidth to radial comoving distance at a
-        specific redshift: [Mpc / Hz]
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        ghz : bool, optional
-            Whether to convert output to [Mpc / GHz] (if True). Default: False.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-        """
-        y = (1 + z) ** 2.0 / self.E(z) * self._hubble_distance(little_h) / units.f21
-        if ghz:
-            return y * 1e9
-        else:
-            return y
-
-    def X2Y(self, z, little_h=True):
-        """
-        Conversion from radians^2 Hz -> Mpc^3 at a specific redshift.
-
-        Parameters:
-        -----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc (True) or
-            Mpc (False). Default: True (h^-1 Mpc)
-
-        Notes:
-        ------
-        Calls Cosmo_Conversions.dRperp_dtheta() and Cosmo_Conversions.dRpara_df().
-        """
-        return self.dRperp_dtheta(z, little_h=little_h) ** 2 * self.dRpara_df(
-            z, little_h=little_h
-        )
-
-    def bl_to_kperp(self, z, little_h=True):
-        """
-        Produce the conversion factor from baseline length [meters] to
-        k_perpendicular mode [h Mpc-1] at a specified redshift.
-
-        Multiply this conversion factor by a baseline-separation length in
-        [meters] to get its corresponding k_perp mode in [h Mpc-1].
-
-        Parameters
-        ----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
-
-        Return
-        ------
-        bl2kperp : float
-            Conversion factor in units [h Mpc-1 / meters]
-        """
-        # Parsons 2012, Pober 2014, Kohn 2018
-        bl2kpara = (
-            2
-            * np.pi
-            / (self.dRperp_dtheta(z, little_h=little_h) * (units.c / self.z2f(z)))
-        )
-        return bl2kpara
-
-    def tau_to_kpara(self, z, little_h=True):
-        """
-        Produce the conversion factor from delay [seconds] to k_parallel mode
-        [h Mpc-1] at a specified redshift.
-
-        Multiply this conversion factor by a delay mode in [seconds]
-        to get its corresponding k_para mode in [h Mpc-1].
-
-        Parameters
-        ----------
-        z : float
-            Redshift.
-
-        little_h : boolean, optional
-            Whether to have cosmological length units be h^-1 Mpc or Mpc
-            Default: h^-1 Mpc
-
-        Return
-        ------
-        tau2kpara : float
-            Conversion factor in units [h Mpc-1 / seconds]
-        """
-        # Parsons 2012, Pober 2014, Kohn 2018
-        tau2kpara = 2 * np.pi / self.dRpara_df(z, little_h=little_h, ghz=False)
-
-        return tau2kpara
-
-    def __str__(self):
-        message = f"Cosmo_Conversions object at <{hex(id(self))}>\n"
-        message += "; ".join([f"{p:s} : {getattr(self, p):0.4f}" for p in self.params])
-        return message
-
-    def __eq__(self, other):
-        """
-        Check two Cosmo_Conversion objects are equivalent
-        """
-        return self.get_params() == other.get_params()

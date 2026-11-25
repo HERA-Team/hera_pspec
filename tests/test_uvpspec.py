@@ -1935,46 +1935,28 @@ def test_set_cosmology_new_cosmology(
     np.testing.assert_allclose(ratios["littleh"], ratios["mpc"] * h_ratio**3, rtol=1e-4)
 
 
-@pytest.mark.parametrize("form", ["astropy", "dict", "cosmo_conversions"])
+@pytest.mark.parametrize("form", ["astropy", "dict"])
 def test_set_cosmology_forms(mutable_uvp_with_beam: uvpspec.UVPSpec, form: str) -> None:
-    """set_cosmology takes an astropy object, a params dict or (deprecated) a
-    Cosmo_Conversions, and always stores an astropy object."""
+    """set_cosmology takes an astropy object or a params dict, and always stores an
+    astropy object."""
     uvp = mutable_uvp_with_beam
     target = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
     expected = copy.deepcopy(uvp)
     expected.set_cosmology(target, overwrite=True, verbose=False)
     if form == "astropy":
         uvp.set_cosmology(target, overwrite=True, verbose=False)
-    elif form == "dict":
+    else:
         uvp.set_cosmology(
             conversions.params_from_cosmology(target), overwrite=True, verbose=False
         )
-    else:
-        with pytest.warns(DeprecationWarning):
-            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            uvp.set_cosmology(old, overwrite=True, verbose=False)
     assert isinstance(uvp.cosmo, FLRW)
     assert uvp.cosmo.is_equivalent(target)
     np.testing.assert_allclose(uvp.scalar_array, expected.scalar_array, rtol=1e-14)
 
 
-def test_cosmo_conversions_attribute_deprecated(vanilla_uvp: uvpspec.UVPSpec) -> None:
-    """A Cosmo_Conversions assigned to uvp.cosmo still works, with a warning,
-    and check() converts it to astropy."""
+def test_check_rejects_non_cosmology(vanilla_uvp: uvpspec.UVPSpec) -> None:
+    """check() raises when uvp.cosmo is not a cosmology (or its parameter dict)."""
     uvp = copy.deepcopy(vanilla_uvp)
-    # Cosmo_Conversions() is the v0.x default cosmology
-    expected = copy.deepcopy(vanilla_uvp)
-    expected.cosmo = conversions.LEGACY_COSMOLOGY
-    with pytest.warns(DeprecationWarning):
-        uvp.cosmo = conversions.Cosmo_Conversions()
-    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-        kperps = uvp.get_kperps(0)
-    np.testing.assert_allclose(kperps, expected.get_kperps(0), rtol=1e-15)
-    with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-        uvp.check()
-    assert isinstance(uvp.cosmo, FLRW)
-    assert uvp == expected
     uvp.cosmo = [1.0]
     with pytest.raises(AssertionError, match="cosmo"):
         uvp.check()
