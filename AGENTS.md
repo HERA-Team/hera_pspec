@@ -71,7 +71,9 @@ The library is organized around three persistent object types and a computation 
 - DO: keep documentation in scope. Docstrings and tutorials are *user facing* and should not refer to e.g. PR's or Issues, and should not refer to
   'history' e.g. "This method avoids previous errors where...". Comments are developer-facing and may refer to details, but should not be over-long.
 - DO: always consider refining the implementation to make it as easy to understand for humans as possible.
-- DON'T: multiple internal methods starting with _ which are called less than 3 times and whose content is less than 3 lines, unless it allows a significant memory gain / speed-up (x1.2 improvement and above).
+- DON'T: add internal methods (starting with `_`) that are called less than 3 times and whose content is less than 3 lines, unless it allows a significant memory gain / speed-up (x1.2 improvement and above).
+- DO: add docstrings to internal methods
+- DO: add type hints to new code, unless the type hints are more complicated than not having them.
 - DO: when modifying methods, modify the example notebooks accordingly.
 
 ### Writing tests
