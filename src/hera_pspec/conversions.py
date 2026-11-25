@@ -15,52 +15,10 @@ import numpy as np
 from astropy import constants
 from astropy.cosmology import FLRW, LambdaCDM, Planck18
 
+_F21_HZ = 1.420405751e9
+"""Rest frequency of the 21cm line, as a plain float in Hz (for internal use)."""
 
-class units:
-    """
-    Fundamental constants and conversion constants
-    in ** SI ** units, as plain floats.
-
-    The physical constants come from ``astropy.constants`` (CODATA 2018 in
-    astropy >= 4); ``f21`` and ``w21`` are hera_pspec's own 21cm constants.
-
-    c : speed of light m s-1
-    ckm : speed of light in km s-1
-    G : Newton constant m3 kg-1 s-2
-    kb : boltzmann constant m2 kg s-2 K-1
-    hp : planck constant m2 kg s-1
-    sb : stefan-boltzmann constant W m-2 K-4
-    f21 : 21cm frequency in Hz
-    w21 : 21cm wavelength in meters
-    H0_to_SI : conversion factor from km s-1 Mpc-1 to s-1
-    """
-
-    c = float(constants.c.value)  # speed of light in m s-1
-    ckm = float(constants.c.to_value(u.km / u.s))  # speed of light in km s-1
-    G = float(constants.G.value)  # Newton constant m3 kg-1 s-2
-    kb = float(constants.k_B.value)  # boltzmann constant m2 kg s-2 K-1
-    hp = float(constants.h.value)  # planck constant m2 kg s-1
-    sb = float(constants.sigma_sb.value)  # stefan boltzmann constant W m-2 K-4
-    f21 = 1.420405751e9  # frequency of 21cm transition in Hz
-    w21 = 0.211061140542  # 21cm wavelength in meters
-    H0_to_SI = float((1 * u.km / u.s / u.Mpc).to_value(1 / u.s))  # km s-1 Mpc-1 to s-1
-
-
-class cgs_units:
-    """
-    Fundamental constants in ** CGS ** units, as plain floats.
-
-    Values come from ``astropy.constants`` (CODATA 2018 in astropy >= 4).
-
-    c : speed of light cm s-1
-    kb : boltzmann constant erg K-1
-    """
-
-    c = float(constants.c.cgs.value)  # cm s-1
-    kb = float(constants.k_B.cgs.value)  # erg K-1
-
-
-F21 = units.f21 * u.Hz
+F21 = _F21_HZ * u.Hz
 """Rest frequency of the 21cm line, as an ``astropy.units.Quantity`` in Hz."""
 
 
@@ -353,7 +311,7 @@ def f2z(freq):
     """
     if isinstance(freq, u.Quantity):
         freq = freq.to_value(u.Hz)
-    return units.f21 / freq - 1
+    return _F21_HZ / freq - 1
 
 
 def z2f(z):
@@ -370,7 +328,7 @@ def z2f(z):
     freq : astropy.units.Quantity
         Frequency in Hz.
     """
-    return units.f21 / (np.asarray(z) + 1) * u.Hz
+    return _F21_HZ / (np.asarray(z) + 1) * u.Hz
 
 
 class _CosmologyKey:
@@ -493,7 +451,7 @@ def dRpara_df(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):
     """
     zp1 = np.asarray(z) + 1.0
     distance = cosmo.hubble_distance * zp1**2 / cosmo.efunc(z)
-    return _to_length_unit(distance, length_unit, cosmo) / (units.f21 * u.Hz)
+    return _to_length_unit(distance, length_unit, cosmo) / F21
 
 
 def X2Y(z, cosmo=DEFAULT_COSMOLOGY, length_unit=_LITTLEH_LENGTH):

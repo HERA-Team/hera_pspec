@@ -5,6 +5,7 @@ import astropy.units as u
 import numpy as np
 import scipy.integrate as integrate
 import uvtools.dspec as dspec
+from astropy import constants
 from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from pyuvdata.analytic_beam import AnalyticBeam, GaussianBeam
@@ -358,8 +359,8 @@ class PSpecBeamBase:
 
         return (
             1e-20
-            * conversions.cgs_units.c**2
-            / (2 * conversions.cgs_units.kb * freqs**2 * Op)
+            * constants.c.cgs.value**2
+            / (2 * constants.k_B.cgs.value * freqs**2 * Op)
         )
 
     def get_Omegas(self, polpairs):

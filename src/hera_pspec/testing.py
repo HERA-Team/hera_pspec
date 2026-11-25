@@ -2,7 +2,7 @@
 import copy
 
 import numpy as np
-from astropy import units
+from astropy import constants, units
 from astropy.cosmology import FLRW
 from hera_cal.utils import JD2LST
 from pyuvdata import UVData
@@ -566,8 +566,8 @@ def sky_noise_jy_autos(
 
     # Calculate Jansky to Kelvin conversion factor
     # The factor of 1e-26 converts from Jy to W/m^2/Hz.
-    wavelengths = conversions.units.c / freqs  # meters
-    Jy2K = 1e-26 * wavelengths**2 / (2 * conversions.units.kb * omega_p)
+    wavelengths = constants.c.value / freqs  # meters
+    Jy2K = 1e-26 * wavelengths**2 / (2 * constants.k_B.value * omega_p)
 
     # Use autocorrelation vsibility to set noise scale
     Tsky = autovis * Jy2K.reshape(1, -1)

@@ -77,6 +77,9 @@ Removed in v1.0
 * ``conversions.Cosmo_Conversions`` no longer exists, and no function accepts
   one. Use an ``astropy.cosmology`` object with the functions of
   ``hera_pspec.conversions`` (see `Cosmology`_).
+* ``conversions.units`` and ``conversions.cgs_units`` no longer exist. Use
+  ``astropy.constants`` (for example ``constants.c`` and ``constants.k_B``).
+  ``conversions.F21`` is the 21 cm rest frequency.
 
 
 Deprecations (removal planned for v2.0)

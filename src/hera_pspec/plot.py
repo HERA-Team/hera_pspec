@@ -3,6 +3,7 @@ import copy
 import astropy.units as u
 import numpy as np
 import uvtools
+from astropy import constants
 from pyuvdata import UVData
 
 from . import conversions, utils, uvpspec
@@ -1288,7 +1289,7 @@ def delay_wedge(
     # Plot horizons
     if horizon_lines:
         # get horizon in ns
-        horizons = blpair_seps / conversions.units.c * 1e9
+        horizons = blpair_seps / constants.c.value * 1e9
 
         # convert to cosmological wave vector
         if not delay:

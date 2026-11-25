@@ -9,7 +9,7 @@ import astropy.cosmology.units as cu
 import h5py
 import numpy as np
 import uvtools.dspec as dspec
-from astropy import units
+from astropy import constants, units
 from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from scipy.interpolate import RegularGridInterpolator
@@ -1061,7 +1061,7 @@ class UVWindow:
             * ngrid
             / (2.0 * self.ftbeam_obj_pol[0].mapsize)
         )
-        k = 2.0 * np.pi / R * (freq * bl_len / conversions.units.c / np.sqrt(2.0) - q)
+        k = 2.0 * np.pi / R * (freq * bl_len / constants.c.value / np.sqrt(2.0) - q)
         k = np.flip(k)
 
         return k

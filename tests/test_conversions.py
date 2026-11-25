@@ -9,25 +9,10 @@ from astropy.cosmology import FlatLambdaCDM, LambdaCDM, Planck18, wCDM
 from hera_pspec import conversions
 
 
-def test_units_match_astropy_constants() -> None:
-    """Check that the float constants are the astropy.constants values."""
-    si = conversions.units
-    cgs = conversions.cgs_units
-    assert si.c == constants.c.value
-    assert si.ckm == constants.c.to_value(u.km / u.s)
-    assert si.G == constants.G.value
-    assert si.kb == constants.k_B.value
-    assert si.hp == constants.h.value
-    assert si.sb == constants.sigma_sb.value
-    assert si.H0_to_SI == (1 * u.km / u.s / u.Mpc).to_value(1 / u.s)
-    assert cgs.c == constants.c.cgs.value
-    assert cgs.kb == constants.k_B.cgs.value
-    for value in (si.c, si.ckm, si.G, si.kb, si.hp, si.sb, si.H0_to_SI, cgs.c, cgs.kb):
-        assert type(value) is float
-    # hera_pspec's own 21cm constants are unchanged
-    assert si.f21 == 1.420405751e9
-    assert si.w21 == 0.211061140542
-    assert conversions.F21 == si.f21 * u.Hz
+def test_f21_is_the_21cm_rest_frequency() -> None:
+    """F21 is the 21cm rest frequency in Hz and f2z maps it to z = 0."""
+    assert conversions.F21 == 1.420405751e9 * u.Hz
+    assert conversions.f2z(conversions.F21) == 0.0
 
 
 # Parameters of the v0.x default cosmology, the dictionary stored in the "cosmo"
@@ -92,7 +77,7 @@ def _old_E(Om_L, Om_M, Om_k, z):
 
 
 def _old_DH(H0, little_h):
-    return conversions.units.ckm / 100.0 if little_h else conversions.units.ckm / H0
+    return constants.c.to_value(u.km / u.s) / 100.0 if little_h else constants.c.to_value(u.km / u.s) / H0
 
 
 def _old_DC(Om_L, Om_M, Om_k, H0, z, little_h):
@@ -112,7 +97,7 @@ def _old_DM(Om_L, Om_M, Om_k, H0, z, little_h):
 
 def _old_quantities(Om_L, Om_M, Om_k, H0, z, little_h):
     """v0.x outputs, as plain floats, in (h^-1) Mpc units."""
-    f21 = conversions.units.f21
+    f21 = conversions.F21.to_value(u.Hz)
     DM = _old_DM(Om_L, Om_M, Om_k, H0, z, little_h)
     dRpara_df = (
         (1 + z) ** 2.0 / _old_E(Om_L, Om_M, Om_k, z) * _old_DH(H0, little_h) / f21
@@ -125,7 +110,7 @@ def _old_quantities(Om_L, Om_M, Om_k, H0, z, little_h):
         "dRperp_dtheta": DM,
         "dRpara_df": dRpara_df,
         "X2Y": DM**2 * dRpara_df,
-        "bl_to_kperp": 2 * np.pi / (DM * (conversions.units.c / (f21 / (z + 1)))),
+        "bl_to_kperp": 2 * np.pi / (DM * (constants.c.value / (f21 / (z + 1)))),
         "tau_to_kpara": 2 * np.pi / dRpara_df,
     }
 
@@ -212,10 +197,10 @@ class TestAstropyBackend:
         z = conversions.f2z(freqs)
         assert not isinstance(z, u.Quantity)
         np.testing.assert_allclose(
-            z, conversions.units.f21 / freqs.to_value(u.Hz) - 1, rtol=1e-15
+            z, conversions.F21.to_value(u.Hz) / freqs.to_value(u.Hz) - 1, rtol=1e-15
         )
         np.testing.assert_allclose(
-            conversions.f2z(150e6), conversions.units.f21 / 150e6 - 1, rtol=1e-15
+            conversions.f2z(150e6), conversions.F21.to_value(u.Hz) / 150e6 - 1, rtol=1e-15
         )
 
     def test_z2f_returns_hz(self) -> None:
