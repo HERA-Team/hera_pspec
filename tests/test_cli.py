@@ -212,10 +212,41 @@ class TestFastMergeBaselines:
         assert len(newuvp.get_blpairs()) == len(vanilla_uvp.get_blpairs())
 
 
-def test_run_help():
-    result = invoke(["run", "--help"])
+@pytest.mark.parametrize(
+    "subcommand,option",
+    [
+        ("run", "--dset-pairs"),
+        ("bootstrap", "--nsamples"),
+        ("auto-noise", "--err-type"),
+        ("generate-pstokes", "--pstokes"),
+        ("compute-ft-beam", "--npix"),
+        ("compute-window-functions", "--workers"),
+    ],
+    ids=[
+        "run",
+        "bootstrap",
+        "auto-noise",
+        "generate-pstokes",
+        "compute-ft-beam",
+        "compute-window-functions",
+    ],
+)
+def test_help(subcommand: str, option: str):
+    """Check that each subcommand's --help exits cleanly and lists its options."""
+    result = invoke([subcommand, "--help"])
     assert result.exit_code == 0, result.output
-    assert "--dset-pairs" in result.output
+    assert option in result.output
+
+
+def _capture_pspec_run(monkeypatch) -> dict:
+    """Replace pspec_run by a stub recording the keyword arguments it gets."""
+    captured = {}
+
+    def fake_pspec_run(dsets, filename, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    return captured
 
 
 def test_run_end_to_end(tmp_path):
@@ -265,13 +296,8 @@ def test_run_end_to_end(tmp_path):
 
 
 def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
-    """Regression: --no-symmetric-taper must forward Python False (not a truthy str)."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    """Check that --no-symmetric-taper reaches pspec_run as the bool False."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"]
     )
@@ -282,12 +308,7 @@ def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
 
 def test_run_blpair_reshaped(monkeypatch, tmp_path):
     """--blpairs 1 2 3 4 must reshape to ((1, 2), (3, 4))."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         [
             "run",
@@ -312,12 +333,7 @@ def test_run_blpair_reshaped(monkeypatch, tmp_path):
 
 def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
     """--cosmo values must reach pspec_run as an astropy cosmology, not a list."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    captured = _capture_pspec_run(monkeypatch)
     beamfile = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
     with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
         result = invoke(
@@ -347,13 +363,8 @@ def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
 
 
 def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
-    """Omitted trailing --cosmo values give the v0.x default cosmology's parameters."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    """Check that omitted trailing --cosmo values take LEGACY_COSMOLOGY's parameters."""
+    captured = _capture_pspec_run(monkeypatch)
     with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
         result = invoke(
             ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo", "0.6844"]
@@ -367,90 +378,56 @@ def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
 
 
 def test_run_cosmo_default_is_none(monkeypatch, tmp_path):
-    """Without --cosmo, pspec_run gets cosmo=None so the beam's cosmology is kept."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
+    """Without a cosmology option, pspec_run gets cosmo=None so the beam's
+    cosmology is kept."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
     assert result.exit_code == 0, result.output
     assert captured["cosmo"] is None
 
 
-def test_run_cosmo_too_many_values(monkeypatch, tmp_path):
-    """More than 6 --cosmo values must fail before pspec_run is called."""
-    called = []
-    monkeypatch.setattr(
-        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
-    )
-    result = invoke(
-        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo"]
-        + ["1", "2", "3", "4", "5", "6", "7"]
-    )
-    assert result.exit_code != 0
-    assert not called
-    message = str(result.exception)
-    assert "1 to 6 values" in message
-    assert cli.COSMO_PARAM_ORDER in message
-
-
-def test_run_help_shows_cosmo_order(monkeypatch):
-    # wide terminal so rich does not wrap the parameter order across lines
-    monkeypatch.setenv("COLUMNS", "300")
-    result = invoke(["run", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]" in result.output
-
-
-def _capture_pspec_run(monkeypatch) -> dict:
-    """Replace pspec_run by a stub recording the keyword arguments it gets."""
-    captured = {}
-
-    def fake_pspec_run(dsets, filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.pspecdata, "pspec_run", fake_pspec_run)
-    return captured
-
-
-@pytest.mark.parametrize("name", ["Planck18", "Planck15", "WMAP9"])
-def test_run_cosmology_name_is_the_astropy_realization(monkeypatch, tmp_path, name):
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Planck18", astropy_cosmology.Planck18),
+        ("Planck15", astropy_cosmology.Planck15),
+        ("WMAP9", astropy_cosmology.WMAP9),
+        ("hera_pspec_default", conversions.LEGACY_COSMOLOGY),
+    ],
+    ids=["Planck18", "Planck15", "WMAP9", "hera_pspec_default"],
+)
+def test_run_cosmology_name_is_passed_on(monkeypatch, tmp_path, name, expected):
+    """--cosmology NAME reaches pspec_run as that very cosmology object."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", name]
     )
     assert result.exit_code == 0, result.output
-    assert captured["cosmo"] is getattr(astropy_cosmology, name)
+    assert captured["cosmo"] is expected
 
 
-def test_run_cosmology_hera_pspec_default(monkeypatch, tmp_path):
+def test_run_cosmo_too_many_values(monkeypatch, tmp_path):
+    """More than 6 --cosmo values must fail before pspec_run is called."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
-        [
-            "run",
-            "a.uvh5",
-            "--output",
-            str(tmp_path / "o.h5"),
-            "--cosmology",
-            "hera_pspec_default",
-        ]
+        ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmo"]
+        + ["1", "2", "3", "4", "5", "6", "7"]
     )
-    assert result.exit_code == 0, result.output
-    assert captured["cosmo"] is conversions.LEGACY_COSMOLOGY
+    assert result.exit_code != 0
+    assert not captured
+    message = str(result.exception)
+    assert "1 to 6 values" in message
+    assert cli.COSMO_PARAM_ORDER in message
 
 
 def test_run_cosmology_unknown_name_lists_available(monkeypatch, tmp_path):
-    called = []
-    monkeypatch.setattr(
-        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
-    )
+    """An unknown --cosmology name fails, and the message lists the known names."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--cosmology", "Nope"]
     )
     assert result.exit_code != 0
-    assert not called
+    assert not captured
     message = str(result.exception)
     assert "unknown cosmology 'Nope'" in message
     for name in ("hera_pspec_default", "Planck18", "WMAP9"):
@@ -458,6 +435,7 @@ def test_run_cosmology_unknown_name_lists_available(monkeypatch, tmp_path):
 
 
 def test_run_cosmology_parameters_build_lambdacdm(monkeypatch, tmp_path):
+    """--h0 --om0 --ode0 --ob0 build a LambdaCDM with those parameters."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
@@ -474,6 +452,7 @@ def test_run_cosmology_parameters_build_lambdacdm(monkeypatch, tmp_path):
 
 
 def test_run_cosmology_parameters_without_ode0_are_flat(monkeypatch, tmp_path):
+    """Without --ode0, the cosmology parameters build a FlatLambdaCDM."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
@@ -509,17 +488,16 @@ def test_run_cosmology_parameters_match_default(monkeypatch, tmp_path):
         (["--om0", "0.3"], "--h0 must be given"),
         (["--ode0", "0.7", "--ob0", "0.05"], "--h0 and --om0 must be given"),
     ],
+    ids=["h0-without-om0", "om0-without-h0", "neither-h0-nor-om0"],
 )
 def test_run_cosmology_parameters_need_h0_and_om0(
     monkeypatch, tmp_path, options, missing
 ):
-    called = []
-    monkeypatch.setattr(
-        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
-    )
+    """Cosmology parameters without both --h0 and --om0 fail before pspec_run."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
     assert result.exit_code != 0
-    assert not called
+    assert not captured
     assert missing in str(result.exception)
 
 
@@ -531,15 +509,19 @@ def test_run_cosmology_parameters_need_h0_and_om0(
         ["--h0", "70", "--om0", "0.3", "--cosmo", "0.7"],
         ["--cosmology", "Planck18", "--tcmb0", "2.7"],
     ],
+    ids=[
+        "cosmology-and-parameters",
+        "cosmology-and-cosmo",
+        "parameters-and-cosmo",
+        "cosmology-and-tcmb0",
+    ],
 )
 def test_run_cosmology_options_are_exclusive(monkeypatch, tmp_path, options):
-    called = []
-    monkeypatch.setattr(
-        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
-    )
+    """Giving the cosmology in more than one way fails before pspec_run."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), *options])
     assert result.exit_code != 0
-    assert not called
+    assert not captured
     assert "give the cosmology one way only" in str(result.exception)
 
 
@@ -566,6 +548,7 @@ def test_run_cosmo_deprecation_is_shown_to_users(tmp_path):
 
 
 def test_run_length_unit_and_normalization_reach_pspec_run(monkeypatch, tmp_path):
+    """--length-unit and --normalization are passed on to pspec_run."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
@@ -577,6 +560,7 @@ def test_run_length_unit_and_normalization_reach_pspec_run(monkeypatch, tmp_path
 
 
 def test_run_length_unit_and_normalization_defaults(monkeypatch, tmp_path):
+    """Without the options, pspec_run gets Mpc / littleh and two-step normalization."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(["run", "a.uvh5", "--output", str(tmp_path / "o.h5")])
     assert result.exit_code == 0, result.output
@@ -585,19 +569,19 @@ def test_run_length_unit_and_normalization_defaults(monkeypatch, tmp_path):
 
 
 def test_run_rejects_unknown_normalization(monkeypatch, tmp_path):
-    called = []
-    monkeypatch.setattr(
-        cli.pspecdata, "pspec_run", lambda *args, **kwargs: called.append(True)
-    )
+    """An unknown --normalization fails before pspec_run is called."""
+    captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5")]
         + ["--normalization", "three-step"]
     )
     assert result.exit_code != 0
-    assert not called
+    assert not captured
 
 
 def test_run_help_lists_cosmology_and_unit_options(monkeypatch):
+    """Check that `run --help` lists and explains the cosmology and unit options."""
+    # wide terminal so rich does not wrap the parameter order across lines
     monkeypatch.setenv("COLUMNS", "300")
     result = invoke(["run", "--help"])
     assert result.exit_code == 0, result.output
@@ -612,6 +596,7 @@ def test_run_help_lists_cosmology_and_unit_options(monkeypatch):
         "--normalization",
     ):
         assert option in result.output
+    assert "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]" in result.output
     assert "Planck18" in result.output
     assert "km/s/Mpc" in result.output
     assert "CMB temperature today in K" in result.output
@@ -640,14 +625,10 @@ def test_run_end_to_end_cosmology_and_length_unit(tmp_path):
     assert uvp.get_kparas(0).unit == 1 / units.Mpc
 
 
-def test_bootstrap_help():
-    result = invoke(["bootstrap", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--nsamples" in result.output
-
-
-def test_bootstrap_bool_flags_round_trip(monkeypatch):
-    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
+@pytest.fixture
+def bootstrap_run_args(monkeypatch) -> dict:
+    """Replace grouping.bootstrap_run with a fake; returns the filename and
+    keyword arguments it receives."""
     captured = {}
 
     def fake_bootstrap_run(filename, **kwargs):
@@ -655,40 +636,38 @@ def test_bootstrap_bool_flags_round_trip(monkeypatch):
         captured.update(kwargs)
 
     monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
+    return captured
+
+
+def test_bootstrap_bool_flags_round_trip(bootstrap_run_args: dict):
+    """Check that the bootstrap bool flags and --nsamples reach bootstrap_run as given."""
     result = invoke(
         ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"]
     )
     assert result.exit_code == 0, result.output
-    assert captured["filename"] == "x.h5"
-    assert captured["time_avg"] is True
-    assert captured["normal_std"] is False
-    assert captured["robust_std"] is False  # argparser default
-    assert captured["Nsamples"] == 5
-    assert captured["seed"] == 0
+    assert bootstrap_run_args["filename"] == "x.h5"
+    assert bootstrap_run_args["time_avg"] is True
+    assert bootstrap_run_args["normal_std"] is False
+    assert bootstrap_run_args["robust_std"] is False  # argparser default
+    assert bootstrap_run_args["Nsamples"] == 5
+    assert bootstrap_run_args["seed"] == 0
 
 
-def test_bootstrap_blpair_group_parsed(monkeypatch):
+def test_bootstrap_blpair_group_parsed(bootstrap_run_args: dict):
     """--blpair-group tokens parse to list[list[int]]."""
-    captured = {}
-
-    def fake_bootstrap_run(filename, **kwargs):
-        captured.update(kwargs)
-
-    monkeypatch.setattr(cli.grouping, "bootstrap_run", fake_bootstrap_run)
     result = invoke(
         ["bootstrap", "x.h5", "--blpair-group", "101 102", "--blpair-group", "103"]
     )
     assert result.exit_code == 0, result.output
-    assert captured["blpair_groups"] == [[101, 102], [103]]
+    assert bootstrap_run_args["blpair_groups"] == [[101, 102], [103]]
 
 
-def test_auto_noise_help():
-    result = invoke(["auto-noise", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--err-type" in result.output
+@pytest.fixture
+def auto_noise_calls(monkeypatch) -> dict:
+    """Replace the file I/O and noise calls of auto-noise with fakes; returns
+    a record of the calls they receive."""
+    calls = {"noise": [], "set": [], "saved": False}
 
-
-def _auto_noise_fakes(monkeypatch, calls):
     class FakeUVData:
         def read(self, fname):
             calls["read"] = fname
@@ -720,23 +699,21 @@ def _auto_noise_fakes(monkeypatch, calls):
         lambda uvp, tsys, err_type: calls["noise"].append((uvp, tsys, tuple(err_type))),
     )
     monkeypatch.setattr(cli.container, "PSpecContainer", FakeContainer)
+    return calls
 
 
-def test_auto_noise_default_spectra(monkeypatch):
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
+def test_auto_noise_default_spectra(auto_noise_calls: dict):
+    """Check that by default auto-noise adds P_N errors to the stored spectrum and saves."""
     result = invoke(["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"])
     assert result.exit_code == 0, result.output
-    assert calls["read"] == "autos.uvh5"
-    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
-    assert calls["set"] == [("grp1", "auto_spec", True)]
-    assert calls["saved"] is True
+    assert auto_noise_calls["read"] == "autos.uvh5"
+    assert auto_noise_calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N",))]
+    assert auto_noise_calls["set"] == [("grp1", "auto_spec", True)]
+    assert auto_noise_calls["saved"] is True
 
 
-def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
-    """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
+def test_auto_noise_explicit_spectra_does_not_raise(auto_noise_calls: dict):
+    """Check that --spectra given twice runs and sets noise errors on both spectra."""
     result = invoke(
         [
             "auto-noise",
@@ -750,13 +727,11 @@ def test_auto_noise_explicit_spectra_does_not_raise(monkeypatch):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
+    assert auto_noise_calls["set"] == [("grp1", "s1", True), ("grp1", "s2", True)]
 
 
-def test_auto_noise_multiple_err_types(monkeypatch):
+def test_auto_noise_multiple_err_types(auto_noise_calls: dict):
     """--err-type is repeatable and the full list reaches uvp_noise_error."""
-    calls = {"noise": [], "set": [], "saved": False}
-    _auto_noise_fakes(monkeypatch, calls)
     result = invoke(
         [
             "auto-noise",
@@ -770,13 +745,7 @@ def test_auto_noise_multiple_err_types(monkeypatch):
         ]
     )
     assert result.exit_code == 0, result.output
-    assert calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
-
-
-def test_generate_pstokes_help():
-    result = invoke(["generate-pstokes", "--help"])
-    assert result.exit_code == 0, result.output
-    assert "--pstokes" in result.output
+    assert auto_noise_calls["noise"] == [("grp1/auto_spec", "TSYS", ("P_N", "P_SN"))]
 
 
 def test_generate_pstokes_default_pstokes_is_list(monkeypatch):
@@ -860,11 +829,6 @@ WF_BEAMFILE = Path(DATA_PATH) / "HERA_NF_dipole_power.beamfits"
 
 
 class TestComputeFtBeam:
-    def test_help(self):
-        result = invoke(["compute-ft-beam", "--help"])
-        assert result.exit_code == 0, result.output
-        assert "--npix" in result.output
-
     @pytest.fixture(scope="class")
     def ft_beam_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
         out_dir = tmp_path_factory.mktemp("ftcache")
@@ -925,11 +889,6 @@ class TestComputeFtBeam:
 
 
 class TestComputeWindowFunctions:
-    def test_help(self):
-        result = invoke(["compute-window-functions", "--help"])
-        assert result.exit_code == 0, result.output
-        assert "--workers" in result.output
-
     @pytest.fixture(scope="class")
     def wf_run(self, wf_pspec_file: Path, tmp_path_factory) -> tuple[Result, Path]:
         ft_dir = tmp_path_factory.mktemp("ftcache-wf")
@@ -1057,6 +1016,7 @@ class TestComputeWindowFunctions:
         assert "out of range" in str(result2.exception)
 
     def test_ambiguous_group(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        """A container with several groups needs --group to pick one."""
         fname = tmp_path / "twogroups.pspec.h5"
         psc = PSpecContainer(fname, "rw", keep_open=False)
         psc.set_pspec("g1", "testps", vanilla_uvp)
@@ -1076,6 +1036,7 @@ class TestComputeWindowFunctions:
         assert "--group" in str(result.exception)
 
     def test_ambiguous_name(self, vanilla_uvp: UVPSpec, tmp_path: Path):
+        """A group holding several spectra needs --name to pick one."""
         fname = tmp_path / "twospectra.pspec.h5"
         psc = PSpecContainer(fname, "rw", keep_open=False)
         psc.set_pspec("g1", "ps1", vanilla_uvp)

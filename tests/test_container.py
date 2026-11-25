@@ -345,6 +345,8 @@ def uvp_pair(uvd_zen_2458042_xx: UVData) -> tuple[UVPSpec, UVPSpec]:
 
 class TestCombinePscSpectra:
     def test_basic(self, tmp_path: Path, uvp_pair: tuple[UVPSpec, UVPSpec]) -> None:
+        """Check that two spectra differing only in their extension are combined
+        into one, given the container itself."""
         uvp1, uvp2 = uvp_pair
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         psc.set_pspec("grp1", "uvp_a", uvp1, overwrite=True)
@@ -355,6 +357,7 @@ class TestCombinePscSpectra:
     @pytest.mark.parametrize(
         "name_a,name_b,expected",
         [("d1_x_d2_a", "d1_x_d2_b", "d1_x_d2"), ("d2_x_d3_a", "d2_x_d3_b", "d2_x_d3")],
+        ids=["d1_x_d2", "d2_x_d3"],
     )
     def test_dset_names(
         self,
@@ -364,6 +367,8 @@ class TestCombinePscSpectra:
         name_b: str,
         expected: str,
     ) -> None:
+        """Check that spectra named <dset1>_x_<dset2>_<ext> are combined into
+        <dset1>_x_<dset2>, given the container's file path."""
         uvp1, uvp2 = uvp_pair
         psc = PSpecContainer(tmp_path / "ex.h5", mode="rw")
         psc.set_pspec("grp1", name_a, uvp1, overwrite=True)

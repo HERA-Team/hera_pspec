@@ -290,13 +290,18 @@ class TestCalcPN:
                 scalar, 300 * u.K, 10.7 * u.s, form="DelSq", k=k * cu.littleh / u.Mpc
             )
 
-    def test_errors(self):
+    def test_wrong_units_raise(self):
+        """Check that Tsys, t_int and scalar in the wrong unit raise."""
         with pytest.raises(u.UnitConversionError, match="Tsys"):
             noise.calc_P_N(self.SCALAR, 300 * u.s, 10.7 * u.s)
         with pytest.raises(u.UnitConversionError, match="t_int"):
             noise.calc_P_N(self.SCALAR, 300 * u.K, 10.7 * u.K)
         with pytest.raises(u.UnitConversionError, match="scalar must be"):
             noise.calc_P_N(1.0 * u.s, 300 * u.K, 10.7 * u.s)
+
+    def test_k_quantity_needs_quantity_scalar(self):
+        """Check that k given as a Quantity needs the scalar as a Quantity too."""
+        # only a Quantity scalar carries the length unit that k must be in
         with pytest.raises(TypeError, match="scalar is a plain float"):
             noise.calc_P_N(
                 self.SCALAR, 300 * u.K, 10.7 * u.s, form="DelSq", k=[1.0] / u.Mpc

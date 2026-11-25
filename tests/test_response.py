@@ -359,7 +359,9 @@ class TestQMatrices:
         expected = explicit_response(ds.R(KEY1), ds.R(KEY2), q_est, c_tensor)
         assert_close(H, expected)
 
-    def test_errors(self, ds) -> None:
+    def test_q_matrices_with_incompatible_options_raise(self, ds) -> None:
+        """Check that q_matrices cannot be combined with the FFT, exact_norm or
+        the legacy-exact response, which use their own estimator."""
         configure(ds, 20, "none", "identity", True, (0, 0))
         q_est = ds.get_Q_alt_tensor()
         with pytest.raises(ValueError, match="allow_fft"):
@@ -368,10 +370,6 @@ class TestQMatrices:
             ds.q_hat(KEY1, KEY2, exact_norm=True, q_matrices=q_est)
         with pytest.raises(ValueError, match="exact_norm"):
             ds.get_unnormed_E(KEY1, KEY2, exact_norm=True, q_matrices=q_est)
-        with pytest.raises(ValueError, match="shape"):
-            ds.q_hat(KEY1, KEY2, q_matrices=q_est[:5])
-        with pytest.raises(ValueError, match="dimensionless"):
-            ds.q_hat(KEY1, KEY2, q_matrices=q_est * u.s)
         with pytest.raises(ValueError, match="own estimator"):
             ds.get_response(
                 KEY1,
@@ -381,18 +379,41 @@ class TestQMatrices:
                 q_matrices=q_est,
             )
 
+    def test_bad_q_matrices_raise(self, ds) -> None:
+        """Check that q_matrices of the wrong shape or with a unit raise."""
+        configure(ds, 20, "none", "identity", True, (0, 0))
+        q_est = ds.get_Q_alt_tensor()
+        with pytest.raises(ValueError, match="shape"):
+            ds.q_hat(KEY1, KEY2, q_matrices=q_est[:5])
+        with pytest.raises(ValueError, match="dimensionless"):
+            ds.q_hat(KEY1, KEY2, q_matrices=q_est * u.s)
+
 
 class TestDelayResponseKernel:
-    def test_invalid_options(self) -> None:
-        for kwargs in [
-            {"sampling": "yes"},
-            {"beam": "gauss"},
-            {"x2y": "mean"},
-            {"bin_width": 3},
-            {"convention": "exact"},
-        ]:
-            with pytest.raises(ValueError, match="DelayResponse"):
-                DelayResponse(**kwargs)
+    def test_invalid_sampling(self) -> None:
+        """Check that a sampling flag that is not a bool raises."""
+        with pytest.raises(ValueError, match="DelayResponse sampling must be"):
+            DelayResponse(sampling="yes")
+
+    def test_invalid_beam(self) -> None:
+        """Check that an unknown beam option raises."""
+        with pytest.raises(ValueError, match="DelayResponse beam must be"):
+            DelayResponse(beam="gauss")
+
+    def test_invalid_x2y(self) -> None:
+        """Check that an unknown x2y option raises."""
+        with pytest.raises(ValueError, match="DelayResponse x2y must be"):
+            DelayResponse(x2y="mean")
+
+    def test_invalid_bin_width(self) -> None:
+        """Check that a bin_width that is not one of the option strings raises."""
+        with pytest.raises(ValueError, match="DelayResponse bin_width must be"):
+            DelayResponse(bin_width=3)
+
+    def test_invalid_convention(self) -> None:
+        """Check that an unknown convention raises."""
+        with pytest.raises(ValueError, match="DelayResponse convention must be"):
+            DelayResponse(convention="exact")
 
     def test_hashable_and_comparable(self) -> None:
         assert DelayResponse() == DelayResponse()
@@ -652,14 +673,20 @@ class TestPspecOneStepLegacy:
         uvp_exact = run_pspec(ds, exact_norm=True, store_cov=False)
         assert uvp_exact.normalization == "two-step-exact"
 
-    def test_errors(self, ds) -> None:
-        legacy = DelayResponse(convention="legacy")
+    def test_bad_normalization_options_raise(self, ds) -> None:
+        """Check that an unknown normalization raises, and that a response or
+        q_matrices need normalization="one-step"."""
         with pytest.raises(ValueError, match="normalization must be"):
             run_pspec(ds, normalization="three-step")
         with pytest.raises(ValueError, match="one-step"):
-            run_pspec(ds, response=legacy)
+            run_pspec(ds, response=DelayResponse(convention="legacy"))
         with pytest.raises(ValueError, match="one-step"):
             run_pspec(ds, q_matrices=np.zeros((40, 40, 40)))
+
+    def test_one_step_rejects_incompatible_options(self, ds) -> None:
+        """Check that one-step normalization rejects exact_norm, the FFT with
+        q_matrices, and the legacy-exact response."""
+        legacy = DelayResponse(convention="legacy")
         with pytest.raises(ValueError, match="exact_norm"):
             run_pspec(ds, normalization="one-step", response=legacy, exact_norm=True)
         with pytest.raises(ValueError, match="allow_fft"):

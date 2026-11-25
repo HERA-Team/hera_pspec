@@ -928,8 +928,11 @@ class TestSpherical:
                 kbins_theory=self.KBINS[:4].value,
             )
 
-    def test_average_bad_k_units(self, uvp_spherical: UVPSpec) -> None:
-        """Check that little_h disagreeing with the bins, or a non-k unit, raises."""
+    def test_average_little_h_disagreeing_with_k_units(
+        self, uvp_spherical: UVPSpec
+    ) -> None:
+        """Check that a little_h argument disagreeing with the unit of the k
+        bins raises."""
         with pytest.raises(ValueError, match="little_h=False disagrees"):
             grouping.spherical_average(
                 uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=False
@@ -938,6 +941,10 @@ class TestSpherical:
             grouping.spherical_average(
                 uvp_spherical, self.KBINS.value / u.Mpc, 0.25, little_h=True
             )
+
+    def test_average_non_wavenumber_units(self, uvp_spherical: UVPSpec) -> None:
+        """Check that kbins, bin_widths or kbins_theory not in a wavenumber unit
+        raise."""
         with pytest.raises(u.UnitConversionError, match="kbins must be a wavenumber"):
             grouping.spherical_average(uvp_spherical, self.KBINS.value * u.Mpc, 0.25)
         with pytest.raises(

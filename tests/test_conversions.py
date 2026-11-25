@@ -21,20 +21,17 @@ def _from_astropy(cosmo) -> conversions.Cosmo_Conversions:
         return conversions.Cosmo_Conversions.from_astropy(cosmo)
 
 
+def _cosmo_with_H0(H0: float) -> conversions.Cosmo_Conversions:
+    """The reference cosmology of the distance/conversion checks, with the given H0."""
+    return _cosmo_conversions(
+        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=H0, Om_M=None, Om_k=None
+    )
+
+
 @pytest.fixture
 def cosmo_h100() -> conversions.Cosmo_Conversions:
     """Cosmology fixture with H0=100 used as the reference for distance/conversion checks."""
-    return _cosmo_conversions(
-        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=100.0, Om_M=None, Om_k=None
-    )
-
-
-@pytest.fixture
-def cosmo_h25() -> conversions.Cosmo_Conversions:
-    """Cosmology fixture with H0=25.12, used to check little_h scaling against cosmo_h100."""
-    return _cosmo_conversions(
-        Om_L=0.68440, Om_b=0.04911, Om_c=0.26442, H0=25.12, Om_M=None, Om_k=None
-    )
+    return _cosmo_with_H0(100.0)
 
 
 def test_units_match_astropy_constants() -> None:
@@ -64,69 +61,95 @@ class TestCosmoConversions:
         C = _cosmo_conversions(H0=25.5)
         np.testing.assert_almost_equal(C.H0, 25.5)
 
-    @pytest.mark.parametrize(
-        "method,args,kwargs,expected",
-        [
-            ("f2z", (100e6,), {}, 13.20405751),
-            ("f2z", (0.1,), {"ghz": True}, 13.20405751),
-            ("z2f", (10.0,), {}, 129127795.54545455),
-            ("z2f", (10.0,), {"ghz": True}, 0.12912779554545455),
-            ("E", (10.0,), {}, 20.450997530682947),
-            ("DC", (10.0,), {}, 6499.708111027144),
-            ("DC", (10.0,), {"little_h": False}, 6499.708111027144),
-            ("DM", (10.0,), {}, 6510.2536925709637),
-            ("DA", (10.0,), {}, 591.84124477917851),
-            ("dRperp_dtheta", (10.0,), {}, 6510.2536925709637),
-            ("dRpara_df", (10.0,), {}, 1.2487605057418872e-05),
-            ("dRpara_df", (10.0,), {"ghz": True}, 12487.605057418872),
-            ("X2Y", (10.0,), {}, 529.26719942209002),
-        ],
-    )
-    def test_distances(
-        self,
-        cosmo_h100: conversions.Cosmo_Conversions,
-        method: str,
-        args: tuple,
-        kwargs: dict,
-        expected: float,
-    ) -> None:
-        """Check that distance/frequency conversion methods match reference values for H0=100."""
-        result = getattr(cosmo_h100, method)(*args, **kwargs)
-        np.testing.assert_almost_equal(result, expected)
+    # The reference values below are for the cosmology of _cosmo_with_H0.
+    # Distances are in Mpc/h by default (little_h=True), so they hold for any H0.
 
-    @pytest.mark.parametrize(
-        "method,args,kwargs,expected",
-        [
-            ("f2z", (100e6,), {}, 13.20405751),
-            ("z2f", (10.0,), {}, 129127795.54545455),
-            ("E", (10.0,), {}, 20.450997530682947),
-            ("DC", (10.0,), {"little_h": True}, 6499.708111027144),
-            ("DM", (10.0,), {"little_h": True}, 6510.2536925709637),
-            ("DA", (10.0,), {"little_h": True}, 591.84124477917851),
-            ("dRperp_dtheta", (10.0,), {"little_h": True}, 6510.2536925709637),
-            ("dRpara_df", (10.0,), {"little_h": True}, 1.2487605057418872e-05),
-            ("dRpara_df", (10.0,), {"ghz": True, "little_h": True}, 12487.605057418872),
-            ("X2Y", (10.0,), {"little_h": True}, 529.26719942209002),
-        ],
-    )
-    def test_little_h_true_gives_h0_independent_results(
-        self,
-        cosmo_h25: conversions.Cosmo_Conversions,
-        method: str,
-        args: tuple,
-        kwargs: dict,
-        expected: float,
-    ) -> None:
-        """Check that little_h=True results are H0-independent."""
-        result = getattr(cosmo_h25, method)(*args, **kwargs)
-        np.testing.assert_almost_equal(result, expected)
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_f2z(self, H0: float) -> None:
+        """Check that f2z maps 100 MHz, given in Hz or in GHz, to redshift 13.204."""
+        cosmo = _cosmo_with_H0(H0)
+        # z = 1420.405751 MHz / 100 MHz - 1
+        np.testing.assert_almost_equal(cosmo.f2z(100e6), 13.20405751)
+        np.testing.assert_almost_equal(cosmo.f2z(0.1, ghz=True), 13.20405751)
 
-    def test_little_h_false_scales_distances_by_h0_ratio(
-        self, cosmo_h25: conversions.Cosmo_Conversions
-    ) -> None:
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_z2f(self, H0: float) -> None:
+        """Check that z2f maps redshift 10 to 129.13 MHz, given in Hz or in GHz."""
+        cosmo = _cosmo_with_H0(H0)
+        # f = 1420405751 Hz / (1 + 10)
+        np.testing.assert_almost_equal(cosmo.z2f(10.0), 129127795.54545455)
+        np.testing.assert_almost_equal(cosmo.z2f(10.0, ghz=True), 0.12912779554545455)
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_E(self, H0: float) -> None:
+        """Check the dimensionless Hubble parameter E(z) at redshift 10."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.E(10.0), 20.450997530682947)
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_DC(self, H0: float) -> None:
+        """Check the line-of-sight comoving distance DC to redshift 10, in Mpc/h."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.DC(10.0), 6499.708111027144)
+        np.testing.assert_almost_equal(cosmo.DC(10.0, little_h=True), 6499.708111027144)
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_DM(self, H0: float) -> None:
+        """Check the transverse comoving distance DM to redshift 10, in Mpc/h."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.DM(10.0), 6510.2536925709637)
+        np.testing.assert_almost_equal(
+            cosmo.DM(10.0, little_h=True), 6510.2536925709637
+        )
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_DA(self, H0: float) -> None:
+        """Check the angular diameter distance DA = DM / (1 + z) to redshift 10."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.DA(10.0), 591.84124477917851)
+        np.testing.assert_almost_equal(
+            cosmo.DA(10.0, little_h=True), 591.84124477917851
+        )
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_dRperp_dtheta(self, H0: float) -> None:
+        """Check that dRperp_dtheta at redshift 10 equals DM, in Mpc/h per radian."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.dRperp_dtheta(10.0), 6510.2536925709637)
+        np.testing.assert_almost_equal(
+            cosmo.dRperp_dtheta(10.0, little_h=True), 6510.2536925709637
+        )
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_dRpara_df(self, H0: float) -> None:
+        """Check dRpara_df at redshift 10, in Mpc/h per Hz, or per GHz with ghz=True."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.dRpara_df(10.0), 1.2487605057418872e-05)
+        np.testing.assert_almost_equal(
+            cosmo.dRpara_df(10.0, little_h=True), 1.2487605057418872e-05
+        )
+        np.testing.assert_almost_equal(
+            cosmo.dRpara_df(10.0, ghz=True), 12487.605057418872
+        )
+        np.testing.assert_almost_equal(
+            cosmo.dRpara_df(10.0, ghz=True, little_h=True), 12487.605057418872
+        )
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_X2Y(self, H0: float) -> None:
+        """Check X2Y = DM^2 dRpara_df at redshift 10, in (Mpc/h)^3 per sr per Hz."""
+        cosmo = _cosmo_with_H0(H0)
+        np.testing.assert_almost_equal(cosmo.X2Y(10.0), 529.26719942209002)
+        np.testing.assert_almost_equal(
+            cosmo.X2Y(10.0, little_h=True), 529.26719942209002
+        )
+
+    @pytest.mark.parametrize("H0", [100.0, 25.12], ids=["H0=100", "H0=25.12"])
+    def test_little_h_false_scales_distances_by_h0_ratio(self, H0: float) -> None:
         """Check that little_h=False distances scale by the H0 ratio relative to h=1."""
-        result = cosmo_h25.DC(10.0, little_h=False)
-        np.testing.assert_almost_equal(result, 6499.708111027144 * 100.0 / 25.12)
+        cosmo = _cosmo_with_H0(H0)
+        result = cosmo.DC(10.0, little_h=False)
+        np.testing.assert_almost_equal(result, 6499.708111027144 * 100.0 / H0)
 
     def test_params(self, cosmo_h100: conversions.Cosmo_Conversions) -> None:
         """Check that get_params returns a dict matching the instance's attributes."""

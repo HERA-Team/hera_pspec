@@ -29,19 +29,22 @@ def uvd_zen_all_xx_meta() -> UVData:
 
 
 class TestCircularAverage:
-    def test_handles_wrap_near_2pi(self) -> None:
-        """Check that wrapping near 2*pi averages near 0/2*pi rather than pi."""
-        angles_wrap = np.array([6.2, 0.1])
-        result = utils.circular_average(angles_wrap)
-        # 6.2 is 6.2 - 2pi below zero, so the mean is halfway between that and 0.1
-        assert np.isclose(result, (6.2 - 2 * np.pi + 0.1) / 2, rtol=1e-10)
-
-    def test_matches_arithmetic_mean_without_wrap(self) -> None:
-        """Check that circular and arithmetic means agree when there's no wrap."""
-        angles_no_wrap = np.array([1.0, 1.5, 2.0])
-        circular_result = utils.circular_average(angles_no_wrap)
-        arithmetic_result = np.mean(angles_no_wrap)
-        assert np.isclose(circular_result, arithmetic_result, atol=1e-10)
+    @pytest.mark.parametrize(
+        "angles,expected",
+        [
+            # 6.2 is 6.2 - 2pi below zero, so the mean is halfway between that
+            # and 0.1, near 0/2*pi rather than pi
+            ([6.2, 0.1], (6.2 - 2 * np.pi + 0.1) / 2),
+            # without a wrap, the circular and arithmetic means agree
+            ([1.0, 1.5, 2.0], np.mean([1.0, 1.5, 2.0])),
+            ([1.5], 1.5),
+        ],
+        ids=["wrap_near_2pi", "no_wrap", "single_value"],
+    )
+    def test_average(self, angles: list[float], expected: float) -> None:
+        """Check circular_average against known means."""
+        result = utils.circular_average(np.array(angles))
+        assert np.isclose(result, expected, rtol=1e-10, atol=1e-10)
 
     def test_handles_multiple_wrapping_values(self) -> None:
         """Check that multiple angles spanning the wrap point still average near 0/2*pi."""
@@ -57,12 +60,6 @@ class TestCircularAverage:
         assert (result_2d[0] < 0.5) or (result_2d[0] > 5.5)
         assert np.isclose(result_2d[1], 1.25, atol=1e-10)
         assert np.isclose(result_2d[2], 3.25, atol=1e-10)
-
-    def test_single_value_returns_itself(self) -> None:
-        """Check that averaging a single angle returns that angle unchanged."""
-        single_angle = np.array([1.5])
-        result_single = utils.circular_average(single_angle)
-        assert np.isclose(result_single, 1.5, atol=1e-10)
 
 
 class TestCov:

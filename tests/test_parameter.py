@@ -15,23 +15,29 @@ class TestPSpecParamUnit:
         param = parameter.PSpecParam("freq", unit=u.Hz)
         assert param.unit is u.Hz
 
-    def test_accepts_string(self) -> None:
-        param = parameter.PSpecParam("dly", unit="ns")
-        assert param.unit == u.ns
+    @pytest.mark.parametrize(
+        "unit, expected",
+        [
+            ("ns", u.ns),
+            ("littleh / Mpc", cu.littleh / u.Mpc),
+            (cu.littleh / u.Mpc, cu.littleh / u.Mpc),
+        ],
+        ids=["string", "littleh_string", "composite_unit"],
+    )
+    def test_accepts_unit_forms(
+        self, unit: str | u.UnitBase, expected: u.UnitBase
+    ) -> None:
+        """Check that a unit given as a string or as a composite unit is stored as a unit."""
+        param = parameter.PSpecParam("example", unit=unit)
+        assert param.unit == expected
 
-    def test_accepts_littleh_string(self) -> None:
-        param = parameter.PSpecParam("k", unit="littleh / Mpc")
-        assert param.unit == cu.littleh / u.Mpc
-
-    def test_accepts_composite_unit(self) -> None:
-        param = parameter.PSpecParam("k", unit=cu.littleh / u.Mpc)
-        assert param.unit == cu.littleh / u.Mpc
-
-    def test_rejects_unparsable_string(self) -> None:
+    def test_rejects_unparsable_unit_string(self) -> None:
+        """Check that a unit string astropy cannot parse raises a ValueError."""
         with pytest.raises(ValueError, match="could not parse unit string"):
             parameter.PSpecParam("bad", unit="not_a_unit")
 
     def test_rejects_non_unit(self) -> None:
+        """Check that a unit that is neither a string nor a unit raises a TypeError."""
         with pytest.raises(TypeError, match="unit must be"):
             parameter.PSpecParam("bad", unit=1.0)
 
