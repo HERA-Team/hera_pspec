@@ -187,23 +187,17 @@ class TestFTBeamInit:
         assert test.pol == uvutils.polnum2str(-5)
 
     @pytest.mark.parametrize(
-        "bad_pol,exc_type,match",
-        [
-            ("test", ValueError, "Wrong polarisation"),
-            (12, ValueError, "Wrong polarisation"),
-            (3.4, TypeError, "Must feed pol as str or int"),
-        ],
-        ids=["unknown_str", "unknown_int", "float"],
+        "bad_pol", ["test", 12], ids=["unknown_str", "unknown_int"]
     )
-    def test_invalid_pol(
-        self,
-        ft_beam_init_kwargs: dict,
-        bad_pol: str | int | float,
-        exc_type: type[Exception],
-        match: str,
-    ) -> None:
-        with pytest.raises(exc_type, match=match):
+    def test_invalid_pol(self, ft_beam_init_kwargs: dict, bad_pol: str | int) -> None:
+        """Check that a pol string or integer that names no polarization raises."""
+        with pytest.raises(ValueError, match="Wrong polarisation"):
             uvwindow.FTBeam(**dict(ft_beam_init_kwargs, pol=bad_pol))
+
+    def test_float_pol(self, ft_beam_init_kwargs: dict) -> None:
+        """Check that a pol given as a float raises a TypeError."""
+        with pytest.raises(TypeError, match="Must feed pol as str or int"):
+            uvwindow.FTBeam(**dict(ft_beam_init_kwargs, pol=3.4))
 
 
 nf_dipole_beamfits = DATA_PATH / "HERA_NF_dipole_power.beamfits"
