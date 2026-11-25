@@ -1145,29 +1145,39 @@ class UVPSpec:
         """
         Cosmological length unit of this object's power spectra (read-only).
 
-        ``u.Mpc / cu.littleh`` if ``norm_units`` (the P(k) normalisation)
-        contains littleh, or if the spectra were not cosmologically
-        normalised (``Hz sr``); ``u.Mpc`` otherwise. :meth:`get_kperps`,
-        :meth:`get_kparas`, :meth:`compute_scalar` and
+        Set by ``norm_units`` (the P(k) normalisation): ``u.Mpc / cu.littleh``
+        for ``Mpc3 / littleh3``, ``u.Mpc`` for ``Mpc3``. Spectra that were not
+        cosmologically normalised (``Hz sr``) use ``u.Mpc / cu.littleh``.
+        :meth:`get_kperps`, :meth:`get_kparas`, :meth:`compute_scalar` and
         :meth:`generate_noise_spectra` work in this unit.
 
         Returns
         -------
         astropy.units.UnitBase
+
+        Raises
+        ------
+        AttributeError
+            If ``norm_units`` is not set.
+        ValueError
+            If ``norm_units`` is not a unit string, or not one of the
+            normalisations above.
         """
-        norm_units = getattr(self, "norm_units", None)
-        if norm_units is None:
-            return _LITTLEH_LENGTH
-        try:
-            norm_unit = unit_helpers.norm_unit(norm_units, False)
-        except ValueError:
-            # an unparsable norm_units string: keep the old littleh default
-            return _LITTLEH_LENGTH
-        if unit_helpers.is_littleh(norm_unit) or norm_unit.is_equivalent(
+        if not hasattr(self, "norm_units"):
+            raise AttributeError(
+                "norm_units is not set, so the length unit is unknown."
+            )
+        norm_unit = unit_helpers.parse_pspec_unit(self.norm_units)
+        if norm_unit == units.Mpc**3:
+            return units.Mpc
+        if norm_unit == units.Mpc**3 / cu.littleh**3 or norm_unit == (
             units.Hz * units.sr
         ):
             return _LITTLEH_LENGTH
-        return units.Mpc
+        raise ValueError(
+            f"norm_units {self.norm_units!r} is not a power spectrum "
+            "normalisation: expected 'Mpc3 / littleh3', 'Mpc3' or 'Hz sr'."
+        )
 
     def window_k_unit(self):
         """
@@ -2984,6 +2994,17 @@ class UVPSpec:
         just_meta : bool, optional
             If True, only check metadata. Default: False.
         """
+        # norm_units: a canonical astropy unit string that sets length_unit
+        if hasattr(self, "norm_units"):
+            try:
+                canonical = unit_helpers.canonical_unit_string(self.norm_units)
+                self.length_unit
+            except ValueError as err:
+                raise AssertionError(f"invalid norm_units: {err}") from err
+            assert self.norm_units == canonical, (
+                f"norm_units {self.norm_units!r} is not in canonical form; use "
+                f"{canonical!r}"
+            )
         # iterate over all possible parameters
         for p in self._all_params:
             # only enforce existance if not just_meta

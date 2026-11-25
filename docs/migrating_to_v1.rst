@@ -114,6 +114,14 @@ Removed in v1.0
 * ``UVWindow`` no longer reads k bins in hour/Mpc (``astropy.units.h /
   astropy.units.Mpc``) as littleh/Mpc: they raise ``ValueError``. Use
   ``astropy.cosmology.units.littleh / astropy.units.Mpc``.
+* ``UVPSpec.norm_units`` must be set to a canonical astropy string
+  (``"Mpc3 / littleh3"``, ``"Mpc3"`` or ``"Hz sr"``). ``check()`` raises
+  ``AssertionError`` for a missing, unparsable or non-canonical one, and
+  ``uvp.length_unit`` raises instead of assuming littleh. Legacy v0.x strings
+  such as ``"h^-3 Mpc^3"`` and ``"Hz str"`` are no longer understood by
+  ``unit_helpers.parse_pspec_unit``, ``canonical_unit_string`` or
+  ``is_littleh``; ``read_hdf5`` still converts them in old files, and
+  ``unit_helpers.canonical_norm_units`` converts one by hand.
 
 
 Deprecations (removal planned for v2.0)
@@ -350,11 +358,14 @@ Power spectrum units
   uvp.units         # Unit("Mpc3 mK2 / littleh3")  (v0.x: the string '(mK)^2 h^-3 Mpc^3')
 
 Don't hand legacy strings to ``u.Unit``: astropy reads the ``h`` in
-``"h^-3 Mpc^3"`` as hour. ``unit_helpers.parse_pspec_unit`` maps them correctly.
+``"h^-3 Mpc^3"`` as hour. ``unit_helpers.parse_pspec_unit`` parses the new
+strings and rejects the legacy ones; ``unit_helpers.canonical_norm_units``
+converts a legacy string to the new one.
 
 .. code-block:: python
 
-  hp.unit_helpers.parse_pspec_unit("h^-3 Mpc^3")   # Unit("Mpc3 / littleh3")
+  hp.unit_helpers.parse_pspec_unit("Mpc3 / littleh3")   # Unit("Mpc3 / littleh3")
+  hp.unit_helpers.canonical_norm_units("h^-3 Mpc^3")    # ('Mpc3 / littleh3', False)
 
 ``convert_to_deltasq`` now sets ``deltasq`` and keeps ``norm_units``; ``units``
 includes the k³ factor. It can be applied only once.

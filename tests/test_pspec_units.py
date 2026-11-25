@@ -68,11 +68,7 @@ class TestParsePspecUnit:
     @pytest.mark.parametrize(
         "string,unit",
         [
-            ("h^-3 Mpc^3", MPC3_H3),
             ("Mpc^3", units.Mpc**3),
-            ("Hz str [beam normalization not specified]", units.Hz * units.sr),
-            ("Hz str", units.Hz * units.sr),
-            ("h^-3 Mpc^3 k^3 / (2pi^2)", units.dimensionless_unscaled),
             ("Mpc3 / littleh3", MPC3_H3),
             ("Mpc3", units.Mpc**3),
             ("Hz sr", units.Hz * units.sr),
@@ -94,12 +90,23 @@ class TestParsePspecUnit:
     def test_known_strings(self, string, unit) -> None:
         assert unit_helpers.parse_pspec_unit(string) == unit
 
-    @pytest.mark.parametrize("string", ["not a unit", "Hz str [other note]", "str"])
+    @pytest.mark.parametrize(
+        "string",
+        [
+            "not a unit",
+            "Hz str [other note]",
+            "str",
+            "Hz str",
+            "Hz str [beam normalization not specified]",
+            "h^-3 Mpc^3 k^3 / (2pi^2)",
+        ],
+    )
     def test_unknown_strings_raise(self, string: str) -> None:
+        """Check that strings which are not units, including legacy norm_units forms, raise."""
         with pytest.raises(ValueError, match="Cannot interpret"):
             unit_helpers.parse_pspec_unit(string)
 
-    @pytest.mark.parametrize("string", ["h^-1 Mpc", "Mpc3 / h3", "h"])
+    @pytest.mark.parametrize("string", ["h^-1 Mpc", "Mpc3 / h3", "h", "h^-3 Mpc^3"])
     def test_hours_raise(self, string: str) -> None:
         with pytest.raises(ValueError, match="hours"):
             unit_helpers.parse_pspec_unit(string)
@@ -107,9 +114,7 @@ class TestParsePspecUnit:
     @pytest.mark.parametrize(
         "string,canonical",
         [
-            ("h^-3 Mpc^3", "Mpc3 / littleh3"),
             ("Mpc^3", "Mpc3"),
-            ("Hz str [beam normalization not specified]", "Hz sr"),
             ("UNCALIB", "uncalib"),
             ("unknown", "uncalib"),
             ("K str", "K sr"),
@@ -127,6 +132,9 @@ class TestParsePspecUnit:
         "string,canonical,is_deltasq",
         [
             ("h^-3 Mpc^3", "Mpc3 / littleh3", False),
+            ("Mpc^3", "Mpc3", False),
+            ("Hz str", "Hz sr", False),
+            ("Hz str [beam normalization not specified]", "Hz sr", False),
             ("h^-3 Mpc^3 k^3 / (2pi^2)", "Mpc3 / littleh3", True),
             ("Mpc^3 k^3 / (2pi^2)", "Mpc3", True),
             ("Hz str k^3 / (2pi^2)", "Hz sr", True),
@@ -143,7 +151,6 @@ class TestParsePspecUnit:
         assert unit_helpers.is_littleh(MPC3_H3)
         assert unit_helpers.is_littleh(cu.littleh / units.Mpc)
         assert unit_helpers.is_littleh("Mpc3 / littleh3")
-        assert unit_helpers.is_littleh("h^-3 Mpc^3")
         assert not unit_helpers.is_littleh(units.Mpc**3)
         assert not unit_helpers.is_littleh("Mpc3")
         assert not unit_helpers.is_littleh("Hz sr")

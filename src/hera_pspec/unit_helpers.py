@@ -256,17 +256,15 @@ def parse_pspec_unit(unit_string):
 
     The canonical strings (``unit_to_string`` of the unit, e.g.
     ``"Mpc3 / littleh3"``, ``"Hz sr"``, ``"mK"``, ``"uncalib"``) parse with
-    astropy, with ``littleh`` and :data:`uncalib` enabled. Legacy strings are
-    mapped explicitly, since astropy would misread some of them (``"h^-3"`` is
-    hours to astropy):
+    astropy, with ``littleh`` and :data:`uncalib` enabled. The visibility
+    unit strings of pyuvdata and hera_pspec are mapped explicitly, matched
+    case-insensitively: ``"uncalib"`` (also ``"UNCALIB"`` and ``"unknown"``)
+    -> :data:`uncalib`, ``"K str"`` -> ``K sr``, ``"Jy"`` -> ``Jy``,
+    ``"mK"`` -> ``mK``.
 
-    - the legacy ``norm_units`` forms of :func:`norm_units_from_legacy_string`
-      (a ``" k^3 / (2pi^2)"`` suffix is folded into the unit; use that
-      function directly to also learn whether it was there);
-    - the visibility unit strings of pyuvdata and hera_pspec, matched
-      case-insensitively: ``"uncalib"`` (also ``"UNCALIB"`` and
-      ``"unknown"``) -> :data:`uncalib`, ``"K str"`` -> ``K sr``,
-      ``"Jy"`` -> ``Jy``, ``"mK"`` -> ``mK``.
+    The legacy ``norm_units`` strings of hera_pspec v0.x files (such as
+    ``"h^-3 Mpc^3"``) are not accepted here: :meth:`UVPSpec.read_hdf5`
+    converts them with :func:`canonical_norm_units`.
 
     Results are cached.
 
@@ -282,14 +280,12 @@ def parse_pspec_unit(unit_string):
     Raises
     ------
     ValueError
-        If the string is not a known legacy form and not a valid astropy unit
-        string, or if it parses to a unit containing hours (a legacy
-        ``"h^..."`` string that is not one of the known forms).
+        If the string is not a valid astropy unit string or one of the
+        visibility unit strings above, or if it parses to a unit containing
+        hours (such as the legacy ``"h^-3 Mpc^3"``).
     """
     if isinstance(unit_string, bytes):
         unit_string = unit_string.decode()
-    if is_legacy_norm_units(unit_string):
-        return norm_units_from_legacy_string(unit_string)[0]
     alias = _VIS_UNITS_ALIASES.get(unit_string.strip().lower())
     if alias is not None:
         return alias
@@ -299,9 +295,7 @@ def parse_pspec_unit(unit_string):
         raise ValueError(
             f"Cannot interpret {unit_string!r} as a power spectrum or "
             "visibility unit. Use an astropy unit string (littleh and uncalib "
-            "are understood), or one of the legacy forms "
-            f"{', '.join(repr(k) for k in _LEGACY_NORM_UNITS)}, "
-            "'uncalib', 'K str', 'Jy' or 'mK'."
+            "are understood), or one of 'uncalib', 'K str', 'Jy' or 'mK'."
         ) from err
     if u.hour in unit.bases:
         raise ValueError(
@@ -317,13 +311,13 @@ def canonical_unit_string(unit_string):
     Return the canonical form of a ``norm_units`` or ``vis_units`` string.
 
     The canonical form is ``unit_to_string(parse_pspec_unit(unit_string))``,
-    e.g. ``"h^-3 Mpc^3"`` -> ``"Mpc3 / littleh3"`` and ``"UNCALIB"`` ->
-    ``"uncalib"``. Results are cached.
+    e.g. ``"Mpc^3"`` -> ``"Mpc3"`` and ``"UNCALIB"`` -> ``"uncalib"``.
+    Results are cached.
 
     Parameters
     ----------
     unit_string : str or bytes
-        Unit string, canonical or legacy.
+        Unit string that :func:`parse_pspec_unit` understands.
 
     Returns
     -------
@@ -339,14 +333,15 @@ def canonical_unit_string(unit_string):
 
 def canonical_norm_units(norm_units):
     """
-    Return the canonical P(k) form of a ``norm_units`` string.
+    Return the canonical P(k) form of a ``norm_units`` string read from file.
 
-    Like :func:`canonical_unit_string`, except that a legacy string ending in
-    ``" k^3 / (2pi^2)"`` (a Delta^2 spectrum, see
-    :func:`norm_units_from_legacy_string`) maps to the canonical form of the
-    string without the suffix, and the suffix is reported separately: from
-    v1.0, ``UVPSpec.norm_units`` holds the P(k) normalisation and
-    ``UVPSpec.deltasq`` whether the spectra are Delta^2.
+    Like :func:`canonical_unit_string`, except that the legacy strings of
+    hera_pspec v0.x files (see :func:`norm_units_from_legacy_string`) are
+    mapped too. A legacy string ending in ``" k^3 / (2pi^2)"`` (a Delta^2
+    spectrum) maps to the canonical form of the string without the suffix,
+    and the suffix is reported separately: ``UVPSpec.norm_units`` holds the
+    P(k) normalisation and ``UVPSpec.deltasq`` whether the spectra are
+    Delta^2.
 
     Parameters
     ----------
@@ -363,16 +358,16 @@ def canonical_norm_units(norm_units):
     Raises
     ------
     ValueError
-        If :func:`parse_pspec_unit` cannot interpret the string.
+        If the string is neither a legacy form nor a string
+        :func:`parse_pspec_unit` understands.
     """
     if isinstance(norm_units, bytes):
         norm_units = norm_units.decode()
-    is_deltasq = is_legacy_norm_units(norm_units) and norm_units.endswith(
-        _LEGACY_DELTASQ_SUFFIX
-    )
-    if is_deltasq:
-        norm_units = norm_units[: -len(_LEGACY_DELTASQ_SUFFIX)]
-    return canonical_unit_string(norm_units), is_deltasq
+    if not is_legacy_norm_units(norm_units):
+        return canonical_unit_string(norm_units), False
+    is_deltasq = norm_units.endswith(_LEGACY_DELTASQ_SUFFIX)
+    unit, _ = _LEGACY_NORM_UNITS[norm_units.removesuffix(_LEGACY_DELTASQ_SUFFIX)]
+    return unit_to_string(unit), is_deltasq
 
 
 def is_littleh(unit):

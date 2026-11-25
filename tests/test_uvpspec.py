@@ -575,11 +575,9 @@ class TestUnitGetters:
         [
             ("Hz sr", LITTLEH_LENGTH),
             ("Mpc3 / littleh3", LITTLEH_LENGTH),
-            ("h^-3 Mpc^3", LITTLEH_LENGTH),
             ("Mpc3", units.Mpc),
-            ("Mpc^3", units.Mpc),
         ],
-        ids=["Hz sr", "Mpc3 / littleh3", "h^-3 Mpc^3", "Mpc3", "Mpc^3"],
+        ids=["Hz sr", "Mpc3 / littleh3", "Mpc3"],
     )
     def test_length_unit(self, vanilla_uvp: UVPSpec, norm_units: str, expected) -> None:
         """Check that length_unit follows norm_units and sets the unit of the k getters."""
@@ -587,6 +585,38 @@ class TestUnitGetters:
         assert uvp.length_unit == expected
         assert uvp.get_kperps(0).unit == 1 / expected
         assert uvp.get_kparas(0).unit == 1 / expected
+
+    def test_length_unit_needs_norm_units(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that an object without norm_units has no length unit and fails check()."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        del uvp.norm_units
+        with pytest.raises(AttributeError, match="norm_units is not set"):
+            uvp.length_unit
+        with pytest.raises(AssertionError, match="required parameter norm_units"):
+            uvp.check()
+
+    def test_legacy_norm_units_raise(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that a legacy "h^-3 Mpc^3" norm_units is not read as littleh in memory."""
+        uvp = _with_norm_units(vanilla_uvp, "h^-3 Mpc^3")
+        with pytest.raises(ValueError, match="hours"):
+            uvp.length_unit
+        with pytest.raises(AssertionError, match="invalid norm_units"):
+            uvp.check()
+
+    def test_non_canonical_norm_units_fail_check(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that check() asks for the canonical form of a valid norm_units string."""
+        uvp = _with_norm_units(vanilla_uvp, "Mpc^3")
+        assert uvp.length_unit == units.Mpc
+        with pytest.raises(AssertionError, match="use 'Mpc3'"):
+            uvp.check()
+
+    def test_length_unit_rejects_other_units(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that a norm_units that is not a normalisation has no length unit."""
+        uvp = _with_norm_units(vanilla_uvp, "Mpc2")
+        with pytest.raises(ValueError, match="not a power spectrum normalisation"):
+            uvp.length_unit
+        with pytest.raises(AssertionError, match="invalid norm_units"):
+            uvp.check()
 
     def test_length_unit_is_read_only(self, vanilla_uvp: UVPSpec) -> None:
         """Check that length_unit cannot be set: it follows norm_units."""
@@ -1198,9 +1228,7 @@ class TestWindowKUnit:
         ("norm_units", "k_unit", "default_length"),
         [
             ("Mpc3 / littleh3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
-            ("h^-3 Mpc^3", cu.littleh / units.Mpc, units.Mpc / cu.littleh),
             ("Mpc3", units.Mpc ** (-1), units.Mpc),
-            ("Mpc^3", units.Mpc ** (-1), units.Mpc),
             # documented difference for unnormalised spectra
             ("Hz sr", units.Mpc ** (-1), units.Mpc / cu.littleh),
         ],
