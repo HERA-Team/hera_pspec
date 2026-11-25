@@ -16,6 +16,7 @@ from astropy.time import Time
 from hera_cal import redcal
 from pyuvdata import UVCal, UVData
 from pyuvdata import utils as uvutils
+from pyuvdata.analytic_beam import UniformBeam
 from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 from scipy.signal import windows
@@ -127,14 +128,6 @@ def uvd_zen_2458042_12552_xx() -> UVData:
 
 
 @pytest.fixture(scope="session")
-def uvd_zen_2458042_12552_std_xx() -> UVData:
-    """Session-cached UVData from zen.2458042.12552.std.xx.HH.uvXAA."""
-    uvd = UVData()
-    uvd.read_miriad(str(DATA_PATH / "zen.2458042.12552.std.xx.HH.uvXAA"))
-    return uvd
-
-
-@pytest.fixture(scope="session")
 def uvd_zen_2458042_17772_std_xx() -> UVData:
     """Session-cached UVData from zen.2458042.17772.std.xx.HH.uvXA."""
     uvd = UVData()
@@ -143,11 +136,16 @@ def uvd_zen_2458042_17772_std_xx() -> UVData:
 
 
 @pytest.fixture(scope="session")
-def bm_Q():
-    beamfile_Q = os.path.join(DATA_PATH, "isotropic_beam.beamfits")
-    bm_Q = pspecbeam.PSpecBeamUV(beamfile_Q)
-    bm_Q.filename = "isotropic_beam.beamfits"
-    return bm_Q
+def bm_Q() -> PSpecBeamUV:
+    """An isotropic (all-sky, unit response) HEALPix power beam over 100-200 MHz."""
+    uvb = UniformBeam().to_uvbeam(
+        freq_array=np.linspace(100e6, 200e6, 26),
+        beam_type="power",
+        pixel_coordinate_system="healpix",
+        nside=8,
+    )
+    uvb.peak_normalize()
+    return pspecbeam.PSpecBeamUV(uvb)
 
 
 @pytest.fixture
@@ -159,11 +157,27 @@ def d(uvd_zen_2458042_12552_xx: UVData) -> list[UVData]:
 
 
 @pytest.fixture
-def d_std(uvd_zen_2458042_12552_std_xx: UVData) -> list[UVData]:
-    return [
-        copy.deepcopy(uvd_zen_2458042_12552_std_xx),
-        copy.deepcopy(uvd_zen_2458042_12552_std_xx),
-    ]
+def synth_d(synthetic_uvd) -> list[UVData]:
+    """Two independent synthetic noise datasets for matrix-level tests.
+
+    Both cover baselines (24, 25), (24, 38) and (25, 38) with 32 channels and 10
+    integrations, and have channels 5 and 13 flagged everywhere. There are fewer
+    integrations than channels, so the empirical covariance used by iC weighting
+    is singular (and hera_pspec warns about it).
+    """
+    kwargs = dict(
+        nfreq=32, ntimes=10, antpairs=[(24, 25), (24, 38), (25, 38)], flag_chans=(5, 13)
+    )
+    return [synthetic_uvd(seed=0, **kwargs), synthetic_uvd(seed=1, **kwargs)]
+
+
+@pytest.fixture
+def synth_d_std(synth_d: list[UVData]) -> list[UVData]:
+    """Standard deviations for synth_d: 1 + 1j everywhere (unit std in real and imag)."""
+    d_std = copy.deepcopy(synth_d)
+    for uvd in d_std:
+        uvd.data_array[:] = 1.0 + 1.0j
+    return d_std
 
 
 @pytest.fixture
@@ -390,12 +404,12 @@ class TestAddData:
 
 class TestSetSymmetricTaper:
     def test_raises_on_truncated_r_matrix(
-        self, d: list[UVData], dayenu_r_params: dict
+        self, synth_d: list[UVData], dayenu_r_params: dict
     ) -> None:
         """
         Make sure that you can't set a symmtric taper with an truncated R matrix
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
         Nfreq = ds.spw_Nfreqs
         ds.spw_Ndlys = Nfreq - 3
 
@@ -420,10 +434,10 @@ class TestSetSymmetricTaper:
         assert not (ds.symmetric_taper)
 
     def test_matches_independent_calculation(
-        self, d: list[UVData], dayenu_r_params: dict
+        self, synth_d: list[UVData], dayenu_r_params: dict
     ) -> None:
         """Now directly compare results to expectations."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
         Nfreq = ds.spw_Nfreqs
         ds.spw_Ndlys = Nfreq - 3
         key1 = (0, 24, 38)
@@ -690,7 +704,16 @@ class TestIntegralBeamCache:
     """get_integral_beam is computed once per spectral window, pol and beam."""
 
     @pytest.fixture
-    def counting_ds(self, beam_nf_dipole, uvd, monkeypatch):
+    def cache_uvd(self, synthetic_uvd) -> UVData:
+        """Synthetic noise on antennas 24, 25, 37 and 38, 14.6 m apart on an
+        east-west line (so 24-25 and 37-38, and 24-37 and 25-38, are
+        redundant), including the autos that cov_model="autos" uses."""
+        ants = (24, 25, 37, 38)
+        antpairs = [(a, b) for i, a in enumerate(ants) for b in ants[i:]]
+        return synthetic_uvd(nfreq=40, ntimes=4, antpairs=antpairs, seed=7)
+
+    @pytest.fixture
+    def counting_ds(self, beam_nf_dipole, cache_uvd, monkeypatch):
         calls = []
         original = beam_nf_dipole.beam_normalized_response
 
@@ -699,7 +722,7 @@ class TestIntegralBeamCache:
             return original(pol, freq, *args, **kwargs)
 
         monkeypatch.setattr(beam_nf_dipole, "beam_normalized_response", counting)
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd], beam=beam_nf_dipole)
+        ds = pspecdata.PSpecData(dsets=[cache_uvd, cache_uvd], beam=beam_nf_dipole)
         ds.set_spw((10, 30))
         return ds, calls
 
@@ -740,8 +763,8 @@ class TestIntegralBeamCache:
         ds.get_integral_beam("xx")
         assert len(calls) == 4
 
-    def test_fallback_warns_on_every_call(self, uvd) -> None:
-        ds = pspecdata.PSpecData(dsets=[uvd, uvd])
+    def test_fallback_warns_on_every_call(self, cache_uvd) -> None:
+        ds = pspecdata.PSpecData(dsets=[cache_uvd, cache_uvd])
         for _ in range(2):
             with pytest.warns(UserWarning, match="could not be calculated"):
                 ds.get_integral_beam("xx")
@@ -763,12 +786,12 @@ class TestIntegralBeamCache:
 
 
 class TestGetUnnormedMatrices:
-    def test_get_unnormed_E(self, beam_nf_dipole, uvd: UVData) -> None:
+    def test_get_unnormed_E(self, beam_nf_dipole, synth_d: list[UVData]) -> None:
         """
         Test the E function
         """
         # Test that error is raised if spw_Ndlys is not set
-        uvd = copy.deepcopy(uvd)
+        uvd = synth_d[0]
         ds = pspecdata.PSpecData(
             dsets=[uvd, uvd], wgts=[None, None], labels=["red", "blue"]
         )
@@ -842,8 +865,10 @@ class TestGetUnnormedMatrices:
                     else:
                         np.testing.assert_almost_equal(matrix[i, j], 0.5)
 
-    def test_get_unnormed_V(self, d) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], labels=["red", "blue"])
+    def test_get_unnormed_V(self, synth_d: list[UVData]) -> None:
+        ds = pspecdata.PSpecData(
+            dsets=synth_d, wgts=[None, None], labels=["red", "blue"]
+        )
         key1 = ("red", (24, 25), "xx")
         key2 = ("blue", (25, 38), "xx")
         ds.spw_Ndlys = 5
@@ -1059,28 +1084,23 @@ def poorly_conditioned_warning(weighting: str):
     return nullcontext()
 
 
-def test_dayenu_R_needs_r_params(d: list[UVData]) -> None:
+def test_dayenu_R_needs_r_params(synth_d: list[UVData]) -> None:
     """Check that dayenu weighting cannot build R before r_params are set."""
-    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+    ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
     ds.set_weighting("dayenu")
     with pytest.raises(ValueError, match="r_param not set"):
         ds.R(QHAT_KEY1)
 
 
 @pytest.fixture
-def cov_q_setup(d, d_std):
+def cov_q_setup(synth_d, synth_d_std):
     """PSpecData + analytic covariance matrix for test_cov_q tests."""
     ndlys = 13
-    dlist = copy.deepcopy(d)
-    dlist_std = copy.deepcopy(d_std)
-    for _d in dlist:
+    dlist = synth_d
+    dlist_std = synth_d_std
+    for _d in dlist + dlist_std:
         _d.flag_array[:] = False
-        _d.select(times=np.unique(_d.time_array)[:10], frequencies=_d.freq_array[:16])
-    for _d_std in dlist_std:
-        _d_std.flag_array[:] = False
-        _d_std.select(
-            times=np.unique(_d_std.time_array)[:10], frequencies=_d_std.freq_array[:16]
-        )
+        _d.select(frequencies=_d.freq_array[:16])
     ds = pspecdata.PSpecData(dsets=dlist, wgts=[None, None], dsets_std=dlist_std)
     ds.set_Ndlys(ndlys)
     chan_x, chan_y = np.meshgrid(range(ds.Nfreqs), range(ds.Nfreqs))
@@ -1150,11 +1170,13 @@ class TestCovQ:
         ):
             ds.cov_q_hat(key1, key2, time_indices="watch out!")
 
-    def test_cov_p_hat(self, d, d_std) -> None:
+    def test_cov_p_hat(self, synth_d, synth_d_std) -> None:
         """
         Test cov_p_hat, verify on identity.
         """
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], dsets_std=d_std)
+        ds = pspecdata.PSpecData(
+            dsets=synth_d, wgts=[None, None], dsets_std=synth_d_std
+        )
         cov_p = ds.cov_p_hat(
             np.sqrt(6.0) * np.identity(10), np.array([5.0 * np.identity(10)])
         )
@@ -1166,12 +1188,12 @@ class TestCovQ:
                     assert np.isclose(0.0, cov_p[0, p, q], atol=1e-6)
 
 
-def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
+def test_R_truncation(synth_d: list[UVData], dayenu_r_params: dict) -> None:
     """
     Test truncation of R-matrices. These should give a q_hat that is all
     zeros outside of the with f-start and f-end.
     """
-    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+    ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
     Nfreq = ds.spw_Nfreqs
     Ntime = ds.Ntimes
     Ndlys = Nfreq - 3
@@ -1206,7 +1228,7 @@ def test_R_truncation(d: list[UVData], dayenu_r_params: dict) -> None:
     assert M.shape == W.shape == (ds1.spw_Ndlys, ds1.spw_Ndlys)
     np.testing.assert_allclose(W.sum(axis=1), 1.0)
     # make sure identity weighting isn't broken.
-    ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+    ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
     ds1 = copy.deepcopy(ds)
     ds1.set_spw((10, Nfreq - 10))
     ds1.set_weighting("identity")
@@ -1224,12 +1246,12 @@ class TestQHat:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_shape_conjugate_symmetry_and_key_lists(
-        self, d: list[UVData], input_data_weight: str, taper: str
+        self, synth_d: list[UVData], input_data_weight: str, taper: str
     ) -> None:
         """Test that q_hat has the right shape, that swapping x1<->x2 yields the
         complex conjugate, and that list-of-duplicate-key inputs scale q_hat
         linearly in each argument."""
-        ds = weighted_ds(d, input_data_weight, taper)
+        ds = weighted_ds(synth_d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         Nfreq = ds.Nfreqs
         Ntime = ds.Ntimes
@@ -1244,13 +1266,13 @@ class TestQHat:
             q_hat_a = ds.q_hat(key1, key2)
         assert q_hat_a.shape == (Ndlys, Ntime)
 
+        # These identities are exact, so only allow for numerical noise far
+        # below the typical size of q_hat.
+        atol = 1e-10 * np.max(np.abs(q_hat_a))
+
         # Check that swapping x_1 <-> x_2 results in complex conj. only
         q_hat_b = ds.q_hat(key2, key1)
-        q_hat_diff = np.conjugate(q_hat_a) - q_hat_b
-        for i in range(Ndlys):
-            for j in range(Ntime):
-                np.testing.assert_almost_equal(q_hat_diff[i, j].real, 0.0, decimal=5)
-                np.testing.assert_almost_equal(q_hat_diff[i, j].imag, 0.0, decimal=5)
+        np.testing.assert_allclose(q_hat_b, np.conjugate(q_hat_a), rtol=0, atol=atol)
 
         # Check that lists of keys are handled properly
         q_hat_aa = ds.q_hat(key1, key4)  # q_hat(x1, x2+x2)
@@ -1259,36 +1281,30 @@ class TestQHat:
 
         # q_hat is linear in each argument separately: doubling x2 doubles q_hat,
         # and likewise for x1.
-        np.testing.assert_almost_equal(q_hat_aa, 2 * q_hat_a, decimal=5)
-        np.testing.assert_almost_equal(q_hat_bb, 2 * q_hat_b, decimal=5)
+        np.testing.assert_allclose(q_hat_aa, 2 * q_hat_a, rtol=0, atol=2 * atol)
+        np.testing.assert_allclose(q_hat_bb, 2 * q_hat_b, rtol=0, atol=2 * atol)
 
         # Effectively checks that q_hat(2*x1, 2*x2) = 4*q_hat(x1, x2)
-        for i in range(Ndlys):
-            for j in range(Ntime):
-                np.testing.assert_almost_equal(
-                    q_hat_a[i, j].real, 0.25 * q_hat_cc[i, j].real
-                )
-                np.testing.assert_almost_equal(
-                    q_hat_a[i, j].imag, 0.25 * q_hat_cc[i, j].imag
-                )
+        np.testing.assert_allclose(q_hat_cc, 4 * q_hat_a, rtol=0, atol=4 * atol)
 
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_fft_matches_slow_method(
-        self, d: list[UVData], input_data_weight: str, taper: str
+        self, synth_d: list[UVData], input_data_weight: str, taper: str
     ) -> None:
         """Check that the slow (explicit) method agrees with the FFT method."""
-        ds = weighted_ds(d, input_data_weight, taper)
+        ds = weighted_ds(synth_d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         ds.spw_Ndlys = ds.Nfreqs
         with poorly_conditioned_warning(input_data_weight):
             q_hat_a_slow = ds.q_hat(key1, key2, allow_fft=False)
         q_hat_a = ds.q_hat(key1, key2, allow_fft=True)
-        assert np.isclose(np.real(q_hat_a / q_hat_a_slow), 1).all()
-        assert np.isclose(np.imag(q_hat_a / q_hat_a_slow), 0, atol=1e-6).all()
+        np.testing.assert_allclose(
+            q_hat_a, q_hat_a_slow, rtol=0, atol=1e-10 * np.max(np.abs(q_hat_a_slow))
+        )
 
-    def test_raises_on_fft_with_exact_norm(self, d: list[UVData]) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None])
+    def test_raises_on_fft_with_exact_norm(self, synth_d: list[UVData]) -> None:
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None])
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
         with pytest.raises(
@@ -1301,9 +1317,11 @@ class TestQHat:
 class TestFisherMatrices:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_H(self, d: list[UVData], input_data_weight: str, taper: str) -> None:
+    def test_get_H(
+        self, synth_d: list[UVData], input_data_weight: str, taper: str
+    ) -> None:
         """Check the shape of the response matrix H, and that with sampling H = G."""
-        ds = weighted_ds(d, input_data_weight, taper)
+        ds = weighted_ds(synth_d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         Nfreq = ds.Nfreqs
 
@@ -1324,9 +1342,11 @@ class TestFisherMatrices:
 
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
-    def test_get_G(self, d: list[UVData], input_data_weight: str, taper: str) -> None:
+    def test_get_G(
+        self, synth_d: list[UVData], input_data_weight: str, taper: str
+    ) -> None:
         """Check the shape and the symmetries of the Fisher matrix G."""
-        ds = weighted_ds(d, input_data_weight, taper)
+        ds = weighted_ds(synth_d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         Nfreq = ds.Nfreqs
         ds.clear_cache()
@@ -1373,8 +1393,8 @@ class TestFisherMatrices:
 
 
 class TestScalar:
-    def test_scalar_delay_adjustment(self, d, beam_nf_dipole) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+    def test_scalar_delay_adjustment(self, synth_d, beam_nf_dipole) -> None:
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
         key1 = (0, 24, 38)
         key2 = (1, 25, 38)
 
@@ -1393,13 +1413,13 @@ class TestScalar:
         # with Nfreqs = Ndlys, sampling and no taper, H = G, so every entry is unity
         np.testing.assert_allclose(adjustment, 1.0)
 
-    def test_scalar(self, d, beam_nf_dipole) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+    def test_scalar(self, synth_d, beam_nf_dipole) -> None:
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
 
         gauss = pspecbeam.PSpecBeamGauss(
-            0.8 * u.rad, np.linspace(115e6, 130e6, 50, endpoint=False) * u.Hz
+            0.8 * u.rad, np.linspace(140e6, 170e6, 50, endpoint=False) * u.Hz
         )
-        ds2 = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=gauss)
+        ds2 = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=gauss)
 
         # Check normal execution
         scalar = ds.scalar(("xx", "xx"))
@@ -1427,10 +1447,10 @@ class TestScalar:
         "length_unit", [u.Mpc / cu.littleh, u.Mpc, "Mpc / littleh", "Mpc"]
     )
     def test_scalar_quantity_matches_beam_scalar(
-        self, d, beam_nf_dipole, length_unit
+        self, synth_d, beam_nf_dipole, length_unit
     ) -> None:
         """scalar() is the beam's float scalar with unit length_unit^3 / (Hz sr)."""
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
         freqs = ds.freqs[ds.spw_range[0] : ds.spw_range[1]]
         unit = (
             unit_helpers.parse_unit_string(length_unit)
@@ -1452,8 +1472,10 @@ class TestScalar:
         assert scalar.value == expected
 
     @pytest.mark.parametrize("little_h", [True, False])
-    def test_scalar_little_h_deprecated(self, d, beam_nf_dipole, little_h) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
+    def test_scalar_little_h_deprecated(
+        self, synth_d, beam_nf_dipole, little_h
+    ) -> None:
+        ds = pspecdata.PSpecData(dsets=synth_d, wgts=[None, None], beam=beam_nf_dipole)
         length_unit = u.Mpc / cu.littleh if little_h else u.Mpc
         with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
             old = ds.scalar("xx", little_h=little_h)
@@ -2442,6 +2464,20 @@ class TestPspec:
         # The exact and approximate normalizations are not identical: for this
         # beam the exact one is systematically a few percent (~4%) higher.
         assert abs(diff) <= 0.05
+
+    def test_pspec_records_beam_filename(self, synthetic_uvd) -> None:
+        """A beam's filename, if it has one, is stored as the UVPSpec beamfile."""
+        uvd = synthetic_uvd(nfreq=16, ntimes=2, antpairs=[(0, 1)])
+        beam = pspecbeam.PSpecBeamGauss(
+            0.2 * u.rad, np.linspace(140e6, 160e6, 11) * u.Hz
+        )
+        ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam)
+        args = ([(0, 1)], [(0, 1)], (0, 1), [("xx", "xx")])
+        uvp = ds.pspec(*args, verbose=False)
+        assert getattr(uvp, "beamfile", None) is None
+        beam.filename = "my_beam.beamfits"
+        uvp = ds.pspec(*args, verbose=False)
+        assert uvp.beamfile == "my_beam.beamfits"
 
     def test_pspec_baseline_formats(self, pspec_ds) -> None:
         """Test pspec() with redundant baseline groups from redcal and with mixed

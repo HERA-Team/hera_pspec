@@ -114,8 +114,8 @@ class FTBeam:
                 dimensions (Nfreqs, N, N).
             - pol contains the polarisation of the beam used.
             - freq_array gives the frequency coordinates of data.
-            - mapsize is the size of the flat map the beam was projected
-                onto (in rad).
+            - mapsize is the half-width of the flat map the beam was
+                projected onto (in rad).
 
         Parameters
         ----------
@@ -133,9 +133,13 @@ class FTBeam:
             been computed, in any frequency unit. A plain array or list is
             read as Hz (deprecated). Stored in :attr:`freq_array` in Hz.
         mapsize : astropy.units.Quantity
-            Size of the flat map the beam was projected onto, in any angle
-            unit. A plain float is read as rad (deprecated). Stored in
-            :attr:`mapsize` in rad.
+            Half-width of the flat (square) map whose Fourier transform
+            ``data`` is, in any angle unit, i.e. the map spans
+            [-mapsize, mapsize] along each direction (in :meth:`from_beam`,
+            the projected beam zero-padded or cropped to that size). The
+            Fourier-space grid of ``data`` then has a spacing of
+            1 / (2 * mapsize), in inverse radians. A plain float is read as
+            rad (deprecated). Stored in :attr:`mapsize` in rad.
         verbose : bool, optional
             If True, print progress, warnings and debugging info to stdout.
         x_orientation: str, optional
@@ -497,9 +501,18 @@ class FTBeam:
             Number of pixels to grid sky plane, along one direction.
             Preferably an odd number.
         cosmo : astropy.cosmology.FLRW, optional
-            Not used: the Fourier-space beam does not depend on the cosmology.
-            Kept for backwards compatibility. Default: None.
+            Deprecated and unused: the Fourier transform of the beam does not
+            depend on the cosmology. Passing a value emits a
+            DeprecationWarning; the argument will be removed in a future
+            version. Default: None.
         """
+        if cosmo is not None:
+            warnings.warn(
+                "The cosmo argument of FTBeam.gaussian is unused and will be "
+                "removed in a future version.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
         # Frequency-related parameters
         freq_array = np.array(
