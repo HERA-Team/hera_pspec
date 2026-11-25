@@ -161,46 +161,6 @@ def fast_merge_baselines(
         cns.print(f"Wrote {fname}")
 
 
-COSMO_PARAM_ORDER = "[Om_L, Om_b, Om_c, H0, Om_M, Om_k]"
-
-
-# Defaults of the --cosmo values, in COSMO_PARAM_ORDER (the defaults of the
-# former Cosmo_Conversions constructor; they give conversions.LEGACY_COSMOLOGY).
-_COSMO_PARAM_DEFAULTS = {
-    "Om_L": 0.68440,
-    "Om_b": 0.04911,
-    "Om_c": 0.26442,
-    "H0": 67.27,
-    "Om_M": None,
-    "Om_k": None,
-}
-
-
-def _validate_cosmo_values(type_, value) -> None:
-    """Reject more values than the six cosmological parameters."""
-    if value is not None and not 1 <= len(value) <= 6:
-        raise ValueError(
-            f"--cosmo takes 1 to 6 values in the order {COSMO_PARAM_ORDER}; "
-            f"got {len(value)}."
-        )
-
-
-def _cosmology_from_values(values):
-    """
-    Build an astropy cosmology from the positional --cosmo values.
-
-    Missing trailing values take their defaults; ``Om_M`` defaults to
-    ``Om_b + Om_c`` and ``Om_k`` to ``1 - Om_L - Om_M``.
-    """
-    params = dict(_COSMO_PARAM_DEFAULTS)
-    params.update(zip(_COSMO_PARAM_DEFAULTS, values))
-    if params["Om_M"] is None:
-        params["Om_M"] = params["Om_b"] + params["Om_c"]
-    if params["Om_k"] is None:
-        params["Om_k"] = 1 - params["Om_L"] - params["Om_M"]
-    return conversions.cosmology_from_params(params)
-
-
 # Name of conversions.LEGACY_COSMOLOGY, the default cosmology of hera_pspec v0.x
 LEGACY_COSMOLOGY_NAME = "hera_pspec_default"
 
@@ -226,23 +186,20 @@ def _cosmology_from_name(name: str):
 
 
 # The cosmology options of `pspec run`, in their CLI spelling. Only one of the
-# three ways of giving a cosmology may be used at a time.
+# two ways of giving a cosmology may be used at a time.
 _COSMOLOGY_NAME_OPTION = "--cosmology"
 _COSMOLOGY_PARAM_OPTIONS = ("--h0", "--om0", "--ode0", "--ob0", "--tcmb0")
 _COSMOLOGY_REQUIRED_PARAM_OPTIONS = ("--h0", "--om0")
-_DEPRECATED_COSMO_OPTION = "--cosmo"
 
 
 def _validate_cosmology_options(argument_collection) -> None:
-    """Allow one of --cosmology, the parameter options or --cosmo."""
+    """Allow one of --cosmology or the parameter options."""
     given = [arg.name for arg in argument_collection.filter_by(value_set=True)]
     styles = []
     if _COSMOLOGY_NAME_OPTION in given:
         styles.append(_COSMOLOGY_NAME_OPTION)
     if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
         styles.append("/".join(_COSMOLOGY_PARAM_OPTIONS))
-    if _DEPRECATED_COSMO_OPTION in given:
-        styles.append(_DEPRECATED_COSMO_OPTION)
     if len(styles) > 1:
         raise ValueError(f"give the cosmology one way only; got {', '.join(styles)}.")
     if any(name in _COSMOLOGY_PARAM_OPTIONS for name in given):
@@ -257,7 +214,7 @@ def _validate_cosmology_options(argument_collection) -> None:
 
 
 COSMOLOGY_GROUP = Group(
-    "Cosmology (one of --cosmology, --h0/--om0/..., or --cosmo)",
+    "Cosmology (one of --cosmology or --h0/--om0/...)",
     validator=_validate_cosmology_options,
     sort_key=1,
 )
@@ -279,20 +236,12 @@ def _cosmology_from_parameters(H0, Om0, Ode0=None, Ob0=None, Tcmb0=None):
     return LambdaCDM(Ode0=Ode0, **kwargs)
 
 
-def _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo):
+def _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0):
     """Return the cosmology selected by the `pspec run` options, or None."""
     if cosmology is not None:
         return _cosmology_from_name(cosmology)
     if H0 is not None:
         return _cosmology_from_parameters(H0, Om0, Ode0=Ode0, Ob0=Ob0, Tcmb0=Tcmb0)
-    if cosmo is not None:
-        warnings.warn(
-            "--cosmo is deprecated and will be removed in a future version; use "
-            "--cosmology NAME or --h0/--om0/--ode0/--ob0/--tcmb0 instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return _cosmology_from_values(cosmo)
     return None
 
 
@@ -369,21 +318,6 @@ def run(
             help="CMB temperature today in K. Default: 0 (no radiation).",
         ),
     ] = None,
-    cosmo: Annotated[
-        list[float] | None,
-        Parameter(
-            group=COSMOLOGY_GROUP,
-            help=(
-                "Deprecated: use --cosmology or --h0/--om0/... instead. "
-                "Cosmological parameters, in the order "
-                f"{COSMO_PARAM_ORDER}, used to build an astropy LambdaCDM. "
-                "Up to 6 values; omitted trailing values keep their defaults."
-            ),
-            validator=_validate_cosmo_values,
-            consume_multiple=True,
-            negative=(),
-        ),
-    ] = None,
     rephase_to_dset: int | None = None,
     trim_dset_lsts: bool = False,
     broadcast_dset_flags: bool = False,
@@ -417,7 +351,7 @@ def run(
     length_unit: Literal["Mpc / littleh", "Mpc"] = "Mpc / littleh",
     normalization: Literal["two-step", "one-step"] = "two-step",
 ) -> None:
-    cosmo = _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0, cosmo)
+    cosmo = _cosmology_from_options(cosmology, H0, Om0, Ode0, Ob0, Tcmb0)
     pspecdata.pspec_run(
         dsets=[str(d) for d in dsets],
         filename=str(filename),

@@ -41,6 +41,8 @@ from hera_pspec.data import DATA_PATH
 DATA_PATH = Path(DATA_PATH)
 FIXTURE_DIR = Path(__file__).parent / "data" / "regression"
 LITTLEH_LENGTH = units.Mpc / cu.littleh
+# (fixture key tag, length unit) pairs for outputs stored in both units
+LENGTH_UNIT_TAGS = (("h", LITTLEH_LENGTH), ("noh", units.Mpc))
 
 # Default relative tolerance for deterministic code paths.
 DEFAULT_RTOL = 1e-12
@@ -249,15 +251,13 @@ def uvpspec_outputs(uvp: UVPSpec, prefix: str = "") -> dict[str, np.ndarray]:
     for spw in uvp.spw_array:
         out[f"{prefix}data_array_{spw}"] = uvp.data_array[spw]
         out[f"{prefix}get_dlys_{spw}"] = uvp.get_dlys(spw).to_value(units.s)
-        for little_h in (True, False):
-            tag = "h" if little_h else "noh"
-            length_unit = conversions.length_unit_from_little_h(little_h)
-            out[f"{prefix}get_kparas_{tag}_{spw}"] = uvp.get_kparas(
-                spw, length_unit=length_unit
-            ).to_value(1 / length_unit)
-            out[f"{prefix}get_kperps_{tag}_{spw}"] = uvp.get_kperps(
-                spw, length_unit=length_unit
-            ).to_value(1 / length_unit)
+        # the getters give k in 1 / uvp.length_unit; store it in both units
+        k_para = uvp.get_kparas(spw)
+        k_perp = uvp.get_kperps(spw)
+        for tag, length_unit in LENGTH_UNIT_TAGS:
+            k_unit, h0 = 1 / length_unit, cu.with_H0(uvp.cosmo.H0)
+            out[f"{prefix}get_kparas_{tag}_{spw}"] = k_para.to_value(k_unit, h0)
+            out[f"{prefix}get_kperps_{tag}_{spw}"] = k_perp.to_value(k_unit, h0)
         if hasattr(uvp, "cov_array_real"):
             out[f"{prefix}cov_array_real_{spw}"] = uvp.cov_array_real[spw]
             out[f"{prefix}cov_array_imag_{spw}"] = uvp.cov_array_imag[spw]
@@ -398,11 +398,11 @@ def from_array_beam() -> PSpecBeamFromArray:
 def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
     out = {}
     for taper in ("none", "blackman-harris"):
-        for little_h in (True, False):
+        for h_flag, length_unit in ((1, LITTLEH_LENGTH), (0, units.Mpc)):
             for noise_scalar in (False, True):
                 for exact_norm in (False, True):
                     key = (
-                        f"scalar_{taper}_h{int(little_h)}_noise{int(noise_scalar)}"
+                        f"scalar_{taper}_h{h_flag}_noise{int(noise_scalar)}"
                         f"_exact{int(exact_norm)}"
                     )
                     out[key] = beam.compute_pspec_scalar(
@@ -412,7 +412,7 @@ def beam_outputs(beam, pol: str) -> dict[str, np.ndarray]:
                         num_steps=2000,
                         pol=pol,
                         taper=taper,
-                        length_unit=conversions.length_unit_from_little_h(little_h),
+                        length_unit=length_unit,
                         noise_scalar=noise_scalar,
                         exact_norm=exact_norm,
                     )
@@ -616,14 +616,10 @@ def _noise_calc_p_n() -> dict[str, np.ndarray]:
 def _noise_sensitivity() -> dict[str, np.ndarray]:
     out = {}
     freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-    for little_h in (True, False):
-        tag = "h" if little_h else "noh"
+    for tag, length_unit in LENGTH_UNIT_TAGS:
         sense = noise.Sensitivity(beam=pstokes_beam())
         sense.calc_scalar(
-            freqs * units.Hz,
-            "pI",
-            num_steps=2000,
-            length_unit=conversions.length_unit_from_little_h(little_h),
+            freqs * units.Hz, "pI", num_steps=2000, length_unit=length_unit
         )
         out[f"scalar_{tag}"] = sense.scalar
         out[f"P_N_Pk_{tag}"] = sense.calc_P_N(
@@ -639,21 +635,17 @@ def _noise_sensitivity() -> dict[str, np.ndarray]:
 def _noise_uvp_noise_error() -> dict[str, np.ndarray]:
     out = {}
     auto_tsys = utils.uvd_to_Tsys(lst_uvdata("even"), dipole_beam())
-    for little_h in (True, False):
-        tag = "h" if little_h else "noh"
-        # even x even so the auto Tsys times match both time arrays
+    for tag, length_unit in LENGTH_UNIT_TAGS:
+        # even x even so the auto Tsys times match both time arrays; the noise
+        # errors are in the length unit of uvp
         uvp = run_even_odd_pspec(
-            halves=("even", "even"),
-            norm="I",
-            taper="bh",
-            length_unit=conversions.length_unit_from_little_h(little_h),
+            halves=("even", "even"), norm="I", taper="bh", length_unit=length_unit
         )
         utils.uvp_noise_error(
             uvp,
             copy.deepcopy(auto_tsys),
             err_type=["P_N", "P_SN"],
             P_SN_correction=True,
-            length_unit=conversions.length_unit_from_little_h(little_h),
         )
         for spw in uvp.spw_array:
             for stat in ("P_N", "P_SN"):

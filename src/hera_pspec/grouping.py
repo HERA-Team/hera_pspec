@@ -71,63 +71,7 @@ def _k_equivalencies(uvp):
     return cu.with_H0(cosmo.H0)
 
 
-def _plain_k_unit(little_h):
-    """Unit given to plain-number k bins: littleh / Mpc unless little_h is False."""
-    return 1 / conversions.length_unit_from_little_h(little_h is None or little_h)
-
-
-def _check_k_bin_inputs(k_inputs, little_h, stacklevel=3):
-    """
-    Handle the deprecated ways of giving k bins (plain numbers, ``little_h``).
-
-    Emits one ``DeprecationWarning`` if any of the k-bin arguments is a plain
-    number (not a Quantity) or if ``little_h`` is given, and raises if
-    ``little_h`` disagrees with the unit of a Quantity input.
-
-    Parameters
-    ----------
-    k_inputs : dict
-        Argument name -> value of the k-bin arguments (None values skipped).
-
-    little_h : bool or None
-        The deprecated ``little_h`` argument.
-
-    stacklevel : int, optional
-        Stack level of the warning, counted from this function.
-    """
-    plain_names = []
-    for arg_name, value in k_inputs.items():
-        if value is None:
-            continue
-        if isinstance(value, units.Quantity):
-            if little_h is not None and bool(little_h) != unit_helpers.is_littleh(
-                value.unit
-            ):
-                raise ValueError(
-                    f"little_h={little_h} disagrees with the unit of {arg_name} "
-                    f"('{value.unit}'). Drop little_h: the unit of the k bins "
-                    "is used."
-                )
-        else:
-            # raise the usual TypeError / ValueError before warning
-            _as_1d_float_array(value, arg_name)
-            plain_names.append(arg_name)
-    messages = []
-    if plain_names:
-        messages.append(
-            f"Passing {', '.join(plain_names)} as plain numbers is deprecated; "
-            "pass k bins as an astropy Quantity in littleh / Mpc or 1 / Mpc."
-        )
-    if little_h is not None:
-        messages.append(
-            "The little_h argument is deprecated; give the k bins as "
-            "Quantities in littleh / Mpc or 1 / Mpc instead."
-        )
-    if messages:
-        warnings.warn(" ".join(messages), DeprecationWarning, stacklevel=stacklevel)
-
-
-def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit):
+def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit=None):
     """
     Convert k bins to a 1D float array in ``k_unit``.
 
@@ -135,7 +79,8 @@ def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit):
     ----------
     value : astropy.units.Quantity or array-like
         k bins. A Quantity in any unit convertible to ``k_unit`` under
-        ``equivalencies``; plain numbers are taken in ``plain_unit``.
+        ``equivalencies``; plain numbers are taken in ``plain_unit``, and
+        raise if it is None.
 
     k_unit : astropy.units.UnitBase
         Output unit (littleh / Mpc or 1 / Mpc).
@@ -146,8 +91,9 @@ def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit):
     arg_name : str
         Argument name used in error messages.
 
-    plain_unit : astropy.units.UnitBase
-        Unit of plain-number input.
+    plain_unit : astropy.units.UnitBase, optional
+        Unit of plain-number input (used for bin widths, which may be given
+        in the unit of the bins). Default: None, plain numbers raise.
 
     Returns
     -------
@@ -156,12 +102,20 @@ def _k_bins_in_unit(value, k_unit, equivalencies, arg_name, plain_unit):
 
     Raises
     ------
+    astropy.units.UnitTypeError
+        If ``value`` is not a Quantity and ``plain_unit`` is None.
     astropy.units.UnitConversionError
         If the unit of ``value`` is not a wavenumber convertible to ``k_unit``.
     """
     if isinstance(value, units.Quantity):
         unit = value.unit
         value = value.value
+    elif plain_unit is None:
+        raise units.UnitTypeError(
+            f"{arg_name} must be an astropy Quantity in units of littleh / Mpc "
+            "or 1 / Mpc (e.g. np.arange(0.1, 1, 0.1) * cu.littleh / u.Mpc), "
+            f"got {type(value).__name__}."
+        )
     else:
         unit = plain_unit
     array = _as_1d_float_array(value, arg_name)
@@ -957,7 +911,7 @@ def spherical_average(
     error_weights=None,
     time_tol: float = 1e-6,
     add_to_history="",
-    little_h=None,
+    *,
     A={},
     run_check=True,
 ):
@@ -975,8 +929,7 @@ def spherical_average(
         (``cu.littleh / u.Mpc``) or 1 / Mpc. They are converted to the k unit
         of ``uvp_in`` (littleh / Mpc if its ``norm_units`` contain littleh or
         are Hz sr, else 1 / Mpc) with ``cu.with_H0(uvp_in.cosmo.H0)``.
-        Plain numbers are deprecated (``DeprecationWarning``) and taken in
-        littleh / Mpc, or 1 / Mpc if ``little_h`` is False.
+        Plain numbers raise ``astropy.units.UnitTypeError``.
 
     bin_widths : astropy.units.Quantity or float or array-like
         Width of each bin in kbins: a scalar (used for every bin) or a 1D
@@ -1008,12 +961,6 @@ def spherical_average(
 
     add_to_history : str, optional
         String to append to object history
-
-    little_h : bool, optional
-        Deprecated: give the k bins as Quantities instead. Only meaningful for
-        plain-number k bins, which it marks as h Mpc^-1 (True) or Mpc^-1
-        (False). Raises a ValueError if it disagrees with the unit of a
-        Quantity input.
 
     A : dict, optional
         Empty dict to populate with A matrix. This is useful for debugging,
@@ -1052,16 +999,15 @@ def spherical_average(
         raise TypeError("A must be a mutable mapping.")
 
     # k grid in the unit of the input object (h Mpc^-1 or Mpc^-1)
-    length_unit = uvp_in._default_length_unit()
+    length_unit = uvp_in.length_unit
     k_unit = 1 / length_unit
     k_equivalencies = _k_equivalencies(uvp_in)
-    _check_k_bin_inputs(
-        {"kbins": kbins, "kbins_theory": kbins_theory}, little_h, stacklevel=3
-    )
-    plain_k_unit = _plain_k_unit(little_h)
-    # plain bin widths are taken in the unit of kbins
-    kbins_unit = kbins.unit if isinstance(kbins, units.Quantity) else plain_k_unit
-    kbins = _k_bins_in_unit(kbins, k_unit, k_equivalencies, "kbins", plain_k_unit)
+    kbins_unit = getattr(kbins, "unit", None)
+    kbins = _k_bins_in_unit(kbins, k_unit, k_equivalencies, "kbins")
+    if kbins_theory is not None:
+        kbins_theory = _k_bins_in_unit(
+            kbins_theory, k_unit, k_equivalencies, "kbins_theory"
+        )
 
     # input checks
     if weight_by_cov:
@@ -1078,6 +1024,7 @@ def spherical_average(
         if np.ndim(bin_widths) == 0:
             bin_widths = np.ones_like(kbins) * bin_widths
     else:
+        # plain bin widths are taken in the unit of kbins
         bin_widths_unit = kbins_unit
     bin_widths = _k_bins_in_unit(
         bin_widths, k_unit, k_equivalencies, "bin_widths", bin_widths_unit
@@ -1126,9 +1073,6 @@ def spherical_average(
             kbin_right_theory = kbin_right
             Nk_theory = Nk
         else:
-            kbins_theory = _k_bins_in_unit(
-                kbins_theory, k_unit, k_equivalencies, "kbins_theory", plain_k_unit
-            )
             bin_widths_theory = (
                 np.ones_like(kbins_theory) * np.diff(kbins_theory).mean()
             )
@@ -1191,15 +1135,13 @@ def spherical_average(
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nbltpairs,), in k_unit
-        kperps = uvp.get_kperps(spw, length_unit=length_unit).to_value(k_unit)
+        kperps = uvp.get_kperps(spw).to_value(k_unit)
 
         # get kparas for this spw: shape (Ndlys,)
-        kparas = uvp.get_kparas(spw, length_unit=length_unit).to_value(k_unit)
+        kparas = uvp.get_kparas(spw).to_value(k_unit)
         # get kparas for this spw: shape (Nfreqs,) - used for window function averaging
         all_dlys = utils.get_delays(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
-        kparas_per_freq = uvp.get_kparas(
-            spw, length_unit=length_unit, dlys=all_dlys
-        ).to_value(k_unit)
+        kparas_per_freq = uvp.get_kparas(spw, dlys=all_dlys).to_value(k_unit)
 
         # get k to tau mapping for this spw
         avgz = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))
@@ -1454,7 +1396,7 @@ def spherical_wf_from_uvp(
     error_weights=None,
     time_avg=False,
     spw_array=None,
-    little_h=None,
+    *,
     verbose=False,
     time_tol: float = 1e-6,
 ):
@@ -1472,9 +1414,8 @@ def spherical_wf_from_uvp(
         1D array of ascending |k| bin edges, in littleh / Mpc
         (``cu.littleh / u.Mpc``) or 1 / Mpc. They are converted with
         ``cu.with_H0(uvp_in.cosmo.H0)`` to the k unit of the stored window
-        functions (littleh / Mpc if ``uvp_in.norm_units`` contain littleh,
-        else 1 / Mpc). Plain numbers are deprecated (``DeprecationWarning``)
-        and taken in littleh / Mpc, or 1 / Mpc if ``little_h`` is False.
+        functions, ``1 / uvp_in.length_unit``. Plain numbers raise
+        ``astropy.units.UnitTypeError``.
 
     kbin_edges_theory : astropy.units.Quantity, optional
         1D array of ascending |k| bin edges, in the same units as
@@ -1501,12 +1442,6 @@ def spherical_wf_from_uvp(
     spw_array : list of ints.
         Spectral window indices.
 
-    little_h : bool, optional
-        Deprecated: give the k bin edges as Quantities instead. Only
-        meaningful for plain-number edges, which it marks as h Mpc^-1 (True)
-        or Mpc^-1 (False). Raises a ValueError if it disagrees with the unit
-        of a Quantity input.
-
     verbose : bool, optional
         If True, print progress, warnings and debugging info to stdout.
         If None, value used is the class attribute.
@@ -1528,28 +1463,16 @@ def spherical_wf_from_uvp(
     _require_uvpspec(uvp_in, "uvp_in")
 
     # bin the k values in the unit of the stored window function k grids
-    k_unit = uvp_in.window_k_unit()
-    length_unit = 1 / k_unit
+    length_unit = uvp_in.length_unit
+    k_unit = length_unit**-1
     k_equivalencies = _k_equivalencies(uvp_in)
-    _check_k_bin_inputs(
-        {"kbin_edges": kbin_edges, "kbin_edges_theory": kbin_edges_theory},
-        little_h,
-        stacklevel=3,
-    )
-    plain_k_unit = _plain_k_unit(little_h)
-    kbin_edges = _k_bins_in_unit(
-        kbin_edges, k_unit, k_equivalencies, "kbin_edges", plain_k_unit
-    )
+    kbin_edges = _k_bins_in_unit(kbin_edges, k_unit, k_equivalencies, "kbin_edges")
 
     if kbin_edges_theory is None:
         kbin_edges_theory = np.copy(kbin_edges)
     else:
         kbin_edges_theory = _k_bins_in_unit(
-            kbin_edges_theory,
-            k_unit,
-            k_equivalencies,
-            "kbin_edges_theory",
-            plain_k_unit,
+            kbin_edges_theory, k_unit, k_equivalencies, "kbin_edges_theory"
         )
     Nk = np.size(kbin_edges) - 1
     Nk_in = np.size(kbin_edges_theory) - 1

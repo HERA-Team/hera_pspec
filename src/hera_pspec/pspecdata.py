@@ -31,20 +31,6 @@ from . import uvpspec_utils as uvputils
 logger = logging.getLogger(__name__)
 
 
-def _resolve_length_unit(length_unit, little_h):
-    """
-    Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
-
-    Strings are parsed with :func:`unit_helpers.parse_unit_string` (so
-    ``"Mpc / littleh"`` works); the rest is
-    :func:`conversions.resolve_length_unit`, whose deprecation warning points
-    at the caller of the public method that called this helper.
-    """
-    if isinstance(length_unit, (str, bytes)):
-        length_unit = unit_helpers.parse_unit_string(length_unit)
-    return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
-
-
 class PSpecData:
     def __init__(
         self,
@@ -1939,7 +1925,7 @@ class PSpecData:
             )
         if response is None:
             response = responses.DelayResponse()
-        length_unit = _resolve_length_unit(length_unit, None)
+        length_unit = conversions.resolve_length_unit(length_unit)
         q_est = None if q_matrices is None else self._resolve_q_matrices(q_matrices)
         model = self._response_kernel(response, pol, length_unit, max_tensor_bytes)
         R1 = self.R(key1)
@@ -3264,18 +3250,13 @@ class PSpecData:
                             bl_inds[flag_ints], self.spw_range[0] : self.spw_range[1], i
                         ] = True
 
-    def units(self, little_h=None, length_unit=None):
+    def units(self, *, length_unit=None):
         r"""
         Return the units of the power spectrum. These are inferred from the
         units reported by the input visibilities (UVData objects).
 
         Parameters
         ----------
-        little_h : boolean, optional
-                Deprecated, use ``length_unit``. ``little_h=True`` is
-                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
-                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
-
         length_unit : astropy.units.Unit or str, optional
                 Cosmological length unit, e.g. ``u.Mpc / cu.littleh``
                 (h^-1 Mpc) or ``u.Mpc``; strings such as ``"Mpc / littleh"``
@@ -3299,11 +3280,10 @@ class PSpecData:
         Raises
         ------
         ValueError
-            If the visibility unit of the first dataset is not understood, if
-            ``length_unit`` is not a length, or if ``little_h`` and
-            ``length_unit`` disagree.
+            If the visibility unit of the first dataset is not understood, or
+            if ``length_unit`` is not a length.
         """
-        length_unit = _resolve_length_unit(length_unit, little_h)
+        length_unit = conversions.resolve_length_unit(length_unit)
 
         # Work out the power spectrum units
         if len(self.dsets) == 0:
@@ -3357,7 +3337,7 @@ class PSpecData:
     def scalar(
         self,
         polpair,
-        little_h=None,
+        *,
         num_steps=2000,
         beam=None,
         taper_override="no_override",
@@ -3381,11 +3361,6 @@ class PSpecData:
                 e.g. ('pI', 'pI') or ('XX', 'YY'). If string, will assume that
                 the specified polarization is to be cross-correlated with
                 itself, e.g. 'XX' implies ('XX', 'XX').
-
-        little_h : boolean, optional
-                Deprecated, use ``length_unit``. ``little_h=True`` is
-                ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
-                ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``.
 
         num_steps : int, optional
                 Number of steps to use when interpolating primary beams for
@@ -3424,10 +3399,9 @@ class PSpecData:
         Raises
         ------
         ValueError
-            If ``length_unit`` is not a length, or if ``little_h`` and
-            ``length_unit`` disagree.
+            If ``length_unit`` is not a length.
         """
-        length_unit = _resolve_length_unit(length_unit, little_h)
+        length_unit = conversions.resolve_length_unit(length_unit)
 
         # make sure polarizations are the same
         if isinstance(polpair, (int, np.integer)):
@@ -3647,7 +3621,7 @@ class PSpecData:
         norm="I",
         taper="none",
         sampling=False,
-        little_h=None,
+        *,
         spw_ranges=None,
         symmetric_taper=True,
         baseline_tol=1.0,
@@ -3738,12 +3712,6 @@ class PSpecData:
             ``normalization="one-step"`` and ``response=None`` it selects
             ``DelayResponse(sampling=sampling)``; it is ignored when a
             ``response`` is given. Default: False
-
-        little_h : boolean, optional
-            Deprecated, use ``length_unit``. ``little_h=True`` is
-            ``length_unit=u.Mpc / cu.littleh`` and ``little_h=False`` is
-            ``length_unit=u.Mpc``. Emits a ``DeprecationWarning``; raises
-            ValueError if it disagrees with ``length_unit``.
 
         spw_ranges : list of tuples, optional
             A list of spectral window channel ranges to select within the total
@@ -3966,7 +3934,7 @@ class PSpecData:
 
         """
         # set taper and data weighting
-        length_unit = _resolve_length_unit(length_unit, little_h)
+        length_unit = conversions.resolve_length_unit(length_unit)
         # unit of self.scalar(); stripped once per spw/pol below
         scalar_unit = length_unit**3 / (units.Hz * units.sr)
 
@@ -5271,8 +5239,7 @@ def pspec_run(
     cosmo : astropy.cosmology.FLRW, optional
         Cosmology to use when normalizing the power spectra. Default is None,
         which keeps the beam's own cosmology (conversions.DEFAULT_COSMOLOGY
-        unless the beam sets one). A ``Cosmo_Conversions`` object is still
-        accepted but deprecated.
+        unless the beam sets one).
 
     interleave_times : bool
         Only applicable if Ndsets == 1. If True, copy dset[0] into
@@ -5448,7 +5415,7 @@ def pspec_run(
     )
 
     # validate length_unit and normalization before any data is read
-    length_unit = _resolve_length_unit(length_unit, None)
+    length_unit = conversions.resolve_length_unit(length_unit)
     if normalization not in ("two-step", "one-step"):
         raise ValueError(
             f'normalization must be "two-step" or "one-step"; got {normalization!r}.'
@@ -5456,9 +5423,6 @@ def pspec_run(
 
     # cosmology check (extend accepted_cosmo_types to allow other cosmologies)
     accepted_cosmo_types = (FLRW,)
-    if isinstance(cosmo, conversions.Cosmo_Conversions):
-        # deprecated: converted with a DeprecationWarning
-        cosmo = conversions.as_astropy_cosmology(cosmo)
     if cosmo is not None and not isinstance(cosmo, accepted_cosmo_types):
         accepted_names = ", ".join(t.__name__ for t in accepted_cosmo_types)
         raise TypeError(

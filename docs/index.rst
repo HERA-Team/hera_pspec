@@ -20,7 +20,6 @@ Contents
    :maxdepth: 2
 
    installation
-   migrating_to_v1
    pspec
    pspecbeam
    pspecdata

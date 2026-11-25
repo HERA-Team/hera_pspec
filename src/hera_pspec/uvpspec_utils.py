@@ -2,10 +2,12 @@ import copy
 import json
 import warnings
 
+import astropy.cosmology.units as cu
 import numpy as np
+from astropy import units
 from pyuvdata.utils import polnum2str, polstr2num
 
-from . import unit_helpers, utils
+from . import conversions, unit_helpers, utils
 
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
@@ -796,11 +798,31 @@ def _select(
                 statnames = []
 
         # version 2 files store units on the per-spw datasets of parameters
-        # with a declared unit, and on the exact window function k grids
-        # (in uvp.window_k_unit()); older files have none
+        # with a declared unit, and on the exact window function k grids;
+        # older files have none
         read_units = h5file is not None and "uvpspec_version" in h5file.attrs
-        if read_units and exact_windows:
-            window_k_unit = uvp.window_k_unit()
+        read_kgrids = h5file is not None and store_window and exact_windows
+        if read_kgrids:
+            # The k grids are read into 1 / uvp.length_unit. Version 2 files
+            # give their unit in an attribute; v0.x files have them in
+            # littleh / Mpc for littleh normalisations and in 1 / Mpc
+            # otherwise, Hz sr spectra (P(k) or Delta^2) included. littleh is
+            # converted with the H0 of the file's cosmology or, if it has
+            # none, of the default cosmology that UVWindow.from_uvpspec used.
+            kgrid_unit = uvp.length_unit**-1
+            hz_sr = units.Hz in uvp.norm_unit.bases
+            v0_kgrid_unit = (
+                "littleh / Mpc"
+                if unit_helpers.is_littleh(uvp.length_unit) and not hz_sr
+                else "1 / Mpc"
+            )
+            if hasattr(uvp, "cosmo"):
+                kgrid_cosmo = uvp.cosmo
+            elif read_units:
+                kgrid_cosmo = conversions.DEFAULT_COSMOLOGY
+            else:
+                kgrid_cosmo = conversions.LEGACY_COSMOLOGY
+            kgrid_equivalencies = cu.with_H0(kgrid_cosmo.H0)
 
         # iterate over spws
         if spw_mapping is None:
@@ -919,18 +941,24 @@ def _select(
                     uvp.get_param_unit("integration_array"),
                     "integration_array",
                 )
-                if store_window and exact_windows:
-                    window_function_kperp[s] = unit_helpers.convert_from_stored_unit(
-                        window_function_kperp[s],
-                        _window_function_kperp.attrs.get("unit", None),
-                        window_k_unit,
+            if read_kgrids:
+                for name, grids, dset in (
+                    (
                         "window_function_kperp",
-                    )
-                    window_function_kpara[s] = unit_helpers.convert_from_stored_unit(
-                        window_function_kpara[s],
-                        _window_function_kpara.attrs.get("unit", None),
-                        window_k_unit,
+                        window_function_kperp,
+                        _window_function_kperp,
+                    ),
+                    (
                         "window_function_kpara",
+                        window_function_kpara,
+                        _window_function_kpara,
+                    ),
+                ):
+                    stored_unit = (
+                        dset.attrs.get("unit", None) if read_units else v0_kgrid_unit
+                    )
+                    grids[s] = unit_helpers.convert_from_stored_unit(
+                        grids[s], stored_unit, kgrid_unit, name, kgrid_equivalencies
                     )
 
         # assign arrays to uvp

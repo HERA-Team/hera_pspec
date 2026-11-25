@@ -7,6 +7,7 @@ unit and cosmology attributes of HDF5 files, and the cached power-spectrum
 units of a UVPSpec.
 """
 
+import ast
 import contextlib
 import functools
 
@@ -89,7 +90,9 @@ def unit_to_string(unit):
     return unit.to_string()
 
 
-def convert_from_stored_unit(value, stored_unit, declared_unit, name):
+def convert_from_stored_unit(
+    value, stored_unit, declared_unit, name, equivalencies=None
+):
     """
     Convert a value read from file to its declared unit.
 
@@ -105,6 +108,10 @@ def convert_from_stored_unit(value, stored_unit, declared_unit, name):
         Unit the value must be returned in.
     name : str
         Name of the parameter, used in error messages.
+    equivalencies : list, optional
+        Astropy equivalencies for the conversion, e.g.
+        ``astropy.cosmology.units.with_H0(cosmo.H0)`` to convert between
+        littleh / Mpc and 1 / Mpc. Default: None.
 
     Returns
     -------
@@ -132,17 +139,17 @@ def convert_from_stored_unit(value, stored_unit, declared_unit, name):
         ) from err
     if unit == declared_unit:
         return value
-    if not unit.is_equivalent(declared_unit):
+    if not unit.is_equivalent(declared_unit, equivalencies):
         raise ValueError(
             f"{name} is stored in unit '{stored_unit}', which is not equivalent "
             f"to its declared unit '{declared_unit}'"
         )
-    return unit.to(declared_unit, value)
+    return unit.to(declared_unit, value, equivalencies)
 
 
 # Legacy (v0.x) norm_units strings. The values are (unit, unit of k) where the
 # unit of k is what UVPSpec.convert_to_deltasq uses for the k^3 factor: it
-# computes k with little_h only when "h^-3" is in norm_units.
+# computes k in littleh / Mpc only when "h^-3" is in norm_units.
 _LEGACY_NORM_UNITS = {
     "h^-3 Mpc^3": (u.Mpc**3 / cu.littleh**3, cu.littleh / u.Mpc),
     "Mpc^3": (u.Mpc**3, u.Mpc**-1),
@@ -175,7 +182,7 @@ def norm_units_from_legacy_string(norm_units):
     Each form may end in ``" k^3 / (2pi^2)"``, which
     ``UVPSpec.convert_to_deltasq`` appends. The unit is then multiplied by
     the unit of k^3: ``(littleh / Mpc)**3`` for the ``h^-3`` form, else
-    ``(1 / Mpc)**3`` (``convert_to_deltasq`` only uses little_h k when
+    ``(1 / Mpc)**3`` (``convert_to_deltasq`` only uses littleh / Mpc k when
     ``"h^-3"`` is in ``norm_units``). So ``"h^-3 Mpc^3 k^3 / (2pi^2)"`` and
     ``"Mpc^3 k^3 / (2pi^2)"`` map to dimensionless units, and the
     ``Hz str`` forms to ``Hz sr / Mpc**3``.
@@ -255,17 +262,15 @@ def parse_pspec_unit(unit_string):
 
     The canonical strings (``unit_to_string`` of the unit, e.g.
     ``"Mpc3 / littleh3"``, ``"Hz sr"``, ``"mK"``, ``"uncalib"``) parse with
-    astropy, with ``littleh`` and :data:`uncalib` enabled. Legacy strings are
-    mapped explicitly, since astropy would misread some of them (``"h^-3"`` is
-    hours to astropy):
+    astropy, with ``littleh`` and :data:`uncalib` enabled. The visibility
+    unit strings of pyuvdata and hera_pspec are mapped explicitly, matched
+    case-insensitively: ``"uncalib"`` (also ``"UNCALIB"`` and ``"unknown"``)
+    -> :data:`uncalib`, ``"K str"`` -> ``K sr``, ``"Jy"`` -> ``Jy``,
+    ``"mK"`` -> ``mK``.
 
-    - the legacy ``norm_units`` forms of :func:`norm_units_from_legacy_string`
-      (a ``" k^3 / (2pi^2)"`` suffix is folded into the unit; use that
-      function directly to also learn whether it was there);
-    - the visibility unit strings of pyuvdata and hera_pspec, matched
-      case-insensitively: ``"uncalib"`` (also ``"UNCALIB"`` and
-      ``"unknown"``) -> :data:`uncalib`, ``"K str"`` -> ``K sr``,
-      ``"Jy"`` -> ``Jy``, ``"mK"`` -> ``mK``.
+    The legacy ``norm_units`` strings of hera_pspec v0.x files (such as
+    ``"h^-3 Mpc^3"``) are not accepted here: :meth:`UVPSpec.read_hdf5`
+    converts them with :func:`canonical_norm_units`.
 
     Results are cached.
 
@@ -281,14 +286,12 @@ def parse_pspec_unit(unit_string):
     Raises
     ------
     ValueError
-        If the string is not a known legacy form and not a valid astropy unit
-        string, or if it parses to a unit containing hours (a legacy
-        ``"h^..."`` string that is not one of the known forms).
+        If the string is not a valid astropy unit string or one of the
+        visibility unit strings above, or if it parses to a unit containing
+        hours (such as the legacy ``"h^-3 Mpc^3"``).
     """
     if isinstance(unit_string, bytes):
         unit_string = unit_string.decode()
-    if is_legacy_norm_units(unit_string):
-        return norm_units_from_legacy_string(unit_string)[0]
     alias = _VIS_UNITS_ALIASES.get(unit_string.strip().lower())
     if alias is not None:
         return alias
@@ -298,9 +301,7 @@ def parse_pspec_unit(unit_string):
         raise ValueError(
             f"Cannot interpret {unit_string!r} as a power spectrum or "
             "visibility unit. Use an astropy unit string (littleh and uncalib "
-            "are understood), or one of the legacy forms "
-            f"{', '.join(repr(k) for k in _LEGACY_NORM_UNITS)}, "
-            "'uncalib', 'K str', 'Jy' or 'mK'."
+            "are understood), or one of 'uncalib', 'K str', 'Jy' or 'mK'."
         ) from err
     if u.hour in unit.bases:
         raise ValueError(
@@ -316,13 +317,13 @@ def canonical_unit_string(unit_string):
     Return the canonical form of a ``norm_units`` or ``vis_units`` string.
 
     The canonical form is ``unit_to_string(parse_pspec_unit(unit_string))``,
-    e.g. ``"h^-3 Mpc^3"`` -> ``"Mpc3 / littleh3"`` and ``"UNCALIB"`` ->
-    ``"uncalib"``. Results are cached.
+    e.g. ``"Mpc^3"`` -> ``"Mpc3"`` and ``"UNCALIB"`` -> ``"uncalib"``.
+    Results are cached.
 
     Parameters
     ----------
     unit_string : str or bytes
-        Unit string, canonical or legacy.
+        Unit string that :func:`parse_pspec_unit` understands.
 
     Returns
     -------
@@ -338,14 +339,14 @@ def canonical_unit_string(unit_string):
 
 def canonical_norm_units(norm_units):
     """
-    Return the canonical P(k) form of a ``norm_units`` string.
+    Return the canonical P(k) form of a ``norm_units`` string read from file.
 
-    Like :func:`canonical_unit_string`, except that a legacy string ending in
-    ``" k^3 / (2pi^2)"`` (a Delta^2 spectrum, see
-    :func:`norm_units_from_legacy_string`) maps to the canonical form of the
-    string without the suffix, and the suffix is reported separately: from
-    v1.0, ``UVPSpec.norm_units`` holds the P(k) normalisation and
-    ``UVPSpec.deltasq`` whether the spectra are Delta^2.
+    Like :func:`canonical_unit_string`, except that the legacy strings of
+    hera_pspec v0.x files (see :func:`norm_units_from_legacy_string`) are
+    mapped too. A legacy string ending in ``" k^3 / (2pi^2)"`` (a Delta^2
+    spectrum) maps to the canonical form of the string without the suffix,
+    and the suffix is reported separately (``UVPSpec.read_hdf5`` then
+    multiplies the P(k) normalisation by the unit of k^3).
 
     Parameters
     ----------
@@ -362,16 +363,16 @@ def canonical_norm_units(norm_units):
     Raises
     ------
     ValueError
-        If :func:`parse_pspec_unit` cannot interpret the string.
+        If the string is neither a legacy form nor a string
+        :func:`parse_pspec_unit` understands.
     """
     if isinstance(norm_units, bytes):
         norm_units = norm_units.decode()
-    is_deltasq = is_legacy_norm_units(norm_units) and norm_units.endswith(
-        _LEGACY_DELTASQ_SUFFIX
-    )
-    if is_deltasq:
-        norm_units = norm_units[: -len(_LEGACY_DELTASQ_SUFFIX)]
-    return canonical_unit_string(norm_units), is_deltasq
+    if not is_legacy_norm_units(norm_units):
+        return canonical_unit_string(norm_units), False
+    is_deltasq = norm_units.endswith(_LEGACY_DELTASQ_SUFFIX)
+    unit, _ = _LEGACY_NORM_UNITS[norm_units.removesuffix(_LEGACY_DELTASQ_SUFFIX)]
+    return unit_to_string(unit), is_deltasq
 
 
 def is_littleh(unit):
@@ -379,9 +380,9 @@ def is_littleh(unit):
     Whether a unit contains ``astropy.cosmology.units.littleh``.
 
     Used to tell power spectra normalised in ``Mpc^3 / littleh^3`` from those
-    in ``Mpc^3``. Pass ``UVPSpec.norm_units`` (the P(k) normalisation) rather
-    than ``UVPSpec.norm_unit``: after ``UVPSpec.convert_to_deltasq`` the
-    littleh factors of ``norm_unit`` cancel against those of k^3.
+    in ``Mpc^3``. After ``UVPSpec.convert_to_deltasq`` the littleh factors of
+    ``norm_units`` cancel against those of k^3, so pass
+    ``UVPSpec.length_unit`` to tell littleh spectra apart whatever their form.
 
     Parameters
     ----------
@@ -406,6 +407,26 @@ def cosmology_from_yaml(cosmo_yaml):
     immutable; parsing costs several milliseconds per read otherwise.
     """
     return Cosmology.from_format(cosmo_yaml, format="yaml")
+
+
+@functools.lru_cache(maxsize=32)
+def cosmology_from_v0_attr(cosmo_attr):
+    """
+    Build the cosmology of the ``cosmo`` attribute of a hera_pspec v0.x file.
+
+    Parameters
+    ----------
+    cosmo_attr : str
+        The ``cosmo`` attribute: the ``str()`` of a cosmological parameter
+        dictionary (see :func:`hera_pspec.conversions.params_from_cosmology`).
+
+    Returns
+    -------
+    cosmo : astropy.cosmology.LambdaCDM
+        Cached, so equal attributes share one (immutable) object. Building a
+        ``LambdaCDM`` costs several milliseconds and leaves a reference cycle.
+    """
+    return conversions.cosmology_from_params(ast.literal_eval(cosmo_attr))
 
 
 # The "cosmo" dict string and "cosmo_yaml" written for each cosmology, keyed by
@@ -475,24 +496,6 @@ def spw_range_to_hz(spw_range):
 
 
 @functools.lru_cache(maxsize=64)
-def norm_unit(norm_units, deltasq):
-    """
-    Return the normalisation unit of a ``norm_units`` string, cached.
-
-    For Delta^2 spectra (``deltasq``), the P(k) normalisation is multiplied
-    by the unit of k^3: ``(littleh / Mpc)**3`` if it contains littleh, else
-    ``Mpc**-3`` (the k that ``UVPSpec.convert_to_deltasq`` uses).
-    """
-    unit = parse_pspec_unit(norm_units)
-    if deltasq:
-        if is_littleh(unit):
-            unit = unit * (cu.littleh / u.Mpc) ** 3
-        else:
-            unit = unit * u.Mpc**-3
-    return unit
-
-
-@functools.lru_cache(maxsize=64)
-def pspec_unit(vis_units, norm_units, deltasq):
-    """Return ``vis_unit**2 * norm_unit`` for the strings and flag, cached."""
-    return parse_pspec_unit(vis_units) ** 2 * norm_unit(norm_units, deltasq)
+def pspec_unit(vis_units, norm_units):
+    """Return ``vis_unit**2 * norm_unit`` for the two strings, cached."""
+    return parse_pspec_unit(vis_units) ** 2 * parse_pspec_unit(norm_units)

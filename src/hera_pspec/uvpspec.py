@@ -38,6 +38,16 @@ ONE_STEP_SCALAR_NUM_STEPS = 2000
 # parameters of a file.
 _COSMO_ATTR_TOL = 1e-12
 
+# The P(k) normalisations (norm_units) of power spectra, with their length
+# unit and the unit of k that convert_to_deltasq multiplies them by k^3 in.
+# Spectra not normalised with a beam (Hz sr) use littleh lengths, but their
+# k^3 is taken in 1 / Mpc.
+_PK_NORMALISATIONS = (
+    (units.Mpc**3 / cu.littleh**3, _LITTLEH_LENGTH, cu.littleh / units.Mpc),
+    (units.Mpc**3, units.Mpc, units.Mpc**-1),
+    (units.Hz * units.sr, _LITTLEH_LENGTH, units.Mpc**-1),
+)
+
 
 def _normalize_nested_sequence(value, arg_name, group_description):
     if not isinstance(value, (list, tuple, np.ndarray)):
@@ -181,12 +191,11 @@ class UVPSpec:
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
         )
-        # The unit of the exact window function k grids depends on norm_units,
-        # so it is not declared on the parameter: see window_k_unit()
+        # The unit of the exact window function k grids is 1 / length_unit,
+        # which depends on norm_units, so it is not declared on the parameter
         desc = (
             "Dictionary of bandpowers given the kperp grid used to compute the "
-            "window functions, in the unit given by window_k_unit() "
-            "(littleh / Mpc or 1 / Mpc)."
+            "window functions, in 1 / length_unit (littleh / Mpc or 1 / Mpc)."
         )
         self._window_function_kperp = PSpecParam(
             "window_function_kperp",
@@ -196,8 +205,7 @@ class UVPSpec:
         )
         desc = (
             "Dictionary of bandpowers given the kparallel grid used to compute "
-            "the window functions, in the unit given by window_k_unit() "
-            "(littleh / Mpc or 1 / Mpc)."
+            "the window functions, in 1 / length_unit (littleh / Mpc or 1 / Mpc)."
         )
         self._window_function_kpara = PSpecParam(
             "window_function_kpara",
@@ -410,8 +418,8 @@ class UVPSpec:
                 "Power spectra normalization units, as a canonical astropy unit "
                 "string: cosmological ('Mpc3 / littleh3' or 'Mpc3') when a beam "
                 "normalization was applied, else telescope units ('Hz sr'). "
-                "Multiplied by the unit of k^3 after convert_to_deltasq. See "
-                "norm_unit."
+                "Multiplied by the unit of k^3 by convert_to_deltasq (e.g. '' "
+                "for 'Mpc3 / littleh3'). See norm_unit."
             ),
             expected_type=str,
         )
@@ -436,13 +444,17 @@ class UVPSpec:
             ),
             expected_type=str,
         )
-        self._deltasq = PSpecParam(
-            "deltasq",
+        self._length_units = PSpecParam(
+            "length_units",
             description=(
-                "Whether the power spectra have been converted from P(k) to "
-                "Delta^2(k) by convert_to_deltasq. Default is False."
+                "Stored cosmological length unit of the power spectra, as a "
+                "canonical astropy unit string ('Mpc / littleh' or 'Mpc'), "
+                "like norm_units and vis_units. Set by convert_to_deltasq, "
+                "since Delta^2 norm_units do not determine it; if not set, it "
+                "follows from norm_units. Use the length_unit property for the "
+                "astropy unit."
             ),
-            expected_type=bool,
+            expected_type=str,
         )
         self._labels = PSpecParam(
             "labels", description="Array of dataset string labels.", expected_type=str
@@ -542,7 +554,6 @@ class UVPSpec:
             "lst_avg_array",
             "time_avg_array",
             "folded",
-            "deltasq",
             "normalization",
             "scalar_array",
             "labels",
@@ -578,7 +589,7 @@ class UVPSpec:
             "cosmo",
             "beamfile",
             "folded",
-            "deltasq",
+            "length_units",
             "normalization",
             "response_model",
             "exact_windows",
@@ -671,7 +682,6 @@ class UVPSpec:
 
         # Default parameter values
         self.folded = False
-        self.deltasq = False
         self.normalization = "two-step"
 
         # Set function docstrings
@@ -1044,7 +1054,7 @@ class UVPSpec:
 
         return np.array(blp_blvecs)
 
-    def get_kperps(self, spw, little_h=None, length_unit=None):
+    def get_kperps(self, spw):
         """
         Get transverse (perpendicular) cosmological wavevector for each
         baseline-pair given an adopted cosmology and a spw selection.
@@ -1053,30 +1063,20 @@ class UVPSpec:
         ----------
         spw : int, choice of spectral window
 
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
-
-        length_unit : astropy.units.Unit or str, optional
-            Cosmological length unit; k is returned in ``1 / length_unit``.
-            Default: None, the length unit of this object's normalisation
-            (see :meth:`_default_length_unit`): ``u.Mpc / cu.littleh`` if
-            ``norm_units`` contains littleh or the spectra are not
-            cosmologically normalised, ``u.Mpc`` otherwise.
-
         Returns
         -------
         k_perp : astropy.units.Quantity
-            Transverse wave-vectors in ``1 / length_unit``,
-            shape=(Nbltpairs,).
+            Transverse wave-vectors in ``1 / self.length_unit`` (see
+            :attr:`length_unit`), shape=(Nbltpairs,). Convert to the other
+            length unit with ``k_perp.to(unit, cu.with_H0(self.cosmo.H0))``.
 
         Notes
         -----
         Changed in v1.0: this returned a float ndarray in h Mpc^-1 by default
         before, whatever the object's normalisation; for an object normalised
-        in ``Mpc3`` the default is now 1 / Mpc.
+        in ``Mpc3`` it is now 1 / Mpc.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self.length_unit
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
@@ -1096,7 +1096,7 @@ class UVPSpec:
 
         return k_perp << k_unit
 
-    def get_kparas(self, spw, little_h=None, dlys=None, length_unit=None):
+    def get_kparas(self, spw, *, dlys=None):
         """
         Get radial (parallel) cosmological wavevectors for
         power spectra given an adopted cosmology and a spw selection.
@@ -1106,34 +1106,25 @@ class UVPSpec:
         spw : int
             Choice of spectral window
 
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
-
         dlys : array_like or astropy.units.Quantity, optional
             Delays to compute k_parallel for (the spw still sets the
             redshift). A Quantity may be in any time unit; plain floats are
             seconds. Default is None (the delays of the spw, see
             :meth:`get_dlys`).
 
-        length_unit : astropy.units.Unit or str, optional
-            Cosmological length unit; k is returned in ``1 / length_unit``.
-            Default: None, the length unit of this object's normalisation
-            (see :meth:`get_kperps`).
-
         Returns
         -------
         k_para : astropy.units.Quantity
-            Radial wave-vectors in ``1 / length_unit``, shape=(Ndlys given
-            spw).
+            Radial wave-vectors in ``1 / self.length_unit`` (see
+            :attr:`length_unit`), shape=(Ndlys given spw).
 
         Notes
         -----
         Changed in v1.0: this returned a float ndarray in h Mpc^-1 by default
         before, whatever the object's normalisation; for an object normalised
-        in ``Mpc3`` the default is now 1 / Mpc.
+        in ``Mpc3`` it is now 1 / Mpc.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self.length_unit
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
@@ -1159,57 +1150,50 @@ class UVPSpec:
         )
         return k_para << k_unit
 
-    def _default_length_unit(self):
+    @property
+    def length_unit(self):
         """
-        Cosmological length unit of this object's power spectra.
+        Cosmological length unit of this object's power spectra (read-only).
 
-        ``u.Mpc / cu.littleh`` if ``norm_units`` (the P(k) normalisation)
-        contains littleh, or if the spectra were not cosmologically
-        normalised (``Hz sr``, where littleh was the old default);
-        ``u.Mpc`` otherwise. Used when a ``length_unit`` argument is None.
+        This is the astropy unit to use in code; ``length_units`` is the
+        string stored with the object and in its HDF5 files.
+
+        Given by ``length_units`` if it is set (as :meth:`convert_to_deltasq`
+        does), else by ``norm_units`` (the P(k) normalisation):
+        ``u.Mpc / cu.littleh`` for ``Mpc3 / littleh3``, ``u.Mpc`` for
+        ``Mpc3``. Spectra that were not cosmologically normalised (``Hz sr``)
+        use ``u.Mpc / cu.littleh``. :meth:`get_kperps`, :meth:`get_kparas`,
+        :meth:`compute_scalar` and :meth:`generate_noise_spectra` work in
+        this unit.
 
         Returns
         -------
         astropy.units.UnitBase
+
+        Raises
+        ------
+        AttributeError
+            If neither ``length_units`` nor ``norm_units`` is set.
+        ValueError
+            If ``length_units`` is not a unit, or if it is not set and
+            ``norm_units`` is not a unit or not one of the P(k)
+            normalisations above.
         """
-        norm_units = getattr(self, "norm_units", None)
-        if norm_units is None:
-            return _LITTLEH_LENGTH
-        try:
-            norm_unit = unit_helpers.norm_unit(norm_units, False)
-        except ValueError:
-            # an unparsable norm_units string: keep the old littleh default
-            return _LITTLEH_LENGTH
-        if unit_helpers.is_littleh(norm_unit) or norm_unit.is_equivalent(
-            units.Hz * units.sr
-        ):
-            return _LITTLEH_LENGTH
-        return units.Mpc
-
-    def window_k_unit(self):
-        """
-        Unit of the k grids of the exact window functions.
-
-        ``cu.littleh / u.Mpc`` if ``norm_units`` (the P(k) normalisation)
-        contains littleh, else ``1 / u.Mpc``. This is the unit
-        :meth:`get_exact_window_functions` (through
-        ``UVWindow.from_uvpspec``) computes ``window_function_kperp`` and
-        ``window_function_kpara`` in, and the unit
-        ``grouping.spherical_wf_from_uvp`` bins them in.
-
-        For spectra that were not cosmologically normalised (``Hz sr``) this
-        is 1 / Mpc, whereas :meth:`_default_length_unit` (used by
-        :meth:`get_kperps` and :meth:`get_kparas`) gives littleh / Mpc. Both
-        are the conventions of hera_pspec v0.x, kept so that stored window
-        functions and k values do not change.
-
-        Returns
-        -------
-        astropy.units.UnitBase
-        """
-        if unit_helpers.is_littleh(self.norm_units):
-            return cu.littleh / units.Mpc
-        return units.Mpc**-1
+        if getattr(self, "length_units", None) is not None:
+            return unit_helpers.parse_unit_string(self.length_units)
+        if not hasattr(self, "norm_units"):
+            raise AttributeError(
+                "norm_units is not set, so the length unit is unknown."
+            )
+        norm_unit = unit_helpers.parse_pspec_unit(self.norm_units)
+        for pk_unit, length_unit, _ in _PK_NORMALISATIONS:
+            if norm_unit == pk_unit:
+                return length_unit
+        raise ValueError(
+            f"norm_units {self.norm_units!r} is not a P(k) normalisation "
+            "('Mpc3 / littleh3', 'Mpc3' or 'Hz sr'), so length_units must be "
+            "set to give the length unit."
+        )
 
     def get_window_function_kgrid(self, spw):
         """
@@ -1224,7 +1208,7 @@ class UVPSpec:
         -------
         kperp, kpara : astropy.units.Quantity
             ``window_function_kperp[spw]`` and ``window_function_kpara[spw]``
-            (shape ``(Nk, Npols)``) in :meth:`window_k_unit`.
+            (shape ``(Nk, Npols)``) in ``1 / self.length_unit``.
 
         Raises
         ------
@@ -1238,26 +1222,11 @@ class UVPSpec:
                 "This object has no exact window functions; compute them with "
                 "get_exact_window_functions."
             )
-        k_unit = self.window_k_unit()
+        k_unit = self.length_unit**-1
         return (
             units.Quantity(self.window_function_kperp[spw], k_unit),
             units.Quantity(self.window_function_kpara[spw], k_unit),
         )
-
-    def _resolve_length_unit(self, length_unit, little_h):
-        """
-        Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
-
-        None for both gives :meth:`_default_length_unit`. Strings are parsed
-        with :func:`unit_helpers.parse_unit_string`; the rest is
-        :func:`conversions.resolve_length_unit`, whose deprecation warning
-        points at the caller of the public method that called this one.
-        """
-        if length_unit is None and little_h is None:
-            return self._default_length_unit()
-        if isinstance(length_unit, (str, bytes)):
-            length_unit = unit_helpers.parse_unit_string(length_unit)
-        return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
 
     def get_blpairs(self):
         """
@@ -1489,7 +1458,8 @@ class UVPSpec:
 
         The unit of the output is therefore the current unit (self.units)
         times the unit of k^3: (littleh / Mpc)^3 if self.norm_units contains
-        littleh, else Mpc^-3. A cosmologically normalised power spectrum
+        littleh, else Mpc^-3 (also for spectra not cosmologically
+        normalised, ``Hz sr``). A cosmologically normalised power spectrum
         thus ends up in the visibility unit squared (e.g. mK^2).
 
         Parameters
@@ -1506,20 +1476,24 @@ class UVPSpec:
         Raises
         ------
         ValueError
-            If the power spectra have already been converted (self.deltasq is
-            True).
+            If the power spectra have already been converted (norm_units is
+            not a P(k) normalisation).
 
         Notes
         -----
-        Alters data_array, stats_array, and cov_array if present, and sets
-        deltasq to True. norm_units keeps the P(k) normalisation (so it still
-        tells whether k is in littleh / Mpc); norm_unit and units include
-        the k^3 factor.
+        Alters data_array, stats_array, and cov_array if present. norm_units
+        is multiplied by the unit of k^3, and length_units is set to the
+        length unit, which norm_units no longer tells.
         """
-        if self.deltasq:
+        norm_unit = self.norm_unit
+        k_unit = None
+        for pk_unit, _, pk_k_unit in _PK_NORMALISATIONS:
+            if norm_unit == pk_unit:
+                k_unit = pk_k_unit
+        if k_unit is None:
             raise ValueError(
                 "The power spectra have already been converted to Delta^2 "
-                "(deltasq is True)."
+                f"(norm_units {self.norm_units!r} is not a P(k) normalisation)."
             )
 
         # copy object
@@ -1528,18 +1502,12 @@ class UVPSpec:
         else:
             uvp = copy.deepcopy(self)
 
-        # k in the length unit of norm_units (this is what norm_unit assumes)
-        if unit_helpers.is_littleh(uvp.norm_units):
-            length_unit = _LITTLEH_LENGTH
-        else:
-            length_unit = units.Mpc
-        k_unit = 1 / length_unit
-
         # loop over spectral windows
         for spw in range(uvp.Nspws):
-            # get k vectors
-            k_perp = uvp.get_kperps(spw, length_unit=length_unit).to_value(k_unit)
-            k_para = uvp.get_kparas(spw, length_unit=length_unit).to_value(k_unit)
+            # get k vectors (for Hz sr objects the getters give littleh / Mpc
+            # but k^3 is taken in 1 / Mpc)
+            k_perp = uvp.get_kperps(spw).to_value(k_unit, cu.with_H0(uvp.cosmo.H0))
+            k_para = uvp.get_kparas(spw).to_value(k_unit, cu.with_H0(uvp.cosmo.H0))
             k_mag = np.sqrt(k_perp[:, None, None] ** 2 + k_para[None, :, None] ** 2)
             # shape of (Nbltpairs, spw_Ndlys, Npols)
             coeff = k_mag**3 / (2 * np.pi**2)
@@ -1563,8 +1531,9 @@ class UVPSpec:
                     "tip,tijp,tjp->tijp", coeff, cov, coeff
                 )
 
-        # edit units: norm_unit now includes k^3
-        uvp.deltasq = True
+        # edit units: norm_units now includes k^3, so keep the length unit
+        uvp.length_units = unit_helpers.unit_to_string(uvp.length_unit)
+        uvp.norm_units = unit_helpers.unit_to_string(norm_unit * k_unit**3)
 
         if not inplace:
             return uvp
@@ -2141,8 +2110,10 @@ class UVPSpec:
 
         ``norm_units`` and ``vis_units`` are converted to their canonical
         astropy strings (e.g. "h^-3 Mpc^3" -> "Mpc3 / littleh3", "UNCALIB" ->
-        "uncalib"), whatever the version. A legacy ``norm_units`` ending in
-        " k^3 / (2pi^2)" sets ``deltasq``; a missing ``deltasq`` is False.
+        "uncalib"), whatever the version. Delta^2 spectra (a legacy
+        ``norm_units`` ending in " k^3 / (2pi^2)", or a ``deltasq`` attribute
+        that is True) get the k^3 unit in ``norm_units`` and their length
+        unit in ``length_units``.
         A missing ``normalization`` (files written before v1.0) is
         ``"two-step"``.
         """
@@ -2216,11 +2187,6 @@ class UVPSpec:
         if "symmetric_taper" not in grp.attrs:
             setattr(self, "symmetric_taper", True)
 
-        # Backwards compatibility: deltasq did not exist; legacy norm_units
-        # strings mark Delta^2 spectra with a " k^3 / (2pi^2)" suffix instead
-        if "deltasq" not in grp.attrs:
-            self.deltasq = False
-
         # Backwards compatibility: normalization did not exist before v1.0;
         # all such files hold two-step spectra (an exact_norm file cannot be
         # told apart from a default one)
@@ -2229,8 +2195,22 @@ class UVPSpec:
 
         # Unit strings: files written before v1.0 (including early version 2
         # files) hold legacy strings such as "h^-3 Mpc^3" and "UNCALIB";
-        # store the canonical astropy form instead
-        self._canonicalize_unit_strings()
+        # store the canonical astropy form instead. Delta^2 spectra were
+        # marked by a " k^3 / (2pi^2)" suffix (v0.x) or a deltasq attribute
+        # next to the P(k) norm_units (version 2 files before v1.0).
+        self._canonicalize_unit_strings(bool(grp.attrs.get("deltasq", False)))
+
+        # handle cosmo (before _select, which converts the window function k
+        # grids with its H0): prefer the astropy YAML of version 2 files, and check
+        # it against the v0.x dict string kept next to it
+        cosmo_yaml = grp.attrs.get("cosmo_yaml", None)
+        if cosmo_yaml is not None:
+            self.cosmo = self._cosmo_from_hdf5_attrs(
+                cosmo_yaml, getattr(self, "cosmo", None)
+            )
+        elif hasattr(self, "cosmo"):
+            # legacy files: only the dict string
+            self.cosmo = unit_helpers.cosmology_from_v0_attr(self.cosmo)
 
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
@@ -2256,17 +2236,6 @@ class UVPSpec:
                 polpairs=polpairs,
                 h5file=grp,
             )
-
-        # handle cosmo: prefer the astropy YAML of version 2 files, and check
-        # it against the v0.x dict string kept next to it
-        cosmo_yaml = grp.attrs.get("cosmo_yaml", None)
-        if cosmo_yaml is not None:
-            self.cosmo = self._cosmo_from_hdf5_attrs(
-                cosmo_yaml, getattr(self, "cosmo", None)
-            )
-        elif hasattr(self, "cosmo"):
-            # legacy files: only the dict string (equal dicts share one object)
-            self.cosmo = conversions.as_astropy_cosmology(ast.literal_eval(self.cosmo))
 
         # BACKWARDS COMPATIBILITY for files with Nblpairts.
         # Check whether we are reading a pre Nbltpairs file by looking for the
@@ -2304,12 +2273,21 @@ class UVPSpec:
 
         self.check(just_meta=just_meta)
 
-    def _canonicalize_unit_strings(self):
+    def _canonicalize_unit_strings(self, deltasq=False):
         """
         Replace legacy ``norm_units`` / ``vis_units`` strings by canonical ones.
 
-        A legacy ``norm_units`` string ending in ``" k^3 / (2pi^2)"`` (written
-        by ``convert_to_deltasq`` before v1.0) also sets ``deltasq``.
+        Delta^2 spectra written before v1.0 kept the P(k) normalisation in
+        ``norm_units``, with a ``" k^3 / (2pi^2)"`` suffix (v0.x) or a
+        ``deltasq`` attribute. Their ``norm_units`` gets the unit of k^3
+        (that of :meth:`convert_to_deltasq`), and ``length_units`` the length
+        unit of the P(k) normalisation.
+
+        Parameters
+        ----------
+        deltasq : bool, optional
+            Whether the file marked the spectra as Delta^2 with a ``deltasq``
+            attribute. Default: False.
 
         Raises
         ------
@@ -2320,8 +2298,14 @@ class UVPSpec:
             self.norm_units, is_deltasq = unit_helpers.canonical_norm_units(
                 self.norm_units
             )
-            if is_deltasq:
-                self.deltasq = True
+            if is_deltasq or deltasq:
+                norm_unit = self.norm_unit
+                for pk_unit, length_unit, k_unit in _PK_NORMALISATIONS:
+                    if norm_unit == pk_unit:
+                        self.length_units = unit_helpers.unit_to_string(length_unit)
+                        self.norm_units = unit_helpers.unit_to_string(
+                            norm_unit * k_unit**3
+                        )
         if hasattr(self, "vis_units"):
             self.vis_units = unit_helpers.canonical_unit_string(self.vis_units)
 
@@ -2498,7 +2482,7 @@ class UVPSpec:
         the unit string in a ``unit`` attribute on datasets (including
         ``integration_spw*``) or a ``<name>_unit`` attribute next to group
         attributes. ``window_function_kperp/kpara_spw*`` are stored in, and
-        carry the ``unit`` attribute of, :meth:`window_k_unit`. Quantity values
+        carry the ``unit`` attribute of, ``1 / length_unit``. Quantity values
         are converted to the declared unit first. The cosmology is stored
         twice: ``cosmo`` holds the ``str()`` of the parameter dict
         (``conversions.params_from_cosmology``), as in v0.x (which can still
@@ -2576,8 +2560,8 @@ class UVPSpec:
         cov_unit = unit_helpers.unit_to_string(pspec_unit**2)
         window_unit = unit_helpers.unit_to_string(units.dimensionless_unscaled)
         if getattr(self, "exact_windows", False):
-            window_k_unit = self.window_k_unit()
-            window_k_unit_string = unit_helpers.unit_to_string(window_k_unit)
+            kgrid_unit = self.length_unit**-1
+            kgrid_unit_string = unit_helpers.unit_to_string(kgrid_unit)
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
@@ -2610,19 +2594,19 @@ class UVPSpec:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
                         data=unit_helpers.value_in_unit(
-                            self.window_function_kperp[i], window_k_unit
+                            self.window_function_kperp[i], kgrid_unit
                         ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = window_k_unit_string
+                    dset.attrs["unit"] = kgrid_unit_string
                     dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
                         data=unit_helpers.value_in_unit(
-                            self.window_function_kpara[i], window_k_unit
+                            self.window_function_kpara[i], kgrid_unit
                         ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = window_k_unit_string
+                    dset.attrs["unit"] = kgrid_unit_string
             if hasattr(self, "cov_array_real"):
                 dset = group.create_dataset(
                     f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
@@ -2696,7 +2680,7 @@ class UVPSpec:
         multiplying the data by (new_scalar_array / old_scalar_array).
 
         The scalar is computed in the length unit of the object's
-        ``norm_units`` (h^-1 Mpc or Mpc, see :meth:`_default_length_unit`).
+        ``norm_units`` (h^-1 Mpc or Mpc, see :attr:`length_unit`).
         Power spectra that were not cosmologically normalised (``Hz sr``)
         get an h^-1 Mpc scalar and ``norm_units`` becomes
         ``"Mpc3 / littleh3"``.
@@ -2723,11 +2707,8 @@ class UVPSpec:
 
         Parameters
         ----------
-        new_cosmo : astropy.cosmology.FLRW or dict
-            Astropy cosmology, or cosmological parameter dictionary (see
-            ``conversions.cosmology_from_params``). The new cosmology you
-            want to adopt for this UVPSpec object. A ``Cosmo_Conversions``
-            object is still accepted but deprecated.
+        new_cosmo : astropy.cosmology.FLRW
+            The new cosmology you want to adopt for this UVPSpec object.
 
         overwrite : bool, optional
             If True, overwrite self.cosmo if it already exists. Default: False.
@@ -2793,16 +2774,12 @@ class UVPSpec:
         # normalisation (littleh for spectra not yet cosmologically normalised)
         if verbose:
             print("Updating scalar array and re-normalizing power spectra")
-        length_unit = self._default_length_unit()
+        length_unit = self.length_unit
         scalar_unit = length_unit**3 / (units.Hz * units.sr)
         for spw in range(self.Nspws):
             for j, polpair in enumerate(self.polpair_array):
                 scalar = self.compute_scalar(
-                    spw,
-                    polpair,
-                    num_steps=1000,
-                    length_unit=length_unit,
-                    noise_scalar=False,
+                    spw, polpair, num_steps=1000, noise_scalar=False
                 ).to_value(scalar_unit)
 
                 # renormalize power spectra with new scalar
@@ -2827,7 +2804,7 @@ class UVPSpec:
         ``s_disc / s`` hardly depends on the cosmology. Its errors in
         ``stats_array`` scale the same way and its covariances as the square.
         """
-        length_unit = self._default_length_unit()
+        length_unit = self.length_unit
         scalar_unit = length_unit**3 / (units.Hz * units.sr)
         for spw in range(self.Nspws):
             for j, polpair in enumerate(self.polpair_array):
@@ -2835,7 +2812,6 @@ class UVPSpec:
                     spw,
                     polpair,
                     num_steps=ONE_STEP_SCALAR_NUM_STEPS,
-                    length_unit=length_unit,
                     noise_scalar=False,
                 ).to_value(scalar_unit)
                 ratio = scalar / self.scalar_array[spw, j]
@@ -3023,6 +2999,35 @@ class UVPSpec:
         just_meta : bool, optional
             If True, only check metadata. Default: False.
         """
+        # norm_units: a canonical astropy unit string that, with length_units
+        # if set, gives length_unit
+        if hasattr(self, "norm_units"):
+            try:
+                canonical = unit_helpers.canonical_unit_string(self.norm_units)
+                length_unit = self.length_unit
+            except ValueError as err:
+                raise AssertionError(f"invalid norm_units: {err}") from err
+            assert self.norm_units == canonical, (
+                f"norm_units {self.norm_units!r} is not in canonical form; use "
+                f"{canonical!r}"
+            )
+            if getattr(self, "length_units", None) is not None:
+                canonical = unit_helpers.unit_to_string(length_unit)
+                assert self.length_units == canonical, (
+                    f"length_units {self.length_units!r} is not in canonical "
+                    f"form; use {canonical!r}"
+                )
+                # P(k) normalisations with this length unit, and their Delta^2
+                allowed = [
+                    unit
+                    for pk_unit, pk_length_unit, k_unit in _PK_NORMALISATIONS
+                    if pk_length_unit == length_unit
+                    for unit in (pk_unit, pk_unit * k_unit**3)
+                ]
+                assert self.norm_unit in allowed, (
+                    f"norm_units {self.norm_units!r} is not a P(k) or Delta^2 "
+                    f"normalisation in length_units {self.length_units!r}"
+                )
         # iterate over all possible parameters
         for p in self._all_params:
             # only enforce existance if not just_meta
@@ -3039,7 +3044,7 @@ class UVPSpec:
                 declared_unit = a.unit
                 if p in ("window_function_kperp", "window_function_kpara"):
                     # unit set by norm_units rather than declared
-                    declared_unit = self.window_k_unit()
+                    declared_unit = self.length_unit**-1
                 if isinstance(value, units.Quantity):
                     self._check_quantity_unit(p, value, declared_unit)
                 elif p in self._dicts and isinstance(value, dict):
@@ -3077,12 +3082,11 @@ class UVPSpec:
                             assert issubclass(
                                 getattr(self, p)[k].dtype.type, a.expected_type
                             ), err_msg
-                    # cosmology: convert a deprecated Cosmo_Conversions (or a
-                    # parameter dict) instead of the generic cast below
+                    # cosmology: an astropy object, not the generic cast below
                     elif p == "cosmo":
                         try:
-                            self.cosmo = conversions.as_astropy_cosmology(self.cosmo)
-                        except (TypeError, ValueError) as err:
+                            conversions.as_astropy_cosmology(self.cosmo)
+                        except TypeError as err:
                             raise AssertionError(f"{err_msg}: {err}") from err
                     # immutables
                     elif p in self._immutables:
@@ -3273,18 +3277,15 @@ class UVPSpec:
         The astropy unit of the ``norm_units`` string: ``Mpc**3 / littleh**3``
         or ``Mpc**3`` when the power spectra were normalised with a beam,
         ``Hz sr`` when they were not (no beam normalisation was applied).
-        If ``deltasq`` is True (see :meth:`convert_to_deltasq`), this is
-        multiplied by the unit of k^3, ``(littleh / Mpc)**3`` when
-        ``norm_units`` contains littleh and ``Mpc**-3`` otherwise, so the
-        cosmological forms become dimensionless.
+        :meth:`convert_to_deltasq` multiplies it by the unit of k^3,
+        ``(littleh / Mpc)**3`` when it contains littleh and ``Mpc**-3``
+        otherwise, so the cosmological forms become dimensionless.
 
         Returns
         -------
         astropy.units.UnitBase
         """
-        return unit_helpers.norm_unit(
-            self.norm_units, bool(getattr(self, "deltasq", False))
-        )
+        return unit_helpers.parse_pspec_unit(self.norm_units)
 
     @property
     def units(self):
@@ -3304,9 +3305,7 @@ class UVPSpec:
         ``"({vis_units})^2 {norm_units}"`` before; it now returns an astropy
         unit. Use ``unit_helpers.unit_to_string(uvp.units)`` for a string.
         """
-        return unit_helpers.pspec_unit(
-            self.vis_units, self.norm_units, bool(getattr(self, "deltasq", False))
-        )
+        return unit_helpers.pspec_unit(self.vis_units, self.norm_units)
 
     def generate_noise_spectra(
         self,
@@ -3314,12 +3313,11 @@ class UVPSpec:
         polpair,
         Tsys,
         blpairs=None,
-        little_h=None,
+        *,
         form="Pk",
         num_steps=2000,
         component="real",
         scalar=None,
-        length_unit=None,
     ):
         """
         Generate the expected RMS noise power spectrum given a selection of
@@ -3327,7 +3325,7 @@ class UVPSpec:
         constructed as:
 
         P_N = scalar * (Tsys * 1e3)^2 / (integration_time) / sqrt(Nincoherent)
-              [mK^2 length_unit^3]
+              [mK^2 L^3]
 
         where scalar is the cosmological and beam scalar (i.e. X2Y * Omega_eff)
         calculated from pspecbeam with noise_scalar = True, integration_time is
@@ -3347,8 +3345,8 @@ class UVPSpec:
         For more details, see hera_pspec.noise.Sensitivity.calc_P_N, and
         Cheng et al. 2018.
 
-        P_N is in mK^2 length_unit^3 for form='Pk' (mK^2 Mpc^3 / littleh^3
-        for the default length unit of a littleh object), and in mK^2 for
+        P_N is in mK^2 L^3 for form='Pk', where L is :attr:`length_unit`
+        (mK^2 Mpc^3 / littleh^3 for a littleh object), and in mK^2 for
         form='DelSq'.
 
         Parameters
@@ -3361,19 +3359,14 @@ class UVPSpec:
             polpair int. Strings are expanded into polarization pairs, e.g.
             'XX' becomes ('XX,'XX').
 
-        Tsys : dictionary, astropy.units.Quantity, float or array
+        Tsys : astropy.units.Quantity or dictionary of Quantities
             System temperature for each blpair, a Quantity in any temperature
             unit (e.g. ``300 * u.K``). Key is blpair-integer, value is a scalar
-            or an array of shape (Ntpairs,). Plain numbers are read as K
-            (deprecated).
+            or an array of shape (Ntpairs,).
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
             spectrum for default is to calculate for baseline pairs.
-
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         form : str, optional
             Form of power spectra, whetehr P(k) or Delta^2(k). Valid options
@@ -3391,27 +3384,22 @@ class UVPSpec:
             Optional noise scalar used to convert from Tsys to cosmological units
             output from pspecbeam.compute_pspec_scalar(...,noise_scalar=True)
             or ``compute_scalar(..., noise_scalar=True)``. A float is taken to
-            be in ``length_unit**3 / (u.Hz * u.sr)``. Default is None. If None
+            be in ``self.length_unit**3 / (u.Hz * u.sr)``. Default is None. If None
             provided, will calculate scalar in function.
-
-        length_unit : astropy.units.Unit or str, optional
-            Cosmological length unit of P_N (and of k for form='DelSq').
-            Default: None, the length unit of this object's normalisation
-            (see :meth:`get_kperps`).
 
         Returns
         -------
         P_N : dict
             Dictionary containing blpair integers as keys and astropy
             Quantities of noise power spectra as values, with shape
-            (Ntimes, Ndlys), in ``u.mK**2 * length_unit**3`` for form='Pk'
-            and ``u.mK**2`` for form='DelSq'.
+            (Ntimes, Ndlys), in ``u.mK**2 * self.length_unit**3`` for
+            form='Pk' and ``u.mK**2`` for form='DelSq'.
 
         Notes
         -----
         Changed in v1.0: the values were float ndarrays before.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self.length_unit
         scalar_unit = length_unit**3 / (units.Hz * units.sr)
         # Check for str polpair and convert to integer
         if isinstance(polpair, str):
@@ -3427,23 +3415,15 @@ class UVPSpec:
         # Calculate scalar (a float in scalar_unit)
         if scalar is None:
             scalar = self.compute_scalar(
-                spw,
-                polpair,
-                num_steps=num_steps,
-                length_unit=length_unit,
-                noise_scalar=True,
+                spw, polpair, num_steps=num_steps, noise_scalar=True
             ).to_value(scalar_unit)
         else:
             scalar = unit_helpers.value_in_unit(scalar, scalar_unit)
 
         # Get k vectors
         if form == "DelSq":
-            k_perp = self.get_kperps(spw, length_unit=length_unit).to_value(
-                1 / length_unit
-            )
-            k_para = self.get_kparas(spw, length_unit=length_unit).to_value(
-                1 / length_unit
-            )
+            k_perp = self.get_kperps(spw).to_value(1 / length_unit)
+            k_para = self.get_kparas(spw).to_value(1 / length_unit)
             k_mag = np.sqrt(k_perp[:, None] ** 2 + k_para[None, :] ** 2)
             P_N_unit = units.mK**2
         else:
@@ -3460,21 +3440,12 @@ class UVPSpec:
 
         # handle Tsys: Quantities are converted to plain values in K
         if isinstance(Tsys, dict):
-            Tsys_in_K = {}
-            plain_Tsys = False
-            for key, value in Tsys.items():
-                if utils._contains_quantity(value):
-                    Tsys_in_K[key] = utils.to_value_in(value, units.K, "Tsys")
-                else:
-                    plain_Tsys = True
-                    Tsys_in_K[key] = value
-            Tsys = Tsys_in_K
+            Tsys = {
+                key: utils.quantity_value(value, units.K, "Tsys", example="300 * u.K")
+                for key, value in Tsys.items()
+            }
         else:
-            plain_Tsys = not utils._contains_quantity(Tsys)
-            if not plain_Tsys:
-                Tsys = utils.to_value_in(Tsys, units.K, "Tsys")
-        if plain_Tsys:
-            utils.warn_plain_number("Tsys", units.K, example="300 * u.K", stacklevel=3)
+            Tsys = utils.quantity_value(Tsys, units.K, "Tsys", example="300 * u.K")
         if not isinstance(Tsys, dict):
             if not isinstance(Tsys, np.ndarray):
                 Tsys = np.ones(self.Ntpairs) * Tsys
@@ -3693,15 +3664,7 @@ class UVPSpec:
             self, bl_len_tol=bl_len_tol, bl_ang_tol=bl_ang_tol
         )
 
-    def compute_scalar(
-        self,
-        spw,
-        polpair,
-        num_steps=1000,
-        little_h=None,
-        noise_scalar=False,
-        length_unit=None,
-    ):
+    def compute_scalar(self, spw, polpair, num_steps=1000, *, noise_scalar=False):
         """
         Compute power spectrum normalization scalar given an adopted cosmology
         and a beam model. See pspecbeam.PSpecBeamBase.compute_pspec_scalar for
@@ -3719,31 +3682,23 @@ class UVPSpec:
             Number of integration bins along frequency in computing scalar.
             Default: 1000.
 
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
-
         noise_scalar : bool, optional
             If True calculate noise pspec scalar, else calculate normal pspec
             scalar. See pspecbeam.py for difference between normal scalar and
             noise scalar. Default: False.
 
-        length_unit : astropy.units.Unit or str, optional
-            Cosmological length unit of the scalar. Default: None, the length
-            unit of this object's normalisation (see :meth:`get_kperps`).
-
         Returns
         -------
         scalar : astropy.units.Quantity
             Power spectrum normalization scalar, in
-            ``length_unit**3 / (u.Hz * u.sr)``.
+            ``self.length_unit**3 / (u.Hz * u.sr)`` (see :attr:`length_unit`).
 
         Notes
         -----
         Changed in v1.0: this returned a float in h^-3 Mpc^3 / (Hz sr) by
         default before, whatever the object's normalisation.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self.length_unit
         # make assertions
         assert hasattr(self, "cosmo"), (
             "self.cosmo object must exist to compute scalar. See self.set_cosmology()"
@@ -4323,7 +4278,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
     include:
         'channel_width', 'telescope_location', 'weighting', 'OmegaP',
         'beam_freqs', 'OmegaPP', 'beamfile', 'norm', 'taper', 'vis_units',
-        'norm_units', 'folded', 'deltasq', 'cosmo', 'scalar',
+        'norm_units', 'folded', 'length_units', 'cosmo', 'scalar',
         'symmetric_taper', 'normalization', 'response_model'
 
     Parameters
@@ -4388,7 +4343,7 @@ def get_uvp_overlap(uvps, just_meta=True, verbose=True):
         "vis_units",
         "norm_units",
         "folded",
-        "deltasq",
+        "length_units",
         "cosmo",
         "exact_windows",
         "symmetric_taper",

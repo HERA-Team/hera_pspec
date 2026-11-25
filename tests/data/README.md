@@ -4,8 +4,8 @@
 `tests/test_regression_numerics.py`. They were generated from unmodified
 library code before the astropy-units migration, so they record what
 hera_pspec computed at that point: `PSpecData.pspec()` across normalisations,
-tapers, `little_h`, Jy -> mK, `exact_norm`, exact windows and stored
-covariances; the beam scalars and `Jy_to_mK` for each beam class; `UVWindow`
+tapers, length units (h^-1 Mpc and Mpc), Jy -> mK, `exact_norm`, exact windows
+and stored covariances; the beam scalars and `Jy_to_mK` for each beam class; `UVWindow`
 cylindrical and spherical window functions; `grouping.spherical_average` and
 `grouping.spherical_wf_from_uvp`; the noise helpers; and a read of the 2019
 file `src/hera_pspec/data/test_uvp.h5`. The cases that use the default

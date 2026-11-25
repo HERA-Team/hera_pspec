@@ -4,7 +4,6 @@ import inspect
 import itertools
 import time
 import traceback
-import warnings
 from datetime import UTC, datetime
 
 import astropy.units as u
@@ -19,53 +18,35 @@ from scipy.interpolate import interp1d
 from . import __version__, conversions
 
 
-def _contains_quantity(value):
-    """Return True if ``value`` is a Quantity or a (nested) list/tuple holding one."""
-    if isinstance(value, u.Quantity):
-        return True
-    if isinstance(value, (list, tuple)):
-        return any(_contains_quantity(item) for item in value)
-    return False
-
-
-def to_value_in(
-    value,
-    unit,
-    name,
-    equivalencies=None,
-    deprecate_plain=True,
-    example=None,
-    stacklevel=3,
-):
+def quantity_value(
+    value: u.Quantity | list | tuple | None,
+    unit: u.UnitBase | str,
+    name: str,
+    equivalencies: list | None = None,
+    example: str | None = None,
+) -> float | np.ndarray | None:
     """
     Return a physical input as a plain float (array) in ``unit``.
 
     This is the boundary helper of the public API: arguments that carry a
-    physical unit are accepted as astropy Quantities in any equivalent unit
-    and converted once to the fixed unit the internals work in.
+    physical unit are astropy Quantities in any equivalent unit, converted
+    once to the fixed unit the internals work in.
 
     Parameters
     ----------
-    value : astropy.units.Quantity, array_like, float or None
-        The argument. A list or tuple of Quantities (e.g. ``(100 * u.MHz,
-        120 * u.MHz)``) is stacked into one Quantity first.
+    value : astropy.units.Quantity, list, tuple or None
+        The argument. A list or tuple of Quantities (e.g. ``[100 * u.MHz,
+        120 * u.MHz]`` or a list of ``(low, high)`` Quantity pairs) is stacked
+        into one Quantity first.
     unit : astropy.units.UnitBase or str
         Unit to return the value in, e.g. ``u.Hz``.
     name : str
-        Name of the argument, used in messages.
+        Name of the argument, used in error messages.
     equivalencies : list, optional
         astropy equivalencies used in the conversion. Default: None.
-    deprecate_plain : bool, optional
-        If True (default), a plain number or array emits a
-        ``DeprecationWarning`` saying it is read as ``unit``. If False, it is
-        returned as a float array without a warning.
     example : str, optional
-        Example Quantity shown in the warning. Default:
-        ``"<name> * u.<unit>"``.
-    stacklevel : int, optional
-        Stack level of the deprecation warning, counted from this function.
-        The default, 3, points at the caller of the function that calls
-        ``to_value_in``.
+        Example Quantity shown in the error message for a plain number, e.g.
+        ``"100 * u.MHz"``. Default: ``"1 * u.<unit>"`` for a named unit.
 
     Returns
     -------
@@ -75,60 +56,47 @@ def to_value_in(
 
     Raises
     ------
+    astropy.units.UnitTypeError
+        If ``value`` holds no Quantity (e.g. a plain number or array).
     astropy.units.UnitConversionError
-        If ``value`` is a Quantity in a unit that cannot be converted to
-        ``unit``.
+        If ``value`` is in a unit that cannot be converted to ``unit``, or a
+        list mixes Quantities with plain numbers.
     """
     if value is None:
         return None
     unit = u.Unit(unit)
-    if _contains_quantity(value):
-        try:
-            # astropy stacks a flat list of Quantities but not a nested one
-            # (e.g. a list of (low, high) pairs), so stack the rows first
-            quantity = (
-                u.Quantity([u.Quantity(row) for row in value])
-                if isinstance(value, (list, tuple))
-                else value
-            )
-            return quantity.to_value(unit, equivalencies=equivalencies or [])
-        except u.UnitConversionError as err:
-            given = value.unit if isinstance(value, u.Quantity) else "mixed units"
-            raise u.UnitConversionError(
-                f"{name} must be in a unit equivalent to '{unit}', got '{given}'."
-            ) from err
-    if deprecate_plain:
-        warn_plain_number(name, unit, example=example, stacklevel=stacklevel + 1)
-    value = np.asarray(value, dtype=float)
-    return value[()] if value.ndim == 0 else value
+    if not _contains_quantity(value):
+        unit_string = unit.to_string()
+        if example is None and unit_string.isidentifier():
+            example = f"1 * u.{unit_string}"
+        hint = f" (e.g. {example})" if example else ""
+        raise u.UnitTypeError(
+            f"{name} must be an astropy Quantity in units of {unit_string}"
+            f"{hint}, got {type(value).__name__}."
+        )
+    try:
+        # astropy stacks a flat list of Quantities but not a nested one
+        # (e.g. a list of (low, high) pairs), so stack the rows first
+        quantity = (
+            u.Quantity([u.Quantity(row) for row in value])
+            if isinstance(value, (list, tuple))
+            else value
+        )
+        return quantity.to_value(unit, equivalencies=equivalencies or [])
+    except u.UnitConversionError as err:
+        given = value.unit if isinstance(value, u.Quantity) else "mixed units"
+        raise u.UnitConversionError(
+            f"{name} must be in a unit equivalent to '{unit}', got '{given}'."
+        ) from err
 
 
-def warn_plain_number(name, unit, example=None, stacklevel=2):
-    """
-    Emit the ``DeprecationWarning`` for a physical argument given without units.
-
-    Parameters
-    ----------
-    name : str
-        Name of the argument.
-    unit : astropy.units.UnitBase
-        Unit plain numbers are read as.
-    example : str, optional
-        Example Quantity shown in the message. Default: ``"<name> * u.<unit>"``.
-    stacklevel : int, optional
-        Stack level of the warning, counted from this function. The default,
-        2, points at the caller of ``warn_plain_number``.
-    """
-    unit = u.Unit(unit)
-    if example is None:
-        example = f"{name} * u.{unit.to_string()}"
-    warnings.warn(
-        f"Passing {name} as a plain number is deprecated; pass it as an "
-        f"astropy Quantity, e.g. {example}. Plain numbers are read as "
-        f"{unit.to_string()}.",
-        DeprecationWarning,
-        stacklevel=stacklevel,
-    )
+def _contains_quantity(value) -> bool:
+    """Return True if ``value`` is a Quantity or a (nested) list/tuple holding one."""
+    if isinstance(value, u.Quantity):
+        return True
+    if isinstance(value, (list, tuple)):
+        return any(_contains_quantity(item) for item in value)
+    return False
 
 
 def circular_average(angles, axis=0):
@@ -702,8 +670,8 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         i.e. it includes all channels in freq_range[0] <= freq < freq_range[1].
         Frequencies are Quantities in any frequency unit, e.g.
         ``(100 * u.MHz, 120 * u.MHz)``; a Quantity of shape (2,) is one
-        window and one of shape (N, 2) is N windows. Plain numbers are read
-        as Hz (deprecated).
+        window and one of shape (N, 2) is N windows. Plain numbers raise
+        ``astropy.units.UnitTypeError``.
 
     bounds_error : bool, optional
         Whether to raise an error if a specified lower/upper frequency is
@@ -726,7 +694,7 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
 
     # A Quantity of shape (2,) is one window, one of shape (N, 2) a list
     if isinstance(freq_range, u.Quantity):
-        freq_range = to_value_in(freq_range, u.Hz, "freq_range")
+        freq_range = quantity_value(freq_range, u.Hz, "freq_range")
         if freq_range.shape == (2,):
             freq_range = tuple(freq_range)
         elif freq_range.ndim == 2 and freq_range.shape[1] == 2:
@@ -736,9 +704,9 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
                 "A freq_range Quantity must have shape (2,) or (N, 2), got "
                 f"{freq_range.shape}."
             )
-        plain_numbers = False
+        in_hz = True
     else:
-        plain_numbers = True
+        in_hz = False
 
     # Check for a single tuple input
     is_tuple = False
@@ -751,19 +719,15 @@ def spw_range_from_freqs(data, freq_range, bounds_error=True):
         raise TypeError("freq_range must be a tuple or list of tuples.")
 
     # Quantities inside the tuples are converted to Hz
-    if plain_numbers:
-        if any(_contains_quantity(frange) for frange in freq_range):
-            # a loop, not a comprehension, so that a warning for a plain
-            # tuple in the list points at the caller on Python 3.11 too
-            freq_range_hz = []
-            for frange in freq_range:
-                frange_hz = to_value_in(frange, u.Hz, "freq_range")
-                freq_range_hz.append(tuple(frange_hz))
-            freq_range = freq_range_hz
-        else:
-            warn_plain_number(
-                "freq_range", u.Hz, example="(100 * u.MHz, 120 * u.MHz)", stacklevel=3
+    if not in_hz:
+        freq_range = [
+            tuple(
+                quantity_value(
+                    frange, u.Hz, "freq_range", example="(100 * u.MHz, 120 * u.MHz)"
+                )
             )
+            for frange in freq_range
+        ]
 
     # Loop over tuples and find spectral window indices
     spw_range = []
@@ -1655,8 +1619,6 @@ def uvp_noise_error(
     precomp_P_N=None,
     P_SN_correction=True,
     num_steps_scalar=2000,
-    little_h=None,
-    length_unit=None,
 ):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
@@ -1697,17 +1659,11 @@ def uvp_noise_error(
         Number of frequency steps to explicitly compute (and interpolate over) for integrand in scalar.
         Default is 2000
 
-    little_h : bool, optional
-        Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
-        Raises ValueError if it disagrees with ``length_unit``.
-
-    length_unit : astropy.units.Unit or str, optional
-        Cosmological length unit L of the noise spectra. P_N and P_SN are
-        stored in ``uvp.stats_array`` as plain arrays in mK^2 * L^3.
-        Default: None, the object's own length unit
-        (``uvp._default_length_unit()``, the length unit of ``uvp.units``), so
-        the stored errors match the units of the data.
-
+    Notes
+    -----
+    P_N and P_SN are stored in ``uvp.stats_array`` as plain arrays in
+    mK^2 L^3, where L is ``uvp.length_unit``, so the stored errors match the
+    units of the data.
     """
     from hera_pspec import uvpspec_utils
 
@@ -1721,19 +1677,14 @@ def uvp_noise_error(
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs (floats in scalar_unit).
-    # stacklevel 4 in the helper: the deprecation warning points at our caller
-    length_unit = uvp._resolve_length_unit(length_unit, little_h)
+    length_unit = uvp.length_unit
     scalar_unit = length_unit**3 / (u.Hz * u.sr)
     P_N_unit = u.mK**2 * length_unit**3
     scalar = {}
     for spw in uvp.spw_array:
         for polpair in uvp.polpair_array:
             scalar[(spw, polpair)] = uvp.compute_scalar(
-                spw,
-                polpair,
-                num_steps=num_steps_scalar,
-                noise_scalar=True,
-                length_unit=length_unit,
+                spw, polpair, num_steps=num_steps_scalar, noise_scalar=True
             ).to_value(scalar_unit)
     # iterate over spectral window
     for spw in uvp.spw_array:
@@ -1863,7 +1814,6 @@ def uvp_noise_error(
                         form="Pk",
                         component="real",
                         scalar=scalar[(spw, polpair)],
-                        length_unit=length_unit,
                     )[blp_int].to_value(P_N_unit)
 
                 else:

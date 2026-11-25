@@ -7,8 +7,7 @@ Cosmology and units
 :meth:`~hera_pspec.UVPSpec.get_param_unit`). Cosmological lengths are in
 h\ :sup:`-1` Mpc (``u.Mpc / cu.littleh``, with
 ``astropy.cosmology.units`` imported as ``cu``) or in Mpc, chosen with the
-``length_unit`` argument. See :doc:`migrating_to_v1` for how this differs
-from v0.x.
+``length_unit`` argument.
 
 Cosmologies are ``astropy.cosmology`` objects. The default is
 :data:`hera_pspec.conversions.DEFAULT_COSMOLOGY`, astropy's ``Planck18``;
@@ -35,9 +34,10 @@ Units of a ``UVPSpec``
   same as strings.
 * :meth:`~hera_pspec.UVPSpec.get_param_unit` gives the declared unit of an
   attribute, e.g. ``Unit("s")`` for ``dly_array``.
-* :meth:`~hera_pspec.UVPSpec.window_k_unit` and
-  :meth:`~hera_pspec.UVPSpec.get_window_function_kgrid` give the k unit and
-  grid of the exact window functions.
+* :attr:`~hera_pspec.UVPSpec.length_unit` is the cosmological length unit of
+  the power spectra; k values, including the grids of the exact window
+  functions (:meth:`~hera_pspec.UVPSpec.get_window_function_kgrid`), are in
+  its inverse.
 * :func:`hera_pspec.unit_helpers.parse_pspec_unit` parses ``norm_units`` and
   ``vis_units`` strings, including the legacy strings of v0.x files.
 
@@ -74,10 +74,5 @@ The ``conversions`` module
 .. autofunction:: hera_pspec.conversions.as_astropy_cosmology
 
 .. autofunction:: hera_pspec.conversions.resolve_length_unit
-
-.. autofunction:: hera_pspec.conversions.length_unit_from_little_h
-
-.. autoclass:: hera_pspec.conversions.Cosmo_Conversions
-  :members:
 
 .. autofunction:: hera_pspec.unit_helpers.parse_pspec_unit

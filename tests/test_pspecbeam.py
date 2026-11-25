@@ -115,7 +115,7 @@ class TestPSpecBeamUV:
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
+        """Check Jy_to_mK output, extrapolation warnings and that inputs without a unit raise a UnitTypeError."""
         M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11) * u.Hz)
         assert len(M) == 11
         # k_B from astropy.constants (CODATA 2018); CODATA 2014 gave 40.643366654821904
@@ -132,10 +132,10 @@ class TestPSpecBeamUV:
             M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13) * u.Hz)
         assert np.all(np.isfinite(M))
 
-        with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
+        with pytest.raises(u.UnitTypeError, match="freqs must be an astropy Quantity"):
             beam_nf_pstokes.Jy_to_mK([1])
-        with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
-            beam_nf_pstokes.Jy_to_mK(np.array([1]))
+        with pytest.raises(u.UnitTypeError, match="freqs must be an astropy Quantity"):
+            beam_nf_pstokes.Jy_to_mK(np.array([1.0]))
 
     def test_noise_scalar(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with noise_scalar=True against a precomputed reference value."""
@@ -534,7 +534,7 @@ class TestPSpecBeamFromArray:
                     OmegaP={"pI": Om_P}, OmegaPP={"pI": "string"}, beam_freqs=freqs
                 ),
                 TypeError,
-                "must both be array_like",
+                "OmegaPP must be an astropy Quantity",
             ),
             (
                 lambda Om_P, Om_PP, freqs: dict(
@@ -674,25 +674,15 @@ class TestBeamCosmology:
         beam = _beam_from_constructor(name, None)
         assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
 
-    @pytest.mark.parametrize("name", BEAM_CONSTRUCTORS)
-    def test_cosmo_conversions_deprecated(self, name: str) -> None:
-        """A Cosmo_Conversions is converted to astropy with a DeprecationWarning."""
-        with pytest.warns(DeprecationWarning):
-            old = conversions.Cosmo_Conversions(H0=70.0, Om_L=0.7, Om_b=0.05, Om_c=0.25)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            beam = _beam_from_constructor(name, old)
-        assert isinstance(beam.cosmo, FLRW)
-        assert beam.cosmo.is_equivalent(old.to_astropy())
-
     def test_set_cosmo(self) -> None:
-        """Setting beam.cosmo accepts astropy, dicts and None; rejects others."""
+        """Setting beam.cosmo accepts astropy and None; rejects dicts and others."""
         beam = pspecbeam.PSpecBeamBase()
         beam.cosmo = CUSTOM_COSMO
         assert beam.cosmo is CUSTOM_COSMO
-        beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
-        assert beam.cosmo.is_equivalent(CUSTOM_COSMO)
         beam.cosmo = None
         assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+        with pytest.raises(TypeError, match="FLRW"):
+            beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
         with pytest.raises(TypeError, match="FLRW"):
             beam.cosmo = [0.7, 0.05]
         del beam.cosmo
@@ -700,37 +690,29 @@ class TestBeamCosmology:
 
 
 def test_vectorised_x2y_matches_loop() -> None:
-    """The vectorised X2Y gives the per-frequency Cosmo_Conversions values."""
-    with pytest.warns(DeprecationWarning):
-        old = conversions.Cosmo_Conversions()
+    """The vectorised X2Y gives the same values as one call per frequency."""
     freqs = np.linspace(LOWER_FREQ.to_value(u.Hz), UPPER_FREQ.to_value(u.Hz), 200)
     redshifts = conversions.f2z(freqs)
-    for little_h in (True, False):
-        length_unit = conversions.length_unit_from_little_h(little_h)
+    for length_unit in (u.Mpc / cu.littleh, u.Mpc):
         new = conversions.X2Y(
             redshifts, conversions.LEGACY_COSMOLOGY, length_unit
         ).to_value(length_unit**3 / (u.sr * u.Hz))
-        loop = np.array([old.X2Y(z, little_h=little_h) for z in redshifts])
+        loop = np.array(
+            [
+                conversions.X2Y(z, conversions.LEGACY_COSMOLOGY, length_unit).value
+                for z in redshifts
+            ]
+        )
         np.testing.assert_allclose(new, loop, rtol=1e-14)
 
 
 class TestScalarLengthUnit:
     @pytest.mark.parametrize("exact_norm", [False, True])
-    def test_length_unit_matches_little_h(
+    def test_length_unit(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV, exact_norm: bool
     ) -> None:
-        """length_unit=Mpc / Mpc/littleh give the old little_h=False/True values."""
+        """The default scalar is in Mpc / littleh, and the Mpc scalar is h^-3 times it."""
         kwargs = dict(pol="XX", num_steps=500, exact_norm=exact_norm)
-        for little_h, length_unit in [(True, u.Mpc / cu.littleh), (False, u.Mpc)]:
-            with pytest.warns(DeprecationWarning, match="little_h"):
-                old = beam_nf_dipole.compute_pspec_scalar(
-                    LOWER_FREQ, UPPER_FREQ, NUM_FREQS, little_h=little_h, **kwargs
-                )
-            new = beam_nf_dipole.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=length_unit, **kwargs
-            )
-            assert new == old
-            assert isinstance(new, float)
         default = beam_nf_dipole.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, **kwargs
         )
@@ -738,38 +720,12 @@ class TestScalarLengthUnit:
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=u.Mpc / cu.littleh, **kwargs
         )
         assert default == littleh
+        assert isinstance(littleh, float)
         mpc = beam_nf_dipole.compute_pspec_scalar(
             LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit="Mpc", **kwargs
         )
         h = beam_nf_dipole.cosmo.h
         np.testing.assert_allclose(mpc, littleh / h**3, rtol=1e-12)
-
-    def test_disagreeing_arguments_raise(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
-    ) -> None:
-        with (
-            pytest.warns(DeprecationWarning, match="little_h"),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            beam_nf_dipole.compute_pspec_scalar(
-                LOWER_FREQ, UPPER_FREQ, NUM_FREQS, little_h=True, length_unit=u.Mpc
-            )
-
-    def test_agreeing_arguments_warn(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
-    ) -> None:
-        with pytest.warns(DeprecationWarning, match="little_h"):
-            both = beam_nf_dipole.compute_pspec_scalar(
-                LOWER_FREQ,
-                UPPER_FREQ,
-                NUM_FREQS,
-                pol="XX",
-                little_h=False,
-                length_unit=u.Mpc,
-            )
-        assert both == beam_nf_dipole.compute_pspec_scalar(
-            LOWER_FREQ, UPPER_FREQ, NUM_FREQS, pol="XX", length_unit=u.Mpc
-        )
 
     @pytest.mark.parametrize("length_unit", [u.s, u.Mpc**3, "littleh"])
     def test_bad_length_unit_raises(
@@ -780,20 +736,18 @@ class TestScalarLengthUnit:
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=length_unit
             )
 
-    def test_private_function_little_h_deprecated(
-        self, beam_nf_dipole: pspecbeam.PSpecBeamUV
-    ) -> None:
-        beam_freqs = beam_nf_dipole.beam_freqs
-        ratio = beam_nf_dipole.power_beam_sq_int("XX") / (
-            beam_nf_dipole.power_beam_int("XX") ** 2
-        )
-        pspec_freqs = np.linspace(
-            LOWER_FREQ.to_value(u.Hz),
-            UPPER_FREQ.to_value(u.Hz),
-            NUM_FREQS,
-            endpoint=False,
-        )
-        args = (conversions.DEFAULT_COSMOLOGY, beam_freqs, ratio, pspec_freqs)
-        with pytest.warns(DeprecationWarning, match="little_h"):
-            old = pspecbeam._compute_pspec_scalar(*args, little_h=False)
-        assert old == pspecbeam._compute_pspec_scalar(*args, length_unit=u.Mpc)
+
+def test_interpolate_omega_ratio_quadratic() -> None:
+    """Check that a beam ratio quadratic in frequency is interpolated and extrapolated exactly."""
+    beam_freqs = np.linspace(100e6, 200e6, 11)
+
+    def ratio(freqs: np.ndarray) -> np.ndarray:
+        mhz = freqs / 1e6
+        return 2e-3 * mhz**2 - 0.1 * mhz + 30.0
+
+    freqs = np.array([90e6, 123.4e6, 150e6, 210e6])
+    np.testing.assert_allclose(
+        pspecbeam.interpolate_omega_ratio(beam_freqs, ratio(beam_freqs), freqs),
+        ratio(freqs),
+        rtol=1e-10,
+    )

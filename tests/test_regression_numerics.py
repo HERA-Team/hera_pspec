@@ -74,7 +74,8 @@ def test_legacy_uvp_file_metadata() -> None:
     uvp = read_legacy_uvp()
     assert uvp.norm_units == "Mpc3 / littleh3"
     assert uvp.vis_units == "uncalib"
-    assert uvp.deltasq is False
+    # a P(k) file: its length unit follows from norm_units
+    assert not hasattr(uvp, "length_units")
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
     assert uvp.vis_unit == unit_helpers.uncalib
     assert uvp.units == unit_helpers.uncalib**2 * units.Mpc**3 / cu.littleh**3

@@ -25,31 +25,18 @@ def sense(beam_nf_pstokes: PSpecBeamUV, cosmo: FLRW) -> noise.Sensitivity:
 
 class TestSensitivity:
     def test_set_cosmology(self) -> None:
-        """Check that set_cosmology accepts an astropy cosmology, its params dict and its stringified params."""
+        """Check that set_cosmology stores an astropy cosmology and its stringified params."""
         sense = noise.Sensitivity()
-        # a cosmology without radiation, which its params dict represents exactly
         C = conversions.LEGACY_COSMOLOGY
         sense.set_cosmology(C)
         assert sense.cosmo is C
-        params = conversions.params_from_cosmology(C)
-        assert sense.cosmo_params == str(params)
-        sense.set_cosmology(str(params))
-        assert isinstance(sense.cosmo, FLRW)
-        assert sense.cosmo.is_equivalent(C)
-        sense.set_cosmology(params)
-        assert sense.cosmo.is_equivalent(C)
+        assert sense.cosmo_params == str(conversions.params_from_cosmology(C))
 
-    def test_set_cosmology_cosmo_conversions_deprecated(self) -> None:
-        """A Cosmo_Conversions object still works, with a DeprecationWarning."""
-        sense = noise.Sensitivity()
-        with pytest.warns(DeprecationWarning):
-            C = conversions.Cosmo_Conversions(Om_L=0.7, Om_c=0.25)
-        with pytest.warns(DeprecationWarning, match="astropy.cosmology"):
-            sense.set_cosmology(C)
-        assert isinstance(sense.cosmo, FLRW)
-        assert conversions.params_from_cosmology(sense.cosmo) == pytest.approx(
-            C.get_params(), rel=1e-12
-        )
+    def test_set_cosmology_rejects_params_dict(self) -> None:
+        """Check that a parameter dictionary is not accepted as a cosmology."""
+        params = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
+        with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
+            noise.Sensitivity().set_cosmology(params)
 
     def test_set_beam_with_cosmo(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that set_beam aligns the beam's cosmology with self.cosmo when both are present."""
@@ -130,38 +117,9 @@ class TestSensitivity:
         sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=u.Mpc)
         assert sense.calc_P_N(300.0 * u.K, 10.7 * u.s) == Pk_mpc
 
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_scalar_little_h_deprecated(
-        self, sense: noise.Sensitivity, little_h: bool
-    ) -> None:
-        """Check that little_h warns at the caller's line, keeps its positional slot and matches length_unit."""
-        freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        length_unit = conversions.length_unit_from_little_h(little_h)
-        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=length_unit)
-        expected = sense.scalar
-        with pytest.warns(
-            DeprecationWarning, match="little_h argument is deprecated"
-        ) as record:
-            sense.calc_scalar(freqs * u.Hz, "pI", 2000, little_h)
-        assert len(record) == 1
-        assert record[0].filename == __file__
-        assert sense.scalar == expected
-        assert sense.length_unit == length_unit
-        # agreeing pair is accepted
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            sense.calc_scalar(
-                freqs * u.Hz, "pI", 2000, little_h=little_h, length_unit=length_unit
-            )
-        assert sense.scalar == expected
-
     def test_scalar_length_unit_errors(self, sense: noise.Sensitivity) -> None:
-        """Check that a disagreeing little_h or a non-length unit raises."""
+        """Check that a length_unit that is not a length raises."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            sense.calc_scalar(freqs * u.Hz, "pI", little_h=True, length_unit=u.Mpc)
         with pytest.raises(ValueError, match="length_unit must be a length"):
             sense.calc_scalar(freqs * u.Hz, "pI", length_unit=u.s)
 
@@ -427,85 +385,19 @@ class TestNoiseErrorUnits:
         )
         return uvp
 
-    def test_littleh_object(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
-    ) -> None:
-        """A littleh object gets littleh noise by default, identical to passing the unit explicitly."""
-        uvp_h, _, auto_Tsys = noise_error_uvps
-        assert uvp_h.units == u.mK**2 * u.Mpc**3 / cu.littleh**3
-        default = self._noise_error(uvp_h, auto_Tsys)
-        explicit = self._noise_error(uvp_h, auto_Tsys, length_unit=u.Mpc / cu.littleh)
-        for stat in ("P_N", "P_SN"):
-            np.testing.assert_array_equal(
-                default.stats_array[stat][0], explicit.stats_array[stat][0]
-            )
-
     def test_mpc_object(
         self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
     ) -> None:
-        """An Mpc^3 object stores P_N in mK^2 Mpc^3: the littleh P_N times the scalar ratio (h^-3)."""
-        _, uvp_mpc, auto_Tsys = noise_error_uvps
-        assert uvp_mpc.units == u.mK**2 * u.Mpc**3
-        default = self._noise_error(uvp_mpc, auto_Tsys)
-        explicit = self._noise_error(uvp_mpc, auto_Tsys, length_unit="Mpc")
-        np.testing.assert_array_equal(
-            default.stats_array["P_N"][0], explicit.stats_array["P_N"][0]
-        )
-        littleh = self._noise_error(uvp_mpc, auto_Tsys, length_unit=u.Mpc / cu.littleh)
-        # the factor between the two is the ratio of the noise scalars
-        polpair = uvp_mpc.polpair_array[0]
-        scalar_mpc = uvp_mpc.compute_scalar(
-            0, polpair, num_steps=2000, noise_scalar=True, length_unit=u.Mpc
-        )
-        scalar_h = uvp_mpc.compute_scalar(
-            0,
-            polpair,
-            num_steps=2000,
-            noise_scalar=True,
-            length_unit=u.Mpc / cu.littleh,
-        )
-        factor = scalar_mpc.value / scalar_h.value
-        np.testing.assert_allclose(factor, uvp_mpc.cosmo.h**-3, rtol=1e-10)
-        np.testing.assert_allclose(
-            default.stats_array["P_N"][0],
-            littleh.stats_array["P_N"][0] * factor,
-            rtol=1e-12,
-        )
-
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_little_h_deprecated(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData], little_h: bool
-    ) -> None:
-        """little_h warns at the caller's line and gives the same result as length_unit."""
+        """An Mpc^3 object stores P_N and P_SN h^-3 times those of the same spectra in Mpc^3 / littleh^3."""
         uvp_h, uvp_mpc, auto_Tsys = noise_error_uvps
-        uvp = uvp_h if little_h else uvp_mpc
-        expected = self._noise_error(uvp, auto_Tsys)
-        uvp_dep = copy.deepcopy(uvp)
-        with pytest.warns(
-            DeprecationWarning, match="little_h argument is deprecated"
-        ) as record:
-            utils.uvp_noise_error(
-                uvp_dep, copy.deepcopy(auto_Tsys), "P_N", little_h=little_h
-            )
-        assert len(record) == 1
-        assert record[0].filename == __file__
-        np.testing.assert_array_equal(
-            uvp_dep.stats_array["P_N"][0], expected.stats_array["P_N"][0]
-        )
-
-    def test_little_h_disagreement_raises(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
-    ) -> None:
-        uvp_h, _, auto_Tsys = noise_error_uvps
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            utils.uvp_noise_error(
-                copy.deepcopy(uvp_h),
-                copy.deepcopy(auto_Tsys),
-                little_h=True,
-                length_unit=u.Mpc,
+        assert uvp_h.units == u.mK**2 * u.Mpc**3 / cu.littleh**3
+        assert uvp_mpc.units == u.mK**2 * u.Mpc**3
+        littleh = self._noise_error(uvp_h, auto_Tsys)
+        mpc = self._noise_error(uvp_mpc, auto_Tsys)
+        h3 = uvp_mpc.cosmo.h**3
+        for stat in ("P_N", "P_SN"):
+            np.testing.assert_allclose(
+                mpc.stats_array[stat][0], littleh.stats_array[stat][0] / h3, rtol=1e-10
             )
 
 

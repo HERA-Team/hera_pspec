@@ -32,8 +32,7 @@ method ``matrices(freqs, delays, beam, pol, cosmo, length_unit)`` that returns
 
 For one-step spectra ``uvp.scalar_array`` holds a reference scalar that was
 not applied to the data; :meth:`~hera_pspec.UVPSpec.set_cosmology` uses it to
-rescale the spectra. See :doc:`migrating_to_v1` for how one-step results
-compare with two-step.
+rescale the spectra.
 
 .. autoclass:: hera_pspec.DelayResponse
   :members: kernel, estimator_weight
