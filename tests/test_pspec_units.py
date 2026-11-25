@@ -1,4 +1,4 @@
-"""Tests for the power spectrum units (vis_units, norm_units, deltasq)."""
+"""Tests for the power spectrum units (vis_units, norm_units, Delta^2)."""
 
 import copy
 import shutil
@@ -197,7 +197,7 @@ class TestPspecUnits:
         assert uvp.units == vis_unit**2 * norm_unit
         assert uvp.vis_units == unit_helpers.unit_to_string(vis_unit)
         assert uvp.norm_units == norm_units
-        assert uvp.deltasq is False
+        assert not hasattr(uvp, "length_units")
 
     def test_without_beam(self, uvd_zen_even_xx: UVData) -> None:
         uvp = _pspec(uvd_zen_even_xx, None, "mK")
@@ -232,16 +232,16 @@ class TestDeltasq:
         beam_nf_dipole: PSpecBeamUV,
         length_unit: units.UnitBase,
     ) -> None:
+        """Check that Delta^2 of a beam-normalised P(k) is k^3 / (2 pi^2) P(k), in mK^2."""
         uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK", length_unit)
         dsq = uvp.convert_to_deltasq(inplace=False)
-        assert dsq.deltasq is True
-        assert uvp.deltasq is False
-        # norm_units keeps the P(k) normalisation; norm_unit includes k^3
-        assert dsq.norm_units == uvp.norm_units
+        assert not hasattr(uvp, "length_units")
+        # norm_units includes k^3, and length_units keeps the length unit
+        assert dsq.norm_units == ""
         assert dsq.norm_unit == units.dimensionless_unscaled
         assert dsq.units == units.mK**2
-        # k was taken in littleh / Mpc only for the littleh normalisation
-        assert uvp.length_unit == length_unit
+        assert dsq.length_units == unit_helpers.unit_to_string(length_unit)
+        assert dsq.length_unit == uvp.length_unit == length_unit
         k_para = uvp.get_kparas(0).to_value(1 / length_unit)
         k_perp = uvp.get_kperps(0).to_value(1 / length_unit)
         coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)
@@ -250,14 +250,24 @@ class TestDeltasq:
         )
 
     def test_unnormalised(self, uvd_zen_even_xx: UVData) -> None:
+        """Check that Delta^2 of an "Hz sr" P(k) takes k^3 in 1 / Mpc^3."""
         uvp = _pspec(uvd_zen_even_xx, None, "mK")
         uvp.cosmo = conversions.DEFAULT_COSMOLOGY
-        uvp.convert_to_deltasq()
-        assert uvp.norm_units == "Hz sr"
-        assert uvp.norm_unit == units.Hz * units.sr / units.Mpc**3
-        assert uvp.units == units.mK**2 * units.Hz * units.sr / units.Mpc**3
+        dsq = uvp.convert_to_deltasq(inplace=False)
+        assert dsq.norm_units == "Hz sr / Mpc3"
+        assert dsq.units == units.mK**2 * units.Hz * units.sr / units.Mpc**3
+        assert dsq.length_unit == units.Mpc / cu.littleh
+        k_unit = 1 / units.Mpc
+        h0 = cu.with_H0(uvp.cosmo.H0)
+        k_para = uvp.get_kparas(0).to_value(k_unit, h0)
+        k_perp = uvp.get_kperps(0).to_value(k_unit, h0)
+        coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)
+        np.testing.assert_allclose(
+            dsq.data_array[0][..., 0], uvp.data_array[0][..., 0] * coeff, rtol=1e-12
+        )
 
     def test_second_call_raises(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that Delta^2 spectra cannot be converted again."""
         uvp = copy.deepcopy(vanilla_uvp)
         uvp.convert_to_deltasq()
         with pytest.raises(ValueError, match="already been converted"):
@@ -268,54 +278,71 @@ class TestDeltasq:
     def test_hdf5_round_trip(
         self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
     ) -> None:
+        """Check that Delta^2 spectra write their k^3 unit and length unit, and read back."""
         uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK")
         uvp.convert_to_deltasq()
         uvp.write_hdf5(tmp_path / "dsq.h5")
         with h5py.File(tmp_path / "dsq.h5", "r") as f:
-            assert bool(f.attrs["deltasq"]) is True
+            assert "deltasq" not in f.attrs
+            assert f.attrs["norm_units"] == ""
+            assert f.attrs["length_units"] == "Mpc / littleh"
             assert f["data_spw0"].attrs["unit"] == "mK2"
         new = _read(tmp_path / "dsq.h5")
-        assert new.deltasq is True
         assert new.units == units.mK**2
+        assert new.length_unit == units.Mpc / cu.littleh
         assert new == uvp
 
-    def test_combine_requires_same_deltasq(self, vanilla_uvp: UVPSpec) -> None:
+    def test_deltasq_attr_read(
+        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, tmp_path: Path
+    ) -> None:
+        """Check that a file with a deltasq attribute and P(k) norm_units reads as Delta^2."""
+        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK")
+        uvp.convert_to_deltasq()
+        path = tmp_path / "dsq.h5"
+        uvp.write_hdf5(path)
+        # the layout of version 2 files written before v1.0
+        with h5py.File(path, "a") as f:
+            f.attrs["norm_units"] = "Mpc3 / littleh3"
+            f.attrs["deltasq"] = True
+            del f.attrs["length_units"]
+        new = _read(path)
+        assert new.norm_units == ""
+        assert new.length_units == "Mpc / littleh"
+        assert new == uvp
+
+    def test_combine_refuses_pk_with_deltasq(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that P(k) and Delta^2 spectra cannot be combined."""
         uvp1 = copy.deepcopy(vanilla_uvp)
         uvp2 = copy.deepcopy(vanilla_uvp)
         uvp2.select(spws=[0], inplace=True)
         uvp2.convert_to_deltasq()
-        with pytest.raises(AssertionError, match="deltasq"):
+        with pytest.raises(AssertionError, match="norm_units"):
             uvpspec.combine_uvpspec([uvp1, uvp2], verbose=False)
 
     @pytest.mark.parametrize(
-        "legacy,canonical,unit",
+        "legacy,norm_units,length_unit",
         [
-            (
-                "h^-3 Mpc^3 k^3 / (2pi^2)",
-                "Mpc3 / littleh3",
-                units.dimensionless_unscaled,
-            ),
-            ("Mpc^3 k^3 / (2pi^2)", "Mpc3", units.dimensionless_unscaled),
+            ("h^-3 Mpc^3 k^3 / (2pi^2)", "", units.Mpc / cu.littleh),
+            ("Mpc^3 k^3 / (2pi^2)", "", units.Mpc),
             (
                 "Hz str [beam normalization not specified] k^3 / (2pi^2)",
-                "Hz sr",
-                units.Hz * units.sr / units.Mpc**3,
+                "Hz sr / Mpc3",
+                units.Mpc / cu.littleh,
             ),
         ],
+        ids=["littleh", "Mpc", "Hz sr"],
     )
     def test_legacy_suffix_read(
-        self, tmp_path: Path, legacy: str, canonical: str, unit
+        self, tmp_path: Path, legacy: str, norm_units: str, length_unit
     ) -> None:
+        """Check that a v0.x Delta^2 norm_units gets the k^3 unit and keeps its length unit."""
         path = tmp_path / "legacy.h5"
         shutil.copy(DATA_PATH / "test_uvp.h5", path)
         _set_attrs(path, norm_units=legacy)
         uvp = _read(path)
-        assert uvp.deltasq is True
-        assert uvp.norm_units == canonical
-        assert uvp.norm_unit == unit
-        assert uvp.units == unit_helpers.uncalib**2 * unit
-        # little h of k is still known from norm_units
-        assert unit_helpers.is_littleh(uvp.norm_units) is ("h^-3" in legacy)
+        assert uvp.norm_units == norm_units
+        assert uvp.units == unit_helpers.uncalib**2 * uvp.norm_unit
+        assert uvp.length_unit == length_unit
 
 
 class TestHdf5Units:
@@ -323,7 +350,7 @@ class TestHdf5Units:
         uvp = _read(DATA_PATH / "test_uvp.h5")
         assert uvp.norm_units == "Mpc3 / littleh3"
         assert uvp.vis_units == "uncalib"
-        assert uvp.deltasq is False
+        assert not hasattr(uvp, "length_units")
         assert uvp.units == unit_helpers.uncalib**2 * MPC3_H3
 
     @pytest.mark.parametrize(
@@ -349,7 +376,7 @@ class TestHdf5Units:
             assert "deltasq" not in grp.attrs
         psc = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)
         uvp = psc.get_pspec(lf.CONTAINER_GROUP, name)
-        assert uvp.deltasq is False
+        assert not hasattr(uvp, "length_units")
         assert uvp.norm_units == norm_units
         assert uvp.vis_units == vis_units
 
@@ -377,16 +404,15 @@ class TestHdf5Units:
         with h5py.File(path, "a") as f:
             f.attrs["norm_units"] = norm_units
             f.attrs["vis_units"] = vis_units
-            # files written before this change had no deltasq attribute and
-            # no unit attributes on the power spectrum datasets
-            del f.attrs["deltasq"]
+            # files written before this change had no unit attributes on the
+            # power spectrum datasets
             for name in f:
                 if name.startswith(("data", "cov", "stats")):
                     del f[name].attrs["unit"]
         uvp = _read(path)
         assert uvp.norm_units == canonical_norm
         assert uvp.vis_units == canonical_vis
-        assert uvp.deltasq is False
+        assert not hasattr(uvp, "length_units")
 
     def test_pspec_dataset_units(self, tmp_path: Path) -> None:
         psc = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)

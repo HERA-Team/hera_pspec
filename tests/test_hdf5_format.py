@@ -466,6 +466,27 @@ class TestLegacyFiles:
         assert isinstance(uvp.cosmo, FLRW)
         assert uvp.cosmo.is_equivalent(conversions.LEGACY_COSMOLOGY)
 
+    def test_container_deltasq_window_k_grids(self, tmp_path: Path) -> None:
+        """Check that the littleh / Mpc window k grids of a v0.x Delta^2 file stay as they are."""
+        path = tmp_path / "container.h5"
+        shutil.copy(lf.CONTAINER_FILE, path)
+        with h5py.File(path, "r+") as f:
+            grp = f[lf.CONTAINER_GROUP][lf.UVP_WINDOWS_NAME]
+            assert grp.attrs["norm_units"] == "h^-3 Mpc^3"
+            grp.attrs["norm_units"] = "h^-3 Mpc^3 k^3 / (2pi^2)"
+        pk = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)
+        pk = pk.get_pspec(lf.CONTAINER_GROUP, lf.UVP_WINDOWS_NAME)
+        psc = PSpecContainer(str(path), mode="r", keep_open=False)
+        dsq = psc.get_pspec(lf.CONTAINER_GROUP, lf.UVP_WINDOWS_NAME)
+        assert dsq.norm_units == ""
+        assert dsq.length_unit == units.Mpc / cu.littleh
+        np.testing.assert_array_equal(
+            dsq.window_function_kperp[0], pk.window_function_kperp[0]
+        )
+        np.testing.assert_array_equal(
+            dsq.window_function_kpara[0], pk.window_function_kpara[0]
+        )
+
     def test_container_rewritten_as_v2(self, tmp_path: Path) -> None:
         psc = PSpecContainer(str(lf.CONTAINER_FILE), mode="r", keep_open=False)
         legacy = psc.get_pspec(lf.CONTAINER_GROUP, lf.UVP_WINDOWS_NAME)

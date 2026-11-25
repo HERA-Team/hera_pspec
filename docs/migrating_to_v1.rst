@@ -44,10 +44,12 @@ Breaking changes
   v0.x they gave h/Mpc numbers for these objects.
 * ``UVPSpec.set_cosmology`` no longer rescales an ``Mpc3`` object by about
   h³. That was a bug.
-* ``convert_to_deltasq`` sets the new ``deltasq`` flag and leaves
-  ``norm_units`` alone. Calling it twice raises ``ValueError``.
-  ``combine_uvpspec`` refuses objects with different ``deltasq`` or
-  ``normalization``.
+* ``convert_to_deltasq`` multiplies ``norm_units`` by the unit of k³ (so a
+  ``"Mpc3 / littleh3"`` spectrum gets ``norm_units = ""``) instead of
+  appending ``" k^3 / (2pi^2)"``, and stores the length unit in the new
+  ``length_units`` string. Calling it twice raises ``ValueError``.
+  ``combine_uvpspec`` refuses objects with different ``norm_units``,
+  ``length_units`` or ``normalization``.
 * ``UVPSpec.set_stats`` converts a Quantity to ``uvp.units`` and raises
   ``ValueError`` if it cannot. It used to drop the unit silently.
 * ``UVWindow.kunits`` is ``littleh / Mpc`` (with ``little_h=True``). In v0.x it
@@ -131,6 +133,12 @@ Removed in v1.0
   in littleh/Mpc. Objects normalised in ``Mpc3 / littleh3`` or ``Mpc3`` are
   unchanged. ``read_hdf5`` converts the 1/Mpc grids of older files of such
   objects to littleh/Mpc with the file's H0.
+* The ``UVPSpec.deltasq`` attribute is gone: the units say whether spectra
+  are Delta². After ``convert_to_deltasq``, ``norm_units`` includes the k³
+  unit and ``length_units`` holds the length unit. Files are no longer
+  written with a ``deltasq`` attribute; files that have one read as before.
+  ``unit_helpers.norm_unit`` is gone (use ``parse_pspec_unit``), and
+  ``unit_helpers.pspec_unit`` takes no ``deltasq`` argument.
 
 
 Deprecations (removal planned for v2.0)
@@ -376,15 +384,17 @@ converts a legacy string to the new one.
   hp.unit_helpers.parse_pspec_unit("Mpc3 / littleh3")   # Unit("Mpc3 / littleh3")
   hp.unit_helpers.canonical_norm_units("h^-3 Mpc^3")    # ('Mpc3 / littleh3', False)
 
-``convert_to_deltasq`` now sets ``deltasq`` and keeps ``norm_units``; ``units``
-includes the k³ factor. It can be applied only once.
+``convert_to_deltasq`` multiplies ``norm_units`` by the unit of k³ and keeps
+the length unit in ``length_units``, since the Delta² units no longer tell
+it. It can be applied only once.
 
 .. code-block:: python
 
   dsq = uvp.convert_to_deltasq(inplace=False)
-  dsq.deltasq      # True
-  dsq.norm_units   # 'Mpc3 / littleh3'
-  dsq.units        # Unit("mK2")
+  dsq.norm_units     # ''  (Mpc3 / littleh3 times (littleh / Mpc)^3)
+  dsq.units          # Unit("mK2")
+  dsq.length_units   # 'Mpc / littleh'
+  dsq.length_unit    # Unit("Mpc / littleh")
 
 
 Delays and the scalar
@@ -554,7 +564,8 @@ Reading old files
 
 Files written by v0.x read without changes. Legacy ``norm_units`` strings
 (``"h^-3 Mpc^3"``, ``"Hz str"``, ``"... k^3 / (2pi^2)"``) are mapped to the
-new strings (and to ``deltasq``), and the cosmology dictionary becomes an
+new strings (for Delta² spectra, with the k³ unit in ``norm_units`` and the
+length unit in ``length_units``), and the cosmology dictionary becomes an
 astropy object.
 
 .. code-block:: python

@@ -345,9 +345,8 @@ def canonical_norm_units(norm_units):
     hera_pspec v0.x files (see :func:`norm_units_from_legacy_string`) are
     mapped too. A legacy string ending in ``" k^3 / (2pi^2)"`` (a Delta^2
     spectrum) maps to the canonical form of the string without the suffix,
-    and the suffix is reported separately: ``UVPSpec.norm_units`` holds the
-    P(k) normalisation and ``UVPSpec.deltasq`` whether the spectra are
-    Delta^2.
+    and the suffix is reported separately (``UVPSpec.read_hdf5`` then
+    multiplies the P(k) normalisation by the unit of k^3).
 
     Parameters
     ----------
@@ -381,9 +380,9 @@ def is_littleh(unit):
     Whether a unit contains ``astropy.cosmology.units.littleh``.
 
     Used to tell power spectra normalised in ``Mpc^3 / littleh^3`` from those
-    in ``Mpc^3``. Pass ``UVPSpec.norm_units`` (the P(k) normalisation) rather
-    than ``UVPSpec.norm_unit``: after ``UVPSpec.convert_to_deltasq`` the
-    littleh factors of ``norm_unit`` cancel against those of k^3.
+    in ``Mpc^3``. After ``UVPSpec.convert_to_deltasq`` the littleh factors of
+    ``norm_units`` cancel against those of k^3, so pass
+    ``UVPSpec.length_unit`` to tell littleh spectra apart whatever their form.
 
     Parameters
     ----------
@@ -497,24 +496,6 @@ def spw_range_to_hz(spw_range):
 
 
 @functools.lru_cache(maxsize=64)
-def norm_unit(norm_units, deltasq):
-    """
-    Return the normalisation unit of a ``norm_units`` string, cached.
-
-    For Delta^2 spectra (``deltasq``), the P(k) normalisation is multiplied
-    by the unit of k^3: ``(littleh / Mpc)**3`` if it contains littleh, else
-    ``Mpc**-3`` (the k that ``UVPSpec.convert_to_deltasq`` uses).
-    """
-    unit = parse_pspec_unit(norm_units)
-    if deltasq:
-        if is_littleh(unit):
-            unit = unit * (cu.littleh / u.Mpc) ** 3
-        else:
-            unit = unit * u.Mpc**-3
-    return unit
-
-
-@functools.lru_cache(maxsize=64)
-def pspec_unit(vis_units, norm_units, deltasq):
-    """Return ``vis_unit**2 * norm_unit`` for the strings and flag, cached."""
-    return parse_pspec_unit(vis_units) ** 2 * norm_unit(norm_units, deltasq)
+def pspec_unit(vis_units, norm_units):
+    """Return ``vis_unit**2 * norm_unit`` for the two strings, cached."""
+    return parse_pspec_unit(vis_units) ** 2 * parse_pspec_unit(norm_units)

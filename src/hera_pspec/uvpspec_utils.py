@@ -4,6 +4,7 @@ import warnings
 
 import astropy.cosmology.units as cu
 import numpy as np
+from astropy import units
 from pyuvdata.utils import polnum2str, polstr2num
 
 from . import conversions, unit_helpers, utils
@@ -805,13 +806,14 @@ def _select(
             # The k grids are read into 1 / uvp.length_unit. Version 2 files
             # give their unit in an attribute; v0.x files have them in
             # littleh / Mpc for littleh normalisations and in 1 / Mpc
-            # otherwise, Hz sr spectra included. littleh is converted with the
-            # H0 of the file's cosmology or, if it has none, of the default
-            # cosmology that UVWindow.from_uvpspec then used.
+            # otherwise, Hz sr spectra (P(k) or Delta^2) included. littleh is
+            # converted with the H0 of the file's cosmology or, if it has
+            # none, of the default cosmology that UVWindow.from_uvpspec used.
             kgrid_unit = uvp.length_unit**-1
+            hz_sr = units.Hz in uvp.norm_unit.bases
             v0_kgrid_unit = (
                 "littleh / Mpc"
-                if unit_helpers.is_littleh(uvp.norm_units)
+                if unit_helpers.is_littleh(uvp.length_unit) and not hz_sr
                 else "1 / Mpc"
             )
             if hasattr(uvp, "cosmo"):

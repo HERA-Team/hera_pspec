@@ -491,11 +491,9 @@ def test_convert_deltasq(uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV) -
         ).all()
     # P(k) in mK^2 Mpc^3 / littleh^3 becomes Delta^2 in mK^2
     assert uvp.norm_unit == units.Mpc**3 / cu.littleh**3
-    assert dsq.norm_units == uvp.norm_units
-    assert dsq.norm_unit == units.dimensionless_unscaled
+    assert dsq.norm_units == ""
     assert dsq.units == uvp.vis_unit**2
-    assert dsq.deltasq is True
-    assert uvp.deltasq is False
+    assert dsq.length_unit == uvp.length_unit
 
 
 LITTLEH_LENGTH = units.Mpc / cu.littleh
@@ -613,9 +611,25 @@ class TestUnitGetters:
     def test_length_unit_rejects_other_units(self, vanilla_uvp: UVPSpec) -> None:
         """Check that a norm_units that is not a normalisation has no length unit."""
         uvp = _with_norm_units(vanilla_uvp, "Mpc2")
-        with pytest.raises(ValueError, match="not a power spectrum normalisation"):
+        with pytest.raises(ValueError, match="not a P\\(k\\) normalisation"):
             uvp.length_unit
         with pytest.raises(AssertionError, match="invalid norm_units"):
+            uvp.check()
+
+    def test_length_units_set_the_length_unit(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that length_units gives length_unit when the norm_units cannot."""
+        uvp = _with_norm_units(vanilla_uvp, "")
+        with pytest.raises(ValueError, match="length_units must be set"):
+            uvp.length_unit
+        uvp.length_units = "Mpc"
+        assert uvp.length_unit == units.Mpc
+        uvp.check()
+
+    def test_length_units_must_match_norm_units(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that check() rejects length_units that disagree with norm_units."""
+        uvp = _with_norm_units(vanilla_uvp, "Mpc3")
+        uvp.length_units = "Mpc / littleh"
+        with pytest.raises(AssertionError, match="not a P\\(k\\) or Delta\\^2"):
             uvp.check()
 
     def test_length_unit_is_read_only(self, vanilla_uvp: UVPSpec) -> None:
