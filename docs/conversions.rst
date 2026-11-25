@@ -35,9 +35,10 @@ Units of a ``UVPSpec``
   same as strings.
 * :meth:`~hera_pspec.UVPSpec.get_param_unit` gives the declared unit of an
   attribute, e.g. ``Unit("s")`` for ``dly_array``.
-* :meth:`~hera_pspec.UVPSpec.window_k_unit` and
-  :meth:`~hera_pspec.UVPSpec.get_window_function_kgrid` give the k unit and
-  grid of the exact window functions.
+* :attr:`~hera_pspec.UVPSpec.length_unit` is the cosmological length unit of
+  the power spectra; k values, including the grids of the exact window
+  functions (:meth:`~hera_pspec.UVPSpec.get_window_function_kgrid`), are in
+  its inverse.
 * :func:`hera_pspec.unit_helpers.parse_pspec_unit` parses ``norm_units`` and
   ``vis_units`` strings, including the legacy strings of v0.x files.
 

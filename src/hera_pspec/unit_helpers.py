@@ -90,7 +90,9 @@ def unit_to_string(unit):
     return unit.to_string()
 
 
-def convert_from_stored_unit(value, stored_unit, declared_unit, name):
+def convert_from_stored_unit(
+    value, stored_unit, declared_unit, name, equivalencies=None
+):
     """
     Convert a value read from file to its declared unit.
 
@@ -106,6 +108,10 @@ def convert_from_stored_unit(value, stored_unit, declared_unit, name):
         Unit the value must be returned in.
     name : str
         Name of the parameter, used in error messages.
+    equivalencies : list, optional
+        Astropy equivalencies for the conversion, e.g.
+        ``astropy.cosmology.units.with_H0(cosmo.H0)`` to convert between
+        littleh / Mpc and 1 / Mpc. Default: None.
 
     Returns
     -------
@@ -133,12 +139,12 @@ def convert_from_stored_unit(value, stored_unit, declared_unit, name):
         ) from err
     if unit == declared_unit:
         return value
-    if not unit.is_equivalent(declared_unit):
+    if not unit.is_equivalent(declared_unit, equivalencies):
         raise ValueError(
             f"{name} is stored in unit '{stored_unit}', which is not equivalent "
             f"to its declared unit '{declared_unit}'"
         )
-    return unit.to(declared_unit, value)
+    return unit.to(declared_unit, value, equivalencies)
 
 
 # Legacy (v0.x) norm_units strings. The values are (unit, unit of k) where the

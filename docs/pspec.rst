@@ -170,5 +170,5 @@ The ``UVPSpec`` class
 The most relevant methods from ``UVPSpec`` are listed below. See :any:`uvpspec` for a full listing of all methods provided by ``UVPSpec``.
 
 .. autoclass:: hera_pspec.UVPSpec
-  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kperps, get_kparas, get_blpair_seps, units, norm_unit, vis_unit, get_param_unit, window_k_unit, get_window_function_kgrid, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
+  :members: __init__, get_data, get_wgts, get_integrations, get_nsamples, get_dlys, get_kperps, get_kparas, get_blpair_seps, units, norm_unit, vis_unit, get_param_unit, length_unit, get_window_function_kgrid, select, read_hdf5, write_hdf5, generate_noise_spectra, average_spectra, fold_spectra, get_blpair_groups_from_bl_groups
   :noindex:

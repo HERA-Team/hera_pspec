@@ -1412,8 +1412,8 @@ def spherical_wf_from_uvp(
         1D array of ascending |k| bin edges, in littleh / Mpc
         (``cu.littleh / u.Mpc``) or 1 / Mpc. They are converted with
         ``cu.with_H0(uvp_in.cosmo.H0)`` to the k unit of the stored window
-        functions (littleh / Mpc if ``uvp_in.norm_units`` contain littleh,
-        else 1 / Mpc). Plain numbers raise ``astropy.units.UnitTypeError``.
+        functions, ``1 / uvp_in.length_unit``. Plain numbers raise
+        ``astropy.units.UnitTypeError``.
 
     kbin_edges_theory : astropy.units.Quantity, optional
         1D array of ascending |k| bin edges, in the same units as
@@ -1461,8 +1461,8 @@ def spherical_wf_from_uvp(
     _require_uvpspec(uvp_in, "uvp_in")
 
     # bin the k values in the unit of the stored window function k grids
-    k_unit = uvp_in.window_k_unit()
-    length_unit = 1 / k_unit
+    length_unit = uvp_in.length_unit
+    k_unit = length_unit**-1
     k_equivalencies = _k_equivalencies(uvp_in)
     kbin_edges = _k_bins_in_unit(kbin_edges, k_unit, k_equivalencies, "kbin_edges")
 

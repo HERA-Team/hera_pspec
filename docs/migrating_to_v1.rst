@@ -55,7 +55,7 @@ Breaking changes
   ``UVWindow.kunits`` follows ``UVWindow.little_h`` and cannot be set itself,
   and ``UVWindow.check_kunits`` returns the converted Quantity.
 * ``UVPSpec.get_param_unit`` returns ``None`` for ``window_function_kperp`` and
-  ``window_function_kpara``; use ``UVPSpec.window_k_unit()`` for these.
+  ``window_function_kpara``: they are in ``1 / uvp.length_unit``.
 * The default cosmology is ``astropy.cosmology.Planck18`` (see `Cosmology`_).
   In v0.x it was a Planck 2015 ``LambdaCDM`` without radiation, now
   ``conversions.LEGACY_COSMOLOGY``. Results computed with the default move
@@ -122,6 +122,15 @@ Removed in v1.0
   ``unit_helpers.parse_pspec_unit``, ``canonical_unit_string`` or
   ``is_littleh``; ``read_hdf5`` still converts them in old files, and
   ``unit_helpers.canonical_norm_units`` converts one by hand.
+* ``UVPSpec.window_k_unit()`` is gone: the k grids of the exact window
+  functions are in ``1 / uvp.length_unit``, like the k getters. For spectra
+  that were not normalised with a beam (``norm_units = "Hz sr"``) this is
+  littleh/Mpc; v0.x computed their window functions on a 1/Mpc grid, so
+  ``get_exact_window_functions`` now gives them on a different grid (in
+  littleh/Mpc, with different bins), and ``spherical_wf_from_uvp`` bins them
+  in littleh/Mpc. Objects normalised in ``Mpc3 / littleh3`` or ``Mpc3`` are
+  unchanged. ``read_hdf5`` converts the 1/Mpc grids of older files of such
+  objects to littleh/Mpc with the file's H0.
 
 
 Deprecations (removal planned for v2.0)
@@ -278,10 +287,10 @@ hour, so those bins were in hour/Mpc, which now raise ``ValueError``. Use
   kbins = np.arange(0.1, 1.0, 0.05) * cu.littleh / u.Mpc
   sph_wf = uvw.get_spherical_wf(kbins, bl_lens=[14.6, 29.2] * u.m)
 
-For exact window functions stored on a ``UVPSpec``, ``uvp.window_k_unit()``
-gives the unit of ``window_function_kperp`` and ``window_function_kpara``
-(littleh/Mpc if ``norm_units`` contain littleh, else 1/Mpc), and
-``uvp.get_window_function_kgrid(spw)`` returns the grid as Quantities.
+Exact window functions stored on a ``UVPSpec`` have their k grids
+(``window_function_kperp`` and ``window_function_kpara``) in
+``1 / uvp.length_unit``, the unit of the k getters, and
+``uvp.get_window_function_kgrid(spw)`` returns them as Quantities.
 
 
 Cosmology

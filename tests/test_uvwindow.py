@@ -671,8 +671,8 @@ class TestUVWindowFromUvpspec:
             uvw.freq_array, uvp.freq_array[uvp.spw_to_freq_indices(0)]
         )
         assert uvw.taper == uvp.taper
-        # the k unit follows the UVPSpec's normalisation (littleh / Mpc or 1 / Mpc)
-        assert uvw.kunits == uvp.window_k_unit()
+        # k in 1 / the UVPSpec's length unit (littleh / Mpc or 1 / Mpc)
+        assert uvw.kunits == 1 / uvp.length_unit
         assert uvw.pols == uvputils.polpair_int2tuple(
             uvp.polpair_array[ipol], pol_strings=True
         )
@@ -692,10 +692,10 @@ class TestUVWindowFromUvpspec:
         [
             ("Mpc3 / littleh3", cu.littleh / units.Mpc),
             ("Mpc3", units.Mpc ** (-1)),
-            # not cosmologically normalised: 1 / Mpc, unlike get_kparas'
-            # default (littleh), see UVPSpec.window_k_unit
-            ("Hz sr", units.Mpc ** (-1)),
+            # not cosmologically normalised: the length unit is Mpc / littleh
+            ("Hz sr", cu.littleh / units.Mpc),
         ],
+        ids=["littleh", "Mpc", "Hz sr"],
     )
     def test_kunits_follow_norm_units(
         self,
@@ -705,7 +705,6 @@ class TestUVWindowFromUvpspec:
     ) -> None:
         uvp = copy.deepcopy(uvp_for_uvwindow[0])
         uvp.norm_units = norm_units
-        assert uvp.window_k_unit() == kunits
         uvw = uvwindow.UVWindow.from_uvpspec(
             uvp, ipol=0, spw=0, ftbeam=DATA_PATH / basename
         )

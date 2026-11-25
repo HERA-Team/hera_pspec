@@ -876,8 +876,8 @@ class UVWindow:
         else:
             cosmo = uvp.cosmo
 
-        # units: the k unit of the window functions stored on uvp
-        little_h = unit_helpers.is_littleh(uvp.window_k_unit())
+        # units: k in 1 / uvp.length_unit
+        little_h = unit_helpers.is_littleh(uvp.length_unit)
 
         # spectral window
         if spw >= uvp.Nspws:

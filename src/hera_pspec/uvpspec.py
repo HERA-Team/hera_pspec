@@ -181,12 +181,11 @@ class UVPSpec:
             expected_type=np.float64,
             form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
         )
-        # The unit of the exact window function k grids depends on norm_units,
-        # so it is not declared on the parameter: see window_k_unit()
+        # The unit of the exact window function k grids is 1 / length_unit,
+        # which depends on norm_units, so it is not declared on the parameter
         desc = (
             "Dictionary of bandpowers given the kperp grid used to compute the "
-            "window functions, in the unit given by window_k_unit() "
-            "(littleh / Mpc or 1 / Mpc)."
+            "window functions, in 1 / length_unit (littleh / Mpc or 1 / Mpc)."
         )
         self._window_function_kperp = PSpecParam(
             "window_function_kperp",
@@ -196,8 +195,7 @@ class UVPSpec:
         )
         desc = (
             "Dictionary of bandpowers given the kparallel grid used to compute "
-            "the window functions, in the unit given by window_k_unit() "
-            "(littleh / Mpc or 1 / Mpc)."
+            "the window functions, in 1 / length_unit (littleh / Mpc or 1 / Mpc)."
         )
         self._window_function_kpara = PSpecParam(
             "window_function_kpara",
@@ -1179,31 +1177,6 @@ class UVPSpec:
             "normalisation: expected 'Mpc3 / littleh3', 'Mpc3' or 'Hz sr'."
         )
 
-    def window_k_unit(self):
-        """
-        Unit of the k grids of the exact window functions.
-
-        ``cu.littleh / u.Mpc`` if ``norm_units`` (the P(k) normalisation)
-        contains littleh, else ``1 / u.Mpc``. This is the unit
-        :meth:`get_exact_window_functions` (through
-        ``UVWindow.from_uvpspec``) computes ``window_function_kperp`` and
-        ``window_function_kpara`` in, and the unit
-        ``grouping.spherical_wf_from_uvp`` bins them in.
-
-        For spectra that were not cosmologically normalised (``Hz sr``) this
-        is 1 / Mpc, whereas :attr:`length_unit` (used by
-        :meth:`get_kperps` and :meth:`get_kparas`) gives littleh / Mpc. Both
-        are the conventions of hera_pspec v0.x, kept so that stored window
-        functions and k values do not change.
-
-        Returns
-        -------
-        astropy.units.UnitBase
-        """
-        if unit_helpers.is_littleh(self.norm_units):
-            return cu.littleh / units.Mpc
-        return units.Mpc**-1
-
     def get_window_function_kgrid(self, spw):
         """
         Return the k grids of the exact window functions of a spectral window.
@@ -1217,7 +1190,7 @@ class UVPSpec:
         -------
         kperp, kpara : astropy.units.Quantity
             ``window_function_kperp[spw]`` and ``window_function_kpara[spw]``
-            (shape ``(Nk, Npols)``) in :meth:`window_k_unit`.
+            (shape ``(Nk, Npols)``) in ``1 / self.length_unit``.
 
         Raises
         ------
@@ -1231,7 +1204,7 @@ class UVPSpec:
                 "This object has no exact window functions; compute them with "
                 "get_exact_window_functions."
             )
-        k_unit = self.window_k_unit()
+        k_unit = self.length_unit**-1
         return (
             units.Quantity(self.window_function_kperp[spw], k_unit),
             units.Quantity(self.window_function_kpara[spw], k_unit),
@@ -2211,6 +2184,18 @@ class UVPSpec:
         # store the canonical astropy form instead
         self._canonicalize_unit_strings()
 
+        # handle cosmo (before _select, which converts the window function k
+        # grids with its H0): prefer the astropy YAML of version 2 files, and check
+        # it against the v0.x dict string kept next to it
+        cosmo_yaml = grp.attrs.get("cosmo_yaml", None)
+        if cosmo_yaml is not None:
+            self.cosmo = self._cosmo_from_hdf5_attrs(
+                cosmo_yaml, getattr(self, "cosmo", None)
+            )
+        elif hasattr(self, "cosmo"):
+            # legacy files: only the dict string
+            self.cosmo = unit_helpers.cosmology_from_v0_attr(self.cosmo)
+
         # Use _select() to pick out only the requested baselines/spws
         if just_meta:
             uvputils._select(
@@ -2235,17 +2220,6 @@ class UVPSpec:
                 polpairs=polpairs,
                 h5file=grp,
             )
-
-        # handle cosmo: prefer the astropy YAML of version 2 files, and check
-        # it against the v0.x dict string kept next to it
-        cosmo_yaml = grp.attrs.get("cosmo_yaml", None)
-        if cosmo_yaml is not None:
-            self.cosmo = self._cosmo_from_hdf5_attrs(
-                cosmo_yaml, getattr(self, "cosmo", None)
-            )
-        elif hasattr(self, "cosmo"):
-            # legacy files: only the dict string
-            self.cosmo = unit_helpers.cosmology_from_v0_attr(self.cosmo)
 
         # BACKWARDS COMPATIBILITY for files with Nblpairts.
         # Check whether we are reading a pre Nbltpairs file by looking for the
@@ -2477,7 +2451,7 @@ class UVPSpec:
         the unit string in a ``unit`` attribute on datasets (including
         ``integration_spw*``) or a ``<name>_unit`` attribute next to group
         attributes. ``window_function_kperp/kpara_spw*`` are stored in, and
-        carry the ``unit`` attribute of, :meth:`window_k_unit`. Quantity values
+        carry the ``unit`` attribute of, ``1 / length_unit``. Quantity values
         are converted to the declared unit first. The cosmology is stored
         twice: ``cosmo`` holds the ``str()`` of the parameter dict
         (``conversions.params_from_cosmology``), as in v0.x (which can still
@@ -2555,8 +2529,8 @@ class UVPSpec:
         cov_unit = unit_helpers.unit_to_string(pspec_unit**2)
         window_unit = unit_helpers.unit_to_string(units.dimensionless_unscaled)
         if getattr(self, "exact_windows", False):
-            window_k_unit = self.window_k_unit()
-            window_k_unit_string = unit_helpers.unit_to_string(window_k_unit)
+            kgrid_unit = self.length_unit**-1
+            kgrid_unit_string = unit_helpers.unit_to_string(kgrid_unit)
 
         # Iterate over spectral windows and create datasets
         for i in np.unique(self.spw_array):
@@ -2589,19 +2563,19 @@ class UVPSpec:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
                         data=unit_helpers.value_in_unit(
-                            self.window_function_kperp[i], window_k_unit
+                            self.window_function_kperp[i], kgrid_unit
                         ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = window_k_unit_string
+                    dset.attrs["unit"] = kgrid_unit_string
                     dset = group.create_dataset(
                         f"window_function_kpara_spw{i}",
                         data=unit_helpers.value_in_unit(
-                            self.window_function_kpara[i], window_k_unit
+                            self.window_function_kpara[i], kgrid_unit
                         ),
                         dtype=np.float64,
                     )
-                    dset.attrs["unit"] = window_k_unit_string
+                    dset.attrs["unit"] = kgrid_unit_string
             if hasattr(self, "cov_array_real"):
                 dset = group.create_dataset(
                     f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
@@ -3021,7 +2995,7 @@ class UVPSpec:
                 declared_unit = a.unit
                 if p in ("window_function_kperp", "window_function_kpara"):
                     # unit set by norm_units rather than declared
-                    declared_unit = self.window_k_unit()
+                    declared_unit = self.length_unit**-1
                 if isinstance(value, units.Quantity):
                     self._check_quantity_unit(p, value, declared_unit)
                 elif p in self._dicts and isinstance(value, dict):

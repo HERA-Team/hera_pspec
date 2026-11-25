@@ -112,25 +112,26 @@ class TestWriteVersion2:
     def test_window_function_k_units(
         self, uvp_windows: UVPSpec, tmp_path: Path
     ) -> None:
+        """Check that the window k grids of a littleh object are written in littleh / Mpc."""
         path = _write(uvp_windows, tmp_path / "uvp.h5")
-        assert uvp_windows.window_k_unit() == cu.littleh / units.Mpc
+        assert uvp_windows.norm_units == "Mpc3 / littleh3"
         with h5py.File(path, "r") as f:
             for name in ("window_function_kperp_spw0", "window_function_kpara_spw0"):
                 assert f[name].attrs["unit"] == "littleh / Mpc"
         assert _read(path) == uvp_windows
 
-    def test_window_function_k_units_inverse_mpc(
+    def test_window_function_k_units_hz_sr(
         self, uvp_exact_wfs: UVPSpec, tmp_path: Path
     ) -> None:
-        # an "Hz sr" object: the window functions are on a 1 / Mpc grid
+        """Check that an "Hz sr" object writes and reads its window k grids in littleh / Mpc."""
         uvp = uvp_exact_wfs
-        assert uvp.window_k_unit() == units.Mpc ** (-1)
+        assert uvp.norm_units == "Hz sr"
         path = _write(uvp, tmp_path / "uvp.h5")
         with h5py.File(path, "r") as f:
             for spw in uvp.spw_array:
                 for name in ("kperp", "kpara"):
                     dset = f[f"window_function_{name}_spw{spw}"]
-                    assert dset.attrs["unit"] == "1 / Mpc"
+                    assert dset.attrs["unit"] == "littleh / Mpc"
                     np.testing.assert_array_equal(
                         dset[()], getattr(uvp, f"window_function_{name}")[spw]
                     )
@@ -142,19 +143,8 @@ class TestWriteVersion2:
                 uvp.get_window_function_kgrid(spw),
                 strict=True,
             ):
-                assert got.unit == expected.unit
+                assert got.unit == cu.littleh / units.Mpc
                 np.testing.assert_array_equal(got.value, expected.value)
-
-    def test_window_k_unit_with_littleh_on_inverse_mpc_raises(
-        self, uvp_exact_wfs: UVPSpec, tmp_path: Path
-    ) -> None:
-        def edit(f):
-            f["window_function_kpara_spw0"].attrs["unit"] = "littleh / Mpc"
-
-        src = _write(uvp_exact_wfs, tmp_path / "windows.h5")
-        path = _edited_copy(src, tmp_path / "bad.h5", edit)
-        with pytest.raises(ValueError, match="window_function_kpara"):
-            _read(path)
 
     def test_cosmo_attrs(self, vanilla_uvp: UVPSpec, tmp_path: Path) -> None:
         path = _write(vanilla_uvp, tmp_path / "uvp.h5")
@@ -350,15 +340,39 @@ class TestReadVersion2:
         with pytest.raises(ValueError, match="time_1_array .*not a valid unit"):
             _read(path)
 
-    def test_window_k_unit_without_littleh_raises(
+    def test_window_k_grid_in_inverse_mpc_converts(
         self, uvp_windows: UVPSpec, tmp_path: Path
     ) -> None:
+        """Check that a littleh object's k grid stored in 1 / Mpc reads back in littleh / Mpc."""
+        h = uvp_windows.cosmo.h
+
         def edit(f):
-            f["window_function_kperp_spw0"].attrs["unit"] = "1 / Mpc"
+            dset = f["window_function_kperp_spw0"]
+            dset[...] = dset[()] * h
+            dset.attrs["unit"] = "1 / Mpc"
+
+        src = _write(uvp_windows, tmp_path / "windows.h5")
+        path = _edited_copy(src, tmp_path / "inverse_mpc.h5", edit)
+        new = _read(path)
+        np.testing.assert_allclose(
+            new.window_function_kperp[0],
+            uvp_windows.window_function_kperp[0],
+            rtol=1e-14,
+        )
+
+    def test_window_k_grid_in_other_unit_raises(
+        self, uvp_windows: UVPSpec, tmp_path: Path
+    ) -> None:
+        """Check that a window k grid stored in a unit that is not a wavenumber raises."""
+
+        def edit(f):
+            f["window_function_kpara_spw0"].attrs["unit"] = "Hz"
 
         src = _write(uvp_windows, tmp_path / "windows.h5")
         path = _edited_copy(src, tmp_path / "bad.h5", edit)
-        with pytest.raises(ValueError, match="window_function_kperp"):
+        with pytest.raises(
+            ValueError, match="window_function_kpara is stored in unit 'Hz'"
+        ):
             _read(path)
 
     @pytest.mark.parametrize("version", ["3", "2.1", "1"])
@@ -491,6 +505,83 @@ class TestLegacyFiles:
                     atol=1e-12 * np.max(np.abs(expected)),
                     err_msg=key,
                 )
+
+
+@pytest.fixture(scope="module")
+def inverse_mpc_windows(uvp_exact_wfs: UVPSpec) -> tuple[dict, dict, dict]:
+    """
+    The exact window functions of uvp_exact_wfs ("Hz sr") as written before v1.0.
+
+    Returns the k grids in 1 / Mpc and the window functions on them.
+    """
+    uvp = copy.deepcopy(uvp_exact_wfs)
+    # hera_pspec before v1.0 computed the windows of "Hz sr" objects as for Mpc3 ones
+    uvp.norm_units = "Mpc3"
+    return uvp.get_exact_window_functions(
+        ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test", inplace=False
+    )
+
+
+def _write_inverse_mpc_windows(f: h5py.File, windows: tuple[dict, dict, dict]) -> None:
+    """Replace the exact window functions of a file by those on 1 / Mpc grids."""
+    for name, arrays in zip(("kperp_", "kpara_", ""), windows, strict=True):
+        for spw, array in arrays.items():
+            key = f"window_function_{name}spw{spw}"
+            del f[key]
+            f.create_dataset(key, data=array)
+            if name:
+                f[key].attrs["unit"] = "1 / Mpc"
+
+
+class TestHzSrWindowKGrids:
+    """Files of "Hz sr" objects with exact window functions on 1 / Mpc grids."""
+
+    def test_version_2(
+        self, uvp_exact_wfs: UVPSpec, inverse_mpc_windows, tmp_path: Path
+    ) -> None:
+        """Check that 1 / Mpc grids of a version 2 file read as littleh / Mpc, divided by h."""
+        src = _write(uvp_exact_wfs, tmp_path / "uvp.h5")
+        path = _edited_copy(
+            src,
+            tmp_path / "old.h5",
+            lambda f: _write_inverse_mpc_windows(f, inverse_mpc_windows),
+        )
+        new = _read(path)
+        h = uvp_exact_wfs.cosmo.h
+        kperp_mpc, kpara_mpc, windows = inverse_mpc_windows
+        for spw in uvp_exact_wfs.spw_array:
+            kperp, kpara = new.get_window_function_kgrid(spw)
+            assert kperp.unit == cu.littleh / units.Mpc
+            assert kpara.unit == cu.littleh / units.Mpc
+            np.testing.assert_allclose(kperp.value, kperp_mpc[spw] / h, rtol=1e-14)
+            np.testing.assert_allclose(kpara.value, kpara_mpc[spw] / h, rtol=1e-14)
+            np.testing.assert_array_equal(new.window_function_array[spw], windows[spw])
+
+    def test_v0(
+        self, uvp_exact_wfs: UVPSpec, inverse_mpc_windows, tmp_path: Path
+    ) -> None:
+        """Check that the 1 / Mpc grids of a v0.x "Hz str" file read as littleh / Mpc."""
+
+        def edit(f):
+            _write_inverse_mpc_windows(f, inverse_mpc_windows)
+            # v0.x files: no version, no units, no YAML cosmology, legacy strings
+            for name in ("uvpspec_version", "cosmo_yaml"):
+                del f.attrs[name]
+            for name in f:
+                f[name].attrs.pop("unit", None)
+            f.attrs["norm_units"] = "Hz str [beam normalization not specified]"
+
+        src = _write(uvp_exact_wfs, tmp_path / "uvp.h5")
+        path = _edited_copy(src, tmp_path / "v0.h5", edit)
+        new = _read(path)
+        assert new.norm_units == "Hz sr"
+        h = uvp_exact_wfs.cosmo.h
+        kperp_mpc, kpara_mpc, _ = inverse_mpc_windows
+        for spw in uvp_exact_wfs.spw_array:
+            kperp, kpara = new.get_window_function_kgrid(spw)
+            assert kperp.unit == cu.littleh / units.Mpc
+            np.testing.assert_allclose(kperp.value, kperp_mpc[spw] / h, rtol=1e-14)
+            np.testing.assert_allclose(kpara.value, kpara_mpc[spw] / h, rtol=1e-14)
 
 
 class TestContainer:
@@ -665,7 +756,10 @@ class TestCosmologyFromParams:
         attr = str(OLD_DEFAULT_COSMO_PARAMS)
         lcdm = unit_helpers.cosmology_from_v0_attr(attr)
         assert lcdm.is_equivalent(conversions.LEGACY_COSMOLOGY)
-        assert unit_helpers.cosmology_from_v0_attr(str(dict(OLD_DEFAULT_COSMO_PARAMS))) is lcdm
+        assert (
+            unit_helpers.cosmology_from_v0_attr(str(dict(OLD_DEFAULT_COSMO_PARAMS)))
+            is lcdm
+        )
 
     def test_round_trip(self) -> None:
         params = {"H0": 70.0, "Om_L": 0.7, "Om_b": 0.04911, "Om_c": 0.26442}
