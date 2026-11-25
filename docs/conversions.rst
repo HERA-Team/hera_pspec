@@ -7,8 +7,7 @@ Cosmology and units
 :meth:`~hera_pspec.UVPSpec.get_param_unit`). Cosmological lengths are in
 h\ :sup:`-1` Mpc (``u.Mpc / cu.littleh``, with
 ``astropy.cosmology.units`` imported as ``cu``) or in Mpc, chosen with the
-``length_unit`` argument. See :doc:`migrating_to_v1` for how this differs
-from v0.x.
+``length_unit`` argument.
 
 Cosmologies are ``astropy.cosmology`` objects. The default is
 :data:`hera_pspec.conversions.DEFAULT_COSMOLOGY`, astropy's ``Planck18``;
