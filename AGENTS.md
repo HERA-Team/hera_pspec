@@ -6,8 +6,6 @@ Guidance for AI coding assistants (Claude Code, Codex, Cursor, …) working in t
 
 `hera_pspec` is the HERA collaboration's delay-spectrum / power-spectrum estimation library. Input visibilities come in via `pyuvdata`; output power spectra are persisted as HDF5. The package is in a `src/` layout (`src/hera_pspec/`); `setuptools_scm` writes `src/hera_pspec/_version.py` from git tags.
 
-Python support: `>=3.11,<3.14`. CI tests on 3.11/3.12/3.13 across Ubuntu and macOS.
-
 ## Environment & common commands
 
 The project uses **uv** for environment and lockfile management (matching CI). Prefer `uv` over `pip` here.
@@ -19,7 +17,7 @@ The project uses **uv** for environment and lockfile management (matching CI). P
   - To bypass coverage while iterating: `uv run pytest --no-cov tests/test_pspecdata.py::test_name`.
 - Warnings job (matches `warnings-tests.yml`, fails on any warning): `MPLBACKEND=agg uv run pytest -Werror`. New code must not emit warnings under this run.
 - Build docs locally: `uv run --group docs sphinx-build docs docs/_build/html` (RTD config at `.readthedocs.yaml`).
-- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`, `app = typer.Typer()`); the legacy `scripts/*.py` shims are also installed via `tool.setuptools.script-files`.
+- CLI entrypoint installed as `pspec` (defined at `src/hera_pspec/cli.py`)
 
 ## Linting
 
@@ -57,13 +55,6 @@ The library is organized around three persistent object types and a computation 
 
 `src/hera_pspec/data/` is shipped with the wheel (`tool.setuptools.package-data`). It holds beamfits files and small `.uvh5` / `.uvA` visibility cutouts that the test suite and example notebooks load by absolute path via `from hera_pspec.data import DATA_PATH`. Don't move or rename these without updating both tests and notebooks under `examples/`.
 
-### Scripts vs CLI
-
-There are two parallel entry-point styles:
-
-- The new `pspec` Typer app (`src/hera_pspec/cli.py`) — currently exposes `hello` and `fast_merge_baselines`. Add new subcommands here.
-- The historical `scripts/*.py` (e.g. `pspec_run.py`, `bootstrap_run.py`, `pspec_red.py`) — installed via `script-files` and built around `argparse` parsers returned from inside the package (e.g. `pspecdata.get_pspec_run_argparser`). `pyproject.toml` notes this is discouraged; new commands should be added under `cli.py` rather than as fresh scripts.
-
 ## Conventions to respect
 
 - Imports go through the package's `__init__.py` (e.g. `from hera_pspec import UVPSpec, PSpecData, utils, grouping`); follow that re-export pattern when adding public surface.
@@ -71,4 +62,28 @@ There are two parallel entry-point styles:
 - Tests live under `tests/` (not inside the package). New `UVPSpec`-based fixtures should be added to `tests/conftest.py` and built via `testing.build_vanilla_uvpspec` when possible.
 - The warnings-tests job is enforcing — when adding code that calls into `pyuvdata`, `numpy`, or `scipy`, suppress or fix any new warnings before merging.
 - Commit messages use **conventional commits** (`type: description`, e.g. `fix:`, `feat:`, `chore:`, `docs:`, `test:`, `refactor:`).
-- Do **not** add `Co-Authored-By: Claude` (or any AI) trailers to commits or PRs.
+
+## Dos / Don'ts
+
+- DON'T: reply to PR comments/issues without direct approval by a human.
+- DO: when writing new features, write tests first. Prioritise *physically meaningful* tests, not just functionality tests / coverage tests.
+- DON'T: write tests that simply re-write a library function and then test the output against the library function.
+- DO: keep documentation in scope. Docstrings and tutorials are *user facing* and should not refer to e.g. PR's or Issues, and should not refer to
+  'history' e.g. "This method avoids previous errors where...". Comments are developer-facing and may refer to details, but should not be over-long.
+- DO: always consider refining the implementation to make it as easy to understand for humans as possible.
+- DON'T: add internal methods (starting with `_`) that are called less than 3 times and whose content is less than 3 lines, unless it allows a significant memory gain / speed-up (x1.2 improvement and above).
+- DO: add docstrings to internal methods
+- DO: add type hints to new code, unless the type hints are more complicated than not having them.
+- DO: when modifying methods, modify the example notebooks accordingly.
+
+### Writing tests
+
+Tests are read by people checking that the code is right, so they should read top to bottom without opening other code.
+
+- DO: parametrize only when the cases really are the same test with different inputs for a given function argument. Avoid parametrized test over the same function but for different function arguments. Keep a table to about three parameters of plain values (numbers, strings, units), and give every case a readable `id`.
+- DO: add a one-sentence docstring to explain what the test is about. Ensure it is consistent with the test name.
+- DO: when possible, include a numerical check to a (simple) expected output.
+- DON'T: put callables, expected error-message fragments or whole objects into a parametrize table to merge tests that differ in what they set up or check. Write two or three short separate tests instead.
+- DON'T: pass fixtures by name through `request.getfixturevalue` unless there is no simpler way.
+- DON'T: hide a test's assertions in a helper. A reader should see what is being checked in the test body.
+- DO: when merging or deleting tests, check that every assertion they made is still made somewhere, and say where in the PR description.
