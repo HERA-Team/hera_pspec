@@ -247,6 +247,7 @@ def test_init_rejects_non_uvdata(bad_input: list | dict) -> None:
 
 
 def test_init(uvd: UVData) -> None:
+    """Check UVData weights, dataset labels, and that get_G/get_H need Ndlys set."""
     # Test get weights when fed a UVData for weights
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[uvd, uvd])
     key = (0, (24, 25), "xx")
@@ -517,13 +518,9 @@ class TestGetQ:
         "ndly_offset", [0, 3], ids=["ndlys_equals_nfreqs", "ndlys_below_nfreqs"]
     )
     def test_get_Q_alt(self, ndly_offset: int) -> None:
-        """
-        Test the Q = dC/dp matrices of get_Q_alt: shape, hermiticity of the
-        quadratic form, the zero-delay response and the delay-mode range check.
-
-        get_Q_alt only needs the number of frequencies, so an empty PSpecData
-        is enough.
-        """
+        """Check the shape, hermiticity, zero-delay response and mode range of get_Q_alt."""
+        # get_Q_alt only needs the number of frequencies, so an empty
+        # PSpecData is enough
         vect_length = 50
         ds = pspecdata.PSpecData()
         ds.spw_Nfreqs = vect_length
@@ -570,12 +567,8 @@ class TestGetQ:
         "ndly_offset", [0, 3], ids=["ndlys_equals_nfreqs", "ndlys_below_nfreqs"]
     )
     def test_get_Q(self, uvd: UVData, ndly_offset: int) -> None:
-        """
-        Test the Q = dC_ij/dp matrices of get_Q: the same properties as for
-        get_Q_alt.
-
-        get_Q needs the frequencies themselves, so it runs on real data.
-        """
+        """Check the shape, hermiticity, zero-delay response and mode range of get_Q."""
+        # get_Q needs the frequencies themselves, so it runs on real data
         ds = pspecdata.PSpecData(dsets=[uvd, uvd])
         vect_length = ds.spw_Nfreqs
         ndlys = vect_length - ndly_offset
@@ -1105,10 +1098,7 @@ def cov_q_setup(d, d_std):
 class TestCovQ:
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_cov_q(self, cov_q_setup, input_data_weight: str) -> None:
-        """
-        Test that q_hat_cov has the right shape and accepts keys in correct
-        format. Also validate with arbitrary number of delays.
-        """
+        """Check that cov_q_hat gives finite, reproducible, taper-dependent covariances."""
         ds, _, key1, key2 = cov_q_setup
 
         ds.set_weighting(input_data_weight)
@@ -1312,9 +1302,7 @@ class TestFisherMatrices:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_get_H(self, d: list[UVData], input_data_weight: str, taper: str) -> None:
-        """
-        Test Fisher/weight matrix calculation.
-        """
+        """Check the shape of the response matrix H, and that with sampling H = G."""
         ds = weighted_ds(d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         Nfreq = ds.Nfreqs
@@ -1337,9 +1325,7 @@ class TestFisherMatrices:
     @pytest.mark.parametrize("taper", taper_selection)
     @pytest.mark.parametrize("input_data_weight", weight_selection)
     def test_get_G(self, d: list[UVData], input_data_weight: str, taper: str) -> None:
-        """
-        Test Fisher/weight matrix calculation.
-        """
+        """Check the shape and the symmetries of the Fisher matrix G."""
         ds = weighted_ds(d, input_data_weight, taper)
         key1, key2 = QHAT_KEY1, QHAT_KEY2
         Nfreq = ds.Nfreqs
@@ -1378,9 +1364,8 @@ class TestFisherMatrices:
         else:
             # In general, when R_1 != R_2, there is a more restricted
             # symmetry where swapping R_1 and R_2 *and* taking the
-            # transpose gives the same result
-            # UPDATE: Taper now occurs after filter so this
-            # symmetry only holds when taper = 'none'.
+            # transpose gives the same result. The taper is applied after the
+            # filter, so this symmetry only holds when taper = 'none'.
             # iC uses pseudo-inverse when poorly conditioned, breaking this symmetry.
             if taper == "none" and input_data_weight != "iC":
                 G_swapped = ds.get_G(key2, key1)
@@ -2606,6 +2591,7 @@ class TestPspec:
     def test_pspec_raises_on_mismatched_bls_lengths(
         self, xx_ds: pspecdata.PSpecData
     ) -> None:
+        """Test that pspec() raises if bls1 and bls2 have different lengths."""
         with pytest.raises(
             AssertionError, match="length of bls1 must equal length of bls2"
         ):
@@ -3044,6 +3030,7 @@ class TestBroadcastDsetFlags:
     def test_single_integration_flagged_within_spw(
         self, broadcast_ds: pspecdata.PSpecData
     ) -> None:
+        """A single flagged integration is broadcast across the window, not the band."""
         ds = broadcast_ds
         ds.dsets[0].flag_array[ds.dsets[0].antpair2ind(24, 25, ordered=False), 600, 0][
             3
