@@ -162,10 +162,15 @@ class TestPSpecBeamUV:
     def test_get_omegas(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV, polpairs, ncols: int
     ) -> None:
-        """Check the OmegaP/OmegaPP shape (Nbeam_freqs, Npolpairs) from get_Omegas."""
+        """Check that get_Omegas gives the xx beam integrals, one column per polpair."""
         OP, OPP = beam_nf_dipole.get_Omegas(polpairs)
         assert OP.shape == (26, ncols)
         assert OPP.shape == (26, ncols)
+        # the first polpair of both cases is xx
+        np.testing.assert_array_equal(OP[:, 0], beam_nf_dipole.power_beam_int(pol="xx"))
+        np.testing.assert_array_equal(
+            OPP[:, 0], beam_nf_dipole.power_beam_sq_int(pol="xx")
+        )
 
     def test_get_omegas_raises_on_non_list_input(
         self, beam_nf_dipole: pspecbeam.PSpecBeamUV

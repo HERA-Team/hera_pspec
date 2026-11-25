@@ -186,7 +186,7 @@ class TestFTBeamInit:
     def test_int_pol(self, ft_beam_init_kwargs: dict) -> None:
         """Check that an integer pol code is stored as its polarization string."""
         test = uvwindow.FTBeam(**dict(ft_beam_init_kwargs, pol=-5))
-        assert test.pol == uvutils.polnum2str(-5)
+        assert test.pol == "xx"
 
     @pytest.mark.parametrize(
         "bad_pol", ["test", 12], ids=["unknown_str", "unknown_int"]

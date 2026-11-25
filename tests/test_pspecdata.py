@@ -2631,8 +2631,8 @@ class TestPspec:
     def test_pspec_multi_pol_uvdata(
         self, beam_nf_dipole: PSpecBeamUV, uvd: UVData
     ) -> None:
-        """Test that pspec() computes every requested pol of datasets holding both
-        xx and yy, and warns about and skips xy, which they don't hold."""
+        """Check that pspec() computes xx and yy (equal for equal data) of datasets
+        holding both, and warns about and skips xy, which they lack."""
         uvd_yy = copy.deepcopy(uvd)
         uvd_yy.polarization_array = np.array([-6])  # relabel the xx data as yy
         uvd_xx_yy = uvd + uvd_yy
@@ -2648,6 +2648,11 @@ class TestPspec:
             verbose=False,
         )
         assert uvp.get_polpairs() == [("xx", "xx"), ("yy", "yy")]
+        # the yy visibilities are the xx ones relabelled, so the two spectra
+        # agree up to the ~1e-8 difference of the xx and yy beam normalizations
+        np.testing.assert_allclose(
+            uvp.data_array[0][..., 1], uvp.data_array[0][..., 0], rtol=1e-6
+        )
 
         with pytest.warns(
             UserWarning,
