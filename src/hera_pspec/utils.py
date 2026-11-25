@@ -1655,7 +1655,6 @@ def uvp_noise_error(
     precomp_P_N=None,
     P_SN_correction=True,
     num_steps_scalar=2000,
-    length_unit=None,
 ):
     """
     Calculate analytic thermal noise error for a UVPSpec object.
@@ -1696,13 +1695,11 @@ def uvp_noise_error(
         Number of frequency steps to explicitly compute (and interpolate over) for integrand in scalar.
         Default is 2000
 
-    length_unit : astropy.units.Unit or str, optional
-        Cosmological length unit L of the noise spectra. P_N and P_SN are
-        stored in ``uvp.stats_array`` as plain arrays in mK^2 * L^3.
-        Default: None, the object's own length unit
-        (``uvp._default_length_unit()``, the length unit of ``uvp.units``), so
-        the stored errors match the units of the data.
-
+    Notes
+    -----
+    P_N and P_SN are stored in ``uvp.stats_array`` as plain arrays in
+    mK^2 L^3, where L is ``uvp.length_unit``, so the stored errors match the
+    units of the data.
     """
     from hera_pspec import uvpspec_utils
 
@@ -1716,18 +1713,14 @@ def uvp_noise_error(
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs (floats in scalar_unit).
-    length_unit = uvp._resolve_length_unit(length_unit)
+    length_unit = uvp.length_unit
     scalar_unit = length_unit**3 / (u.Hz * u.sr)
     P_N_unit = u.mK**2 * length_unit**3
     scalar = {}
     for spw in uvp.spw_array:
         for polpair in uvp.polpair_array:
             scalar[(spw, polpair)] = uvp.compute_scalar(
-                spw,
-                polpair,
-                num_steps=num_steps_scalar,
-                noise_scalar=True,
-                length_unit=length_unit,
+                spw, polpair, num_steps=num_steps_scalar, noise_scalar=True
             ).to_value(scalar_unit)
     # iterate over spectral window
     for spw in uvp.spw_array:
@@ -1857,7 +1850,6 @@ def uvp_noise_error(
                         form="Pk",
                         component="real",
                         scalar=scalar[(spw, polpair)],
-                        length_unit=length_unit,
                     )[blp_int].to_value(P_N_unit)
 
                 else:

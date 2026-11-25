@@ -914,7 +914,7 @@ class TestKAxisUnits:
         assert ax.get_xlabel() == rf"$k_{{\parallel}}\ [{unit}]$"
         assert ax.get_ylabel() == rf"$k_{{\perp}}\ [{unit}]$"
         # pcolormesh x range covers the k_parallel values in 1 / L
-        k_para = uvp.get_kparas(0, length_unit=length_unit).value
+        k_para = uvp.get_kparas(0).to_value(1 / length_unit)
         x_min, x_max = ax.collections[0].get_coordinates()[0, [0, -1], 0]
         assert x_min < k_para.min() < k_para.max() < x_max
         # horizon lines: |b| / c times d k_parallel / d tau, in the same 1 / L

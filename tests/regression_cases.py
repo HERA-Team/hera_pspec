@@ -251,13 +251,13 @@ def uvpspec_outputs(uvp: UVPSpec, prefix: str = "") -> dict[str, np.ndarray]:
     for spw in uvp.spw_array:
         out[f"{prefix}data_array_{spw}"] = uvp.data_array[spw]
         out[f"{prefix}get_dlys_{spw}"] = uvp.get_dlys(spw).to_value(units.s)
+        # the getters give k in 1 / uvp.length_unit; store it in both units
+        k_para = uvp.get_kparas(spw)
+        k_perp = uvp.get_kperps(spw)
         for tag, length_unit in LENGTH_UNIT_TAGS:
-            out[f"{prefix}get_kparas_{tag}_{spw}"] = uvp.get_kparas(
-                spw, length_unit=length_unit
-            ).to_value(1 / length_unit)
-            out[f"{prefix}get_kperps_{tag}_{spw}"] = uvp.get_kperps(
-                spw, length_unit=length_unit
-            ).to_value(1 / length_unit)
+            k_unit, h0 = 1 / length_unit, cu.with_H0(uvp.cosmo.H0)
+            out[f"{prefix}get_kparas_{tag}_{spw}"] = k_para.to_value(k_unit, h0)
+            out[f"{prefix}get_kperps_{tag}_{spw}"] = k_perp.to_value(k_unit, h0)
         if hasattr(uvp, "cov_array_real"):
             out[f"{prefix}cov_array_real_{spw}"] = uvp.cov_array_real[spw]
             out[f"{prefix}cov_array_imag_{spw}"] = uvp.cov_array_imag[spw]
@@ -636,7 +636,8 @@ def _noise_uvp_noise_error() -> dict[str, np.ndarray]:
     out = {}
     auto_tsys = utils.uvd_to_Tsys(lst_uvdata("even"), dipole_beam())
     for tag, length_unit in LENGTH_UNIT_TAGS:
-        # even x even so the auto Tsys times match both time arrays
+        # even x even so the auto Tsys times match both time arrays; the noise
+        # errors are in the length unit of uvp
         uvp = run_even_odd_pspec(
             halves=("even", "even"), norm="I", taper="bh", length_unit=length_unit
         )
@@ -645,7 +646,6 @@ def _noise_uvp_noise_error() -> dict[str, np.ndarray]:
             copy.deepcopy(auto_tsys),
             err_type=["P_N", "P_SN"],
             P_SN_correction=True,
-            length_unit=length_unit,
         )
         for spw in uvp.spw_array:
             for stat in ("P_N", "P_SN"):

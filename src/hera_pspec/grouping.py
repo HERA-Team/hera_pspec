@@ -1024,7 +1024,7 @@ def spherical_average(
         raise TypeError("A must be a mutable mapping.")
 
     # k grid in the unit of the input object (h Mpc^-1 or Mpc^-1)
-    length_unit = uvp_in._default_length_unit()
+    length_unit = uvp_in.length_unit
     k_unit = 1 / length_unit
     k_equivalencies = _k_equivalencies(uvp_in)
     _check_k_bin_inputs({"kbins": kbins, "kbins_theory": kbins_theory}, stacklevel=3)
@@ -1161,15 +1161,13 @@ def spherical_average(
         E = np.zeros((uvp.Ntimes, Ndlyblps, Ndlys, uvp.Npols), dtype=np.float64)
 
         # get kperps for this spw: shape (Nbltpairs,), in k_unit
-        kperps = uvp.get_kperps(spw, length_unit=length_unit).to_value(k_unit)
+        kperps = uvp.get_kperps(spw).to_value(k_unit)
 
         # get kparas for this spw: shape (Ndlys,)
-        kparas = uvp.get_kparas(spw, length_unit=length_unit).to_value(k_unit)
+        kparas = uvp.get_kparas(spw).to_value(k_unit)
         # get kparas for this spw: shape (Nfreqs,) - used for window function averaging
         all_dlys = utils.get_delays(uvp.freq_array[uvp.spw_to_freq_indices(spw)])
-        kparas_per_freq = uvp.get_kparas(
-            spw, length_unit=length_unit, dlys=all_dlys
-        ).to_value(k_unit)
+        kparas_per_freq = uvp.get_kparas(spw, dlys=all_dlys).to_value(k_unit)
 
         # get k to tau mapping for this spw
         avgz = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(spw)]))

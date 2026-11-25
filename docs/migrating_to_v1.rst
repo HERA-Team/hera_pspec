@@ -37,7 +37,7 @@ Breaking changes
   object, such as ``uvp.cosmo.get_params()`` or ``uvp.cosmo.X2Y(z)``, are gone;
   see `Cosmology`_.
 * Power spectra normalized in ``Mpc3`` (``length_unit=u.Mpc``) now give k in
-  1/Mpc by default: the getters, the ``spherical_average`` k grid, the plots
+  1/Mpc: the getters, the ``spherical_average`` k grid, the plots
   and ``utils.uvp_noise_error`` all follow the object's own length unit. In
   v0.x they gave h/Mpc numbers for these objects.
 * ``UVPSpec.set_cosmology`` no longer rescales an ``Mpc3`` object by about
@@ -93,12 +93,14 @@ Removed in v1.0
   ``UVPSpec.generate_noise_spectra``, ``PSpecBeamBase.compute_pspec_scalar``,
   ``noise.Sensitivity.calc_scalar``, ``utils.uvp_noise_error``,
   ``grouping.spherical_average`` and ``grouping.spherical_wf_from_uvp``.
-  Passing it by name raises ``TypeError``. Use ``length_unit=`` instead (see
-  `little_h is now length_unit`_); for ``spherical_average`` and
-  ``spherical_wf_from_uvp``, give the k bins as Quantities. The arguments
-  that followed ``little_h`` moved up one position, so pass them by name.
-  ``UVWindow(little_h=...)`` is unchanged: it keeps its v0.x name, position
-  and meaning.
+  Passing it by name raises ``TypeError``. For the ``PSpecData``, beam and
+  ``noise`` functions, use ``length_unit=`` instead; the ``UVPSpec`` methods
+  and ``utils.uvp_noise_error`` work in the object's own length unit,
+  ``uvp.length_unit`` (see `little_h is now length_unit`_). For
+  ``spherical_average`` and ``spherical_wf_from_uvp``, give the k bins as
+  Quantities. The arguments that followed ``little_h`` moved up one
+  position, so pass them by name. ``UVWindow(little_h=...)`` is unchanged:
+  it keeps its v0.x name, position and meaning.
   ``conversions.length_unit_from_little_h`` is gone too.
 
 
@@ -185,15 +187,13 @@ The ``little_h`` flag is replaced by a ``length_unit`` argument:
 .. code-block:: python
 
   # v1.0
-  k_para = uvp.get_kparas(0, length_unit=u.Mpc / cu.littleh)
+  k_para = uvp.get_kparas(0)   # in 1 / uvp.length_unit, here littleh / Mpc
   uvp_mpc = ds.pspec(bls, bls, (0, 1), [("xx", "xx")], spw_ranges=[(50, 90)],
                      length_unit=u.Mpc, verbose=False)
 
 ``length_unit`` is accepted by ``PSpecData.pspec``, ``scalar`` and ``units``,
-``pspecdata.pspec_run``, ``UVPSpec.get_kperps``, ``get_kparas``,
-``compute_scalar`` and ``generate_noise_spectra``,
-``PSpecBeamBase.compute_pspec_scalar``, ``noise.Sensitivity.calc_scalar``,
-``utils.uvp_noise_error`` and ``pspec run --length-unit``.
+``pspecdata.pspec_run``, ``PSpecBeamBase.compute_pspec_scalar``,
+``noise.Sensitivity.calc_scalar`` and ``pspec run --length-unit``.
 
 To convert between littleh and Mpc yourself, use the object's Hubble constant.
 Always pass ``H0`` to ``cu.with_H0``: without it, astropy uses Planck18's
@@ -203,13 +203,18 @@ H0 = 67.66, not the cosmology of your data.
 
   k_mpc = uvp.get_kparas(0).to(1 / u.Mpc, cu.with_H0(uvp.cosmo.H0))
 
-Getters default to the object's own length unit: littleh for objects
-normalized in ``Mpc3 / littleh3`` (and for ``Hz sr`` objects), Mpc for objects
-normalized in ``Mpc3``.
+A ``UVPSpec`` has one length unit, the read-only ``uvp.length_unit``, set by
+its ``norm_units``: ``Mpc / littleh`` for objects normalized in
+``Mpc3 / littleh3`` (and for ``Hz sr`` objects), ``Mpc`` for objects
+normalized in ``Mpc3``. ``get_kperps``, ``get_kparas``, ``compute_scalar``,
+``generate_noise_spectra`` and ``utils.uvp_noise_error`` work in it and take
+no length unit argument; convert their results as above if you need the other
+unit.
 
 .. code-block:: python
 
   uvp_mpc.norm_units          # 'Mpc3'
+  uvp_mpc.length_unit         # Unit("Mpc")
   uvp_mpc.get_kparas(0).unit  # Unit("1 / Mpc"); v0.x gave h/Mpc numbers here
 
 

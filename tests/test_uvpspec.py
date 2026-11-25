@@ -205,7 +205,7 @@ class TestGetFuncs:
         # k is proportional to baseline length / delay, at the mean redshift,
         # in the object's own length unit
         z = conversions.f2z(np.mean(uvp.freq_array[uvp.spw_to_freq_indices(0)]))
-        length = uvp._default_length_unit()
+        length = uvp.length_unit
         np.testing.assert_allclose(
             k_perp.to_value(1 / length),
             uvp.get_blpair_seps().to_value(units.m)
@@ -579,29 +579,32 @@ class TestUnitGetters:
             ("Mpc3", units.Mpc),
             ("Mpc^3", units.Mpc),
         ],
+        ids=["Hz sr", "Mpc3 / littleh3", "h^-3 Mpc^3", "Mpc3", "Mpc^3"],
     )
-    def test_default_length_unit(
-        self, vanilla_uvp: UVPSpec, norm_units: str, expected
-    ) -> None:
+    def test_length_unit(self, vanilla_uvp: UVPSpec, norm_units: str, expected) -> None:
+        """Check that length_unit follows norm_units and sets the unit of the k getters."""
         uvp = _with_norm_units(vanilla_uvp, norm_units)
-        assert uvp._default_length_unit() == expected
+        assert uvp.length_unit == expected
         assert uvp.get_kperps(0).unit == 1 / expected
         assert uvp.get_kparas(0).unit == 1 / expected
 
-    @pytest.mark.parametrize("norm_units", ["Hz sr", "Mpc3 / littleh3", "Mpc3"])
+    def test_length_unit_is_read_only(self, vanilla_uvp: UVPSpec) -> None:
+        """Check that length_unit cannot be set: it follows norm_units."""
+        uvp = copy.deepcopy(vanilla_uvp)
+        with pytest.raises(AttributeError):
+            uvp.length_unit = units.Mpc
+
     @pytest.mark.parametrize(
-        "length_unit", [LITTLEH_LENGTH, units.Mpc, "Mpc / littleh", "Mpc"]
+        "norm_units",
+        ["Hz sr", "Mpc3 / littleh3", "Mpc3"],
+        ids=["Hz sr", "littleh", "Mpc"],
     )
-    def test_k_values(self, vanilla_uvp: UVPSpec, norm_units: str, length_unit) -> None:
-        """An explicit length_unit always wins over the object's own unit."""
+    def test_k_values(self, vanilla_uvp: UVPSpec, norm_units: str) -> None:
+        """Check that the k getters match the conversion helpers in the object's length unit."""
         uvp = _with_norm_units(vanilla_uvp, norm_units)
-        unit = unit_helpers.parse_unit_string(length_unit)
-        k_perp_expected, k_para_expected = _expected_ks(uvp, 0, unit)
-        k_perp = uvp.get_kperps(0, length_unit=length_unit)
-        k_para = uvp.get_kparas(0, length_unit=length_unit)
-        assert k_perp.unit == 1 / unit and k_para.unit == 1 / unit
-        np.testing.assert_array_equal(k_perp.value, k_perp_expected)
-        np.testing.assert_array_equal(k_para.value, k_para_expected)
+        k_perp_expected, k_para_expected = _expected_ks(uvp, 0, uvp.length_unit)
+        np.testing.assert_array_equal(uvp.get_kperps(0).value, k_perp_expected)
+        np.testing.assert_array_equal(uvp.get_kparas(0).value, k_para_expected)
 
     def test_k_mpc_object_default(self, vanilla_uvp: UVPSpec) -> None:
         """An Mpc3 object gives 1 / Mpc by default: littleh k times h."""
@@ -618,11 +621,6 @@ class TestUnitGetters:
             littleh_uvp.get_kperps(0).to_value(cu.littleh / units.Mpc) * h,
             rtol=1e-14,
         )
-
-    def test_k_bad_length_unit(self, vanilla_uvp: UVPSpec) -> None:
-        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
-            with pytest.raises(ValueError, match="length_unit must be a length"):
-                getter(0, length_unit=units.Hz)
 
     def test_get_kparas_dlys(self, vanilla_uvp: UVPSpec) -> None:
         dlys = np.linspace(-1e-6, 1e-6, 11)
@@ -1212,7 +1210,7 @@ class TestWindowKUnit:
     ) -> None:
         mutable_uvp.norm_units = norm_units
         assert mutable_uvp.window_k_unit() == k_unit
-        assert mutable_uvp._default_length_unit() == default_length
+        assert mutable_uvp.length_unit == default_length
 
     def test_kgrid_without_exact_windows_raises(
         self, vanilla_uvp: uvpspec.UVPSpec
@@ -1667,40 +1665,38 @@ class TestScalarAndNoiseUnits:
     BLP = 101102101102
 
     def test_compute_scalar_length_unit(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        """Check that the scalar of an Mpc3 object is in Mpc and h^-3 times the littleh one."""
         uvp = vanilla_uvp_with_beam
         h = uvp.cosmo.h
-        default = uvp.compute_scalar(0, self.POLPAIR)
-        littleh = uvp.compute_scalar(0, self.POLPAIR, length_unit=LITTLEH_LENGTH)
-        mpc = uvp.compute_scalar(0, self.POLPAIR, length_unit="Mpc")
-        assert default.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
+        littleh = uvp.compute_scalar(0, self.POLPAIR)
+        mpc = _with_norm_units(uvp, "Mpc3").compute_scalar(0, self.POLPAIR)
+        assert littleh.unit == LITTLEH_LENGTH**3 / (units.Hz * units.sr)
         assert mpc.unit == units.Mpc**3 / (units.Hz * units.sr)
-        assert littleh == default
-        np.testing.assert_allclose(mpc.value, default.value / h**3, rtol=1e-12)
+        np.testing.assert_allclose(mpc.value, littleh.value / h**3, rtol=1e-12)
         # the same physical quantity
         np.testing.assert_allclose(
-            mpc.to_value(default.unit, equivalencies=cu.with_H0(uvp.cosmo.H0)),
-            default.value,
+            mpc.to_value(littleh.unit, equivalencies=cu.with_H0(uvp.cosmo.H0)),
+            littleh.value,
             rtol=1e-12,
         )
-        # an Mpc3 object gives an Mpc scalar by default
-        mpc_uvp = _with_norm_units(uvp, "Mpc3")
-        assert mpc_uvp.compute_scalar(0, self.POLPAIR) == mpc
 
     def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
+        """Check that noise P(k) follows the object's length unit and noise Delta^2 does not depend on it."""
         uvp = vanilla_uvp_with_beam
+        mpc_uvp = _with_norm_units(uvp, "Mpc3")
         h = uvp.cosmo.h
         pk = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[self.BLP]
-        pk_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
-        )[self.BLP]
+        pk_mpc = mpc_uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K)[
+            self.BLP
+        ]
         assert pk.unit == units.mK**2 * units.Mpc**3 / cu.littleh**3
         assert pk_mpc.unit == units.mK**2 * units.Mpc**3
         np.testing.assert_allclose(pk_mpc.value, pk.value / h**3, rtol=1e-12)
         dsq = uvp.generate_noise_spectra(0, self.POLPAIR, 500 * units.K, form="DelSq")[
             self.BLP
         ]
-        dsq_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500 * units.K, form="DelSq", length_unit=units.Mpc
+        dsq_mpc = mpc_uvp.generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, form="DelSq"
         )[self.BLP]
         assert dsq.unit == units.mK**2 and dsq_mpc.unit == units.mK**2
         # Delta^2 does not depend on the length unit
@@ -1720,12 +1716,12 @@ class TestScalarAndNoiseUnits:
         )[self.BLP]
         np.testing.assert_array_equal(from_quantity.value, computed.value)
         np.testing.assert_array_equal(from_float.value, computed.value)
-        # a Quantity scalar is converted to the requested length unit's scalar unit
+        # an Mpc3 object takes a Quantity scalar in Mpc3 / (Hz sr)
         mpc_scalar = scalar.to(
             units.Mpc**3 / (units.Hz * units.sr), equivalencies=cu.with_H0(uvp.cosmo.H0)
         )
-        from_mpc = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500 * units.K, scalar=mpc_scalar, length_unit=units.Mpc
+        from_mpc = _with_norm_units(uvp, "Mpc3").generate_noise_spectra(
+            0, self.POLPAIR, 500 * units.K, scalar=mpc_scalar
         )[self.BLP]
         np.testing.assert_allclose(
             from_mpc.value * uvp.cosmo.h**3, computed.value, rtol=1e-12
@@ -1843,12 +1839,13 @@ def test_set_cosmology_same_cosmology(
         )
     # the scalar is in the object's own length unit
     length_unit = LITTLEH_LENGTH if name == "littleh" else units.Mpc
+    assert uvp.length_unit == length_unit
     for spw in uvp.spw_array:
         np.testing.assert_array_equal(
             uvp.scalar_array[spw, 0],
-            uvp.compute_scalar(
-                spw, uvp.polpair_array[0], length_unit=length_unit
-            ).to_value(length_unit**3 / (units.Hz * units.sr)),
+            uvp.compute_scalar(spw, uvp.polpair_array[0]).to_value(
+                length_unit**3 / (units.Hz * units.sr)
+            ),
         )
 
 

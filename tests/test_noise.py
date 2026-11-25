@@ -385,50 +385,20 @@ class TestNoiseErrorUnits:
         )
         return uvp
 
-    def test_littleh_object(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
-    ) -> None:
-        """A littleh object gets littleh noise by default, identical to passing the unit explicitly."""
-        uvp_h, _, auto_Tsys = noise_error_uvps
-        assert uvp_h.units == u.mK**2 * u.Mpc**3 / cu.littleh**3
-        default = self._noise_error(uvp_h, auto_Tsys)
-        explicit = self._noise_error(uvp_h, auto_Tsys, length_unit=u.Mpc / cu.littleh)
-        for stat in ("P_N", "P_SN"):
-            np.testing.assert_array_equal(
-                default.stats_array[stat][0], explicit.stats_array[stat][0]
-            )
-
     def test_mpc_object(
         self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
     ) -> None:
-        """An Mpc^3 object stores P_N in mK^2 Mpc^3: the littleh P_N times the scalar ratio (h^-3)."""
-        _, uvp_mpc, auto_Tsys = noise_error_uvps
+        """An Mpc^3 object stores P_N and P_SN h^-3 times those of the same spectra in Mpc^3 / littleh^3."""
+        uvp_h, uvp_mpc, auto_Tsys = noise_error_uvps
+        assert uvp_h.units == u.mK**2 * u.Mpc**3 / cu.littleh**3
         assert uvp_mpc.units == u.mK**2 * u.Mpc**3
-        default = self._noise_error(uvp_mpc, auto_Tsys)
-        explicit = self._noise_error(uvp_mpc, auto_Tsys, length_unit="Mpc")
-        np.testing.assert_array_equal(
-            default.stats_array["P_N"][0], explicit.stats_array["P_N"][0]
-        )
-        littleh = self._noise_error(uvp_mpc, auto_Tsys, length_unit=u.Mpc / cu.littleh)
-        # the factor between the two is the ratio of the noise scalars
-        polpair = uvp_mpc.polpair_array[0]
-        scalar_mpc = uvp_mpc.compute_scalar(
-            0, polpair, num_steps=2000, noise_scalar=True, length_unit=u.Mpc
-        )
-        scalar_h = uvp_mpc.compute_scalar(
-            0,
-            polpair,
-            num_steps=2000,
-            noise_scalar=True,
-            length_unit=u.Mpc / cu.littleh,
-        )
-        factor = scalar_mpc.value / scalar_h.value
-        np.testing.assert_allclose(factor, uvp_mpc.cosmo.h**-3, rtol=1e-10)
-        np.testing.assert_allclose(
-            default.stats_array["P_N"][0],
-            littleh.stats_array["P_N"][0] * factor,
-            rtol=1e-12,
-        )
+        littleh = self._noise_error(uvp_h, auto_Tsys)
+        mpc = self._noise_error(uvp_mpc, auto_Tsys)
+        h3 = uvp_mpc.cosmo.h**3
+        for stat in ("P_N", "P_SN"):
+            np.testing.assert_allclose(
+                mpc.stats_array[stat][0], littleh.stats_array[stat][0] / h3, rtol=1e-10
+            )
 
 
 def check_corr_matrix(m: np.ndarray) -> None:

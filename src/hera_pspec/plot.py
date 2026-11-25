@@ -381,15 +381,13 @@ def delay_spectrum(
         uvp_plt.fold_spectra()
 
     # Get x-axis units (delays in ns, or k_parallel in 1 / L for the object's
-    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives by default)
-    length_unit = uvp_plt._default_length_unit()
+    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives)
+    length_unit = uvp_plt.length_unit
     if delay:
         dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw, length_unit=length_unit).to_value(
-            length_unit**-1
-        )
+        k_para = uvp_plt.get_kparas(spw).to_value(length_unit**-1)
         x = k_para
 
     # Check plot_stats
@@ -731,15 +729,13 @@ def delay_waterfall(
         uvp_plt.convert_to_deltasq()
 
     # Get x-axis units (delays in ns, or k_parallel in 1 / L for the object's
-    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives by default)
-    length_unit = uvp_plt._default_length_unit()
+    # length unit L: h Mpc^-1 or Mpc^-1, as get_kparas gives)
+    length_unit = uvp_plt.length_unit
     if delay:
         dlys = uvp_plt.get_dlys(spw).to_value(u.ns)
         x = dlys
     else:
-        k_para = uvp_plt.get_kparas(spw, length_unit=length_unit).to_value(
-            length_unit**-1
-        )
+        k_para = uvp_plt.get_kparas(spw).to_value(length_unit**-1)
         x = k_para
 
     # Extract power spectra into array
@@ -1099,7 +1095,7 @@ def delay_wedge(
 
     # cosmological length unit of the k axes: the object's own (as for
     # get_kparas / get_kperps), so axes and horizon lines agree with them
-    length_unit = uvp._default_length_unit()
+    length_unit = uvp.length_unit
 
     # Create new ax if none specified
     new_plot = False
@@ -1145,8 +1141,8 @@ def delay_wedge(
         x_axis = uvp.get_dlys(spw).to_value(u.ns)
         y_axis = blpair_seps
     else:
-        x_axis = uvp.get_kparas(spw, length_unit=length_unit).to_value(length_unit**-1)
-        y_axis = uvp.get_kperps(spw, length_unit=length_unit).to_value(length_unit**-1)
+        x_axis = uvp.get_kparas(spw).to_value(length_unit**-1)
+        y_axis = uvp.get_kperps(spw).to_value(length_unit**-1)
     if rotate:
         _x_axis = y_axis
         y_axis = x_axis
