@@ -7,6 +7,7 @@ unit and cosmology attributes of HDF5 files, and the cached power-spectrum
 units of a UVPSpec.
 """
 
+import ast
 import contextlib
 import functools
 
@@ -406,6 +407,26 @@ def cosmology_from_yaml(cosmo_yaml):
     immutable; parsing costs several milliseconds per read otherwise.
     """
     return Cosmology.from_format(cosmo_yaml, format="yaml")
+
+
+@functools.lru_cache(maxsize=32)
+def cosmology_from_v0_attr(cosmo_attr):
+    """
+    Build the cosmology of the ``cosmo`` attribute of a hera_pspec v0.x file.
+
+    Parameters
+    ----------
+    cosmo_attr : str
+        The ``cosmo`` attribute: the ``str()`` of a cosmological parameter
+        dictionary (see :func:`hera_pspec.conversions.params_from_cosmology`).
+
+    Returns
+    -------
+    cosmo : astropy.cosmology.LambdaCDM
+        Cached, so equal attributes share one (immutable) object. Building a
+        ``LambdaCDM`` costs several milliseconds and leaves a reference cycle.
+    """
+    return conversions.cosmology_from_params(ast.literal_eval(cosmo_attr))
 
 
 # The "cosmo" dict string and "cosmo_yaml" written for each cosmology, keyed by

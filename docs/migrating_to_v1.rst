@@ -80,6 +80,11 @@ Removed in v1.0
 * ``conversions.units`` and ``conversions.cgs_units`` no longer exist. Use
   ``astropy.constants`` (for example ``constants.c`` and ``constants.k_B``).
   ``conversions.F21`` is the 21 cm rest frequency.
+* A cosmology given as a parameter dictionary or its string is no longer
+  accepted anywhere (``noise.Sensitivity``, ``UVPSpec.set_cosmology``, the
+  ``cosmo`` of a beam or ``UVWindow``): it raises a ``TypeError``. Build the
+  astropy cosmology first with ``conversions.cosmology_from_params``. Reading
+  v0.x files, which store their cosmology as such a dictionary, is unchanged.
 
 
 Deprecations (removal planned for v2.0)
@@ -300,8 +305,8 @@ a cosmology and a length unit and return Quantities: ``f2z``, ``z2f``,
 ``get_params()``               ``hera_pspec.conversions.params_from_cosmology(cosmo)``
 =============================  =====================================================
 
-If you have the old parameter dictionary (for example from a v0.x file),
-``conversions.cosmology_from_params`` builds the astropy object.
+If you have the old parameter dictionary, ``conversions.cosmology_from_params``
+builds the astropy object.
 
 .. code-block:: python
 

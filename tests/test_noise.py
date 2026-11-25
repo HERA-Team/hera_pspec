@@ -25,19 +25,18 @@ def sense(beam_nf_pstokes: PSpecBeamUV, cosmo: FLRW) -> noise.Sensitivity:
 
 class TestSensitivity:
     def test_set_cosmology(self) -> None:
-        """Check that set_cosmology accepts an astropy cosmology, its params dict and its stringified params."""
+        """Check that set_cosmology stores an astropy cosmology and its stringified params."""
         sense = noise.Sensitivity()
-        # a cosmology without radiation, which its params dict represents exactly
         C = conversions.LEGACY_COSMOLOGY
         sense.set_cosmology(C)
         assert sense.cosmo is C
-        params = conversions.params_from_cosmology(C)
-        assert sense.cosmo_params == str(params)
-        sense.set_cosmology(str(params))
-        assert isinstance(sense.cosmo, FLRW)
-        assert sense.cosmo.is_equivalent(C)
-        sense.set_cosmology(params)
-        assert sense.cosmo.is_equivalent(C)
+        assert sense.cosmo_params == str(conversions.params_from_cosmology(C))
+
+    def test_set_cosmology_rejects_params_dict(self) -> None:
+        """Check that a parameter dictionary is not accepted as a cosmology."""
+        params = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
+        with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
+            noise.Sensitivity().set_cosmology(params)
 
     def test_set_beam_with_cosmo(self, beam_nf_pstokes: PSpecBeamUV) -> None:
         """Check that set_beam aligns the beam's cosmology with self.cosmo when both are present."""

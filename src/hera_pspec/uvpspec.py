@@ -2265,8 +2265,8 @@ class UVPSpec:
                 cosmo_yaml, getattr(self, "cosmo", None)
             )
         elif hasattr(self, "cosmo"):
-            # legacy files: only the dict string (equal dicts share one object)
-            self.cosmo = conversions.as_astropy_cosmology(ast.literal_eval(self.cosmo))
+            # legacy files: only the dict string
+            self.cosmo = unit_helpers.cosmology_from_v0_attr(self.cosmo)
 
         # BACKWARDS COMPATIBILITY for files with Nblpairts.
         # Check whether we are reading a pre Nbltpairs file by looking for the
@@ -2723,10 +2723,8 @@ class UVPSpec:
 
         Parameters
         ----------
-        new_cosmo : astropy.cosmology.FLRW or dict
-            Astropy cosmology, or cosmological parameter dictionary (see
-            ``conversions.cosmology_from_params``). The new cosmology you
-            want to adopt for this UVPSpec object.
+        new_cosmo : astropy.cosmology.FLRW
+            The new cosmology you want to adopt for this UVPSpec object.
 
         overwrite : bool, optional
             If True, overwrite self.cosmo if it already exists. Default: False.
@@ -3076,12 +3074,11 @@ class UVPSpec:
                             assert issubclass(
                                 getattr(self, p)[k].dtype.type, a.expected_type
                             ), err_msg
-                    # cosmology: convert a parameter dict instead of the generic
-                    # cast below
+                    # cosmology: an astropy object, not the generic cast below
                     elif p == "cosmo":
                         try:
-                            self.cosmo = conversions.as_astropy_cosmology(self.cosmo)
-                        except (TypeError, ValueError) as err:
+                            conversions.as_astropy_cosmology(self.cosmo)
+                        except TypeError as err:
                             raise AssertionError(f"{err_msg}: {err}") from err
                     # immutables
                     elif p in self._immutables:

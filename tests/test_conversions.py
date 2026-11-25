@@ -253,15 +253,6 @@ class TestAstropyCosmologyObjects:
         default = conversions.DEFAULT_COSMOLOGY
         assert conversions.as_astropy_cosmology(default) is default
 
-    def test_as_astropy_cosmology_dict(self) -> None:
-        """A parameter dict gives one shared, equivalent astropy object."""
-        params = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
-        first = conversions.as_astropy_cosmology(params)
-        second = conversions.as_astropy_cosmology(dict(params))
-        assert isinstance(first, LambdaCDM)
-        assert first is second
-        assert first.is_equivalent(conversions.LEGACY_COSMOLOGY)
-
     def test_params_from_planck18_have_no_radiation(self) -> None:
         """The dict of Planck18 keeps its parameters but not its radiation."""
         params = conversions.params_from_cosmology(Planck18)
@@ -283,11 +274,16 @@ class TestAstropyCosmologyObjects:
         )
         assert np.all(np.abs(ratio.value - 1) < 4e-3)
 
-    def test_as_astropy_cosmology_inconsistent_om_k(self) -> None:
+    def test_as_astropy_cosmology_rejects_params_dict(self) -> None:
+        """A cosmology parameter dictionary is not an accepted cosmology."""
+        with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
+            conversions.as_astropy_cosmology(OLD_DEFAULT_COSMO_PARAMS)
+
+    def test_cosmology_from_params_rejects_inconsistent_om_k(self) -> None:
         """A dictionary astropy cannot represent (inconsistent Om_k) raises ValueError."""
         params = dict(OLD_DEFAULT_COSMO_PARAMS, Om_k=0.05)
         with pytest.raises(ValueError, match="Om_k"):
-            conversions.as_astropy_cosmology(params)
+            conversions.cosmology_from_params(params)
 
     def test_cosmology_from_params_rejects_large_om_b(self) -> None:
         """Om_b larger than Om_M cannot be converted to an astropy cosmology."""
@@ -295,7 +291,9 @@ class TestAstropyCosmologyObjects:
         with pytest.raises(ValueError, match="Om_b"):
             conversions.cosmology_from_params(params)
 
-    @pytest.mark.parametrize("value", [[0.7, 0.05], "Planck18", 1.0])
+    @pytest.mark.parametrize(
+        "value", [[0.7, 0.05], "Planck18", 1.0], ids=["list", "str", "float"]
+    )
     def test_as_astropy_cosmology_rejects_other_types(self, value) -> None:
         """Other types raise TypeError."""
         with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):

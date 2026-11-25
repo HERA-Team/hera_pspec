@@ -155,59 +155,33 @@ def params_from_cosmology(cosmo):
     }
 
 
-@functools.lru_cache(maxsize=32)
-def _cached_cosmology_from_params(params_items):
-    """``cosmology_from_params`` cached on the sorted items of the dictionary."""
-    return cosmology_from_params(dict(params_items))
-
-
-def _cosmology_from_params_cached(params):
-    """
-    Build (or reuse) the astropy cosmology of a parameter dictionary.
-
-    Astropy cosmologies are immutable, so the same parameters give one shared
-    object. This avoids building a new ``LambdaCDM`` (several milliseconds,
-    and a reference cycle) every time, e.g. on each HDF5 read.
-    """
-    try:
-        key = tuple(sorted(params.items()))
-        hash(key)
-    except TypeError:
-        return cosmology_from_params(params)
-    return _cached_cosmology_from_params(key)
-
-
 def as_astropy_cosmology(cosmo):
     """
-    Return a cosmology as an ``astropy.cosmology.FLRW`` object.
+    Check that a cosmology is an ``astropy.cosmology.FLRW`` object.
 
     Parameters
     ----------
-    cosmo : astropy.cosmology.FLRW or dict
-        An astropy cosmology (returned as is), or a hera_pspec cosmology
-        dictionary with the keys of :func:`params_from_cosmology` (see
-        :func:`cosmology_from_params`).
+    cosmo : astropy.cosmology.FLRW
+        An astropy cosmology, e.g. ``astropy.cosmology.Planck18`` or
+        :data:`LEGACY_COSMOLOGY`.
 
     Returns
     -------
     cosmo : astropy.cosmology.FLRW
-        Equal parameter dictionaries give the same (shared) object.
+        ``cosmo`` itself.
 
     Raises
     ------
     TypeError
-        If ``cosmo`` is none of the accepted types.
-    ValueError
-        If the parameters cannot be represented by an astropy ``LambdaCDM``
-        (see :func:`cosmology_from_params`).
+        If ``cosmo`` is not an astropy FLRW cosmology (for example a
+        dictionary of cosmological parameters).
     """
     if isinstance(cosmo, FLRW):
         return cosmo
-    if isinstance(cosmo, dict):
-        return _cosmology_from_params_cached(cosmo)
     raise TypeError(
-        "cosmo must be an astropy.cosmology.FLRW object (or a cosmology "
-        f"parameter dictionary), got {type(cosmo).__name__}."
+        "cosmo must be an astropy.cosmology.FLRW object (e.g. "
+        "astropy.cosmology.Planck18 or hera_pspec.conversions.LEGACY_COSMOLOGY), "
+        f"got {type(cosmo).__name__}."
     )
 
 

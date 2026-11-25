@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
@@ -16,7 +15,6 @@ if TYPE_CHECKING:
     from .pspecbeam import PSpecBeamBase
 
 PowerSpectrum = float | npt.NDArray[np.floating[Any]]
-CosmologyInput = FLRW | str | dict[str, Any]
 
 
 def calc_P_N(
@@ -171,7 +169,7 @@ class Sensitivity:
     """Power spectrum thermal sensitivity calculator"""
 
     def __init__(
-        self, cosmo: CosmologyInput | None = None, beam: PSpecBeamBase | None = None
+        self, cosmo: FLRW | None = None, beam: PSpecBeamBase | None = None
     ) -> None:
         """
         Object for power spectrum thermal sensitivity calculations.
@@ -179,7 +177,7 @@ class Sensitivity:
         Parameters
         ----------
         cosmo : astropy.cosmology.FLRW, optional
-            Cosmology; see :meth:`set_cosmology` for the accepted forms.
+            Cosmology.
 
         beam : hera_pspec.pspecbeam.PSpecBeam instance
         """
@@ -189,19 +187,15 @@ class Sensitivity:
         if beam is not None:
             self.set_beam(beam)
 
-    def set_cosmology(self, cosmo: CosmologyInput) -> None:
+    def set_cosmology(self, cosmo: FLRW) -> None:
         """
         Set a cosmological model to self.cosmo, an astropy.cosmology object.
 
         Parameters
         ----------
-        cosmo : astropy.cosmology.FLRW, self.cosmo_params string, or dictionary
-            The cosmology, or its parameter dictionary (see
-            ``conversions.cosmology_from_params``) or that dictionary's
-            ``str()``.
+        cosmo : astropy.cosmology.FLRW
+            The cosmology.
         """
-        if isinstance(cosmo, str):
-            cosmo = ast.literal_eval(cosmo)
         self.cosmo = conversions.as_astropy_cosmology(cosmo)
         self.cosmo_params = str(conversions.params_from_cosmology(self.cosmo))
 

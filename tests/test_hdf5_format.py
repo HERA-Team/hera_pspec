@@ -660,6 +660,13 @@ class TestCosmologyFromParams:
         assert lcdm.Ob0 == OLD_DEFAULT_COSMO_PARAMS["Om_b"]
         assert lcdm.Tcmb0.value == 0
 
+    def test_v0_attr_string_gives_shared_cosmology(self) -> None:
+        """The cosmo attribute of a v0.x file is read as one shared astropy cosmology."""
+        attr = str(OLD_DEFAULT_COSMO_PARAMS)
+        lcdm = unit_helpers.cosmology_from_v0_attr(attr)
+        assert lcdm.is_equivalent(conversions.LEGACY_COSMOLOGY)
+        assert unit_helpers.cosmology_from_v0_attr(str(dict(OLD_DEFAULT_COSMO_PARAMS))) is lcdm
+
     def test_round_trip(self) -> None:
         params = {"H0": 70.0, "Om_L": 0.7, "Om_b": 0.04911, "Om_c": 0.26442}
         params["Om_M"] = params["Om_b"] + params["Om_c"]

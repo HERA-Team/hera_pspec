@@ -675,14 +675,14 @@ class TestBeamCosmology:
         assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
 
     def test_set_cosmo(self) -> None:
-        """Setting beam.cosmo accepts astropy, dicts and None; rejects others."""
+        """Setting beam.cosmo accepts astropy and None; rejects dicts and others."""
         beam = pspecbeam.PSpecBeamBase()
         beam.cosmo = CUSTOM_COSMO
         assert beam.cosmo is CUSTOM_COSMO
-        beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
-        assert beam.cosmo.is_equivalent(CUSTOM_COSMO)
         beam.cosmo = None
         assert beam.cosmo is conversions.DEFAULT_COSMOLOGY
+        with pytest.raises(TypeError, match="FLRW"):
+            beam.cosmo = conversions.params_from_cosmology(CUSTOM_COSMO)
         with pytest.raises(TypeError, match="FLRW"):
             beam.cosmo = [0.7, 0.05]
         del beam.cosmo

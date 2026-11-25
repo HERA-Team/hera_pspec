@@ -1935,29 +1935,28 @@ def test_set_cosmology_new_cosmology(
     np.testing.assert_allclose(ratios["littleh"], ratios["mpc"] * h_ratio**3, rtol=1e-4)
 
 
-@pytest.mark.parametrize("form", ["astropy", "dict"])
-def test_set_cosmology_forms(mutable_uvp_with_beam: uvpspec.UVPSpec, form: str) -> None:
-    """set_cosmology takes an astropy object or a params dict, and always stores an
-    astropy object."""
+def test_set_cosmology_rejects_params_dict(
+    mutable_uvp_with_beam: uvpspec.UVPSpec,
+) -> None:
+    """set_cosmology needs an astropy cosmology and leaves the object untouched
+    when given a parameter dictionary."""
     uvp = mutable_uvp_with_beam
+    before = copy.deepcopy(uvp)
     target = LambdaCDM(H0=70.0, Om0=0.3, Ode0=0.7, Ob0=0.05)
-    expected = copy.deepcopy(uvp)
-    expected.set_cosmology(target, overwrite=True, verbose=False)
-    if form == "astropy":
-        uvp.set_cosmology(target, overwrite=True, verbose=False)
-    else:
+    with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
         uvp.set_cosmology(
             conversions.params_from_cosmology(target), overwrite=True, verbose=False
         )
-    assert isinstance(uvp.cosmo, FLRW)
-    assert uvp.cosmo.is_equivalent(target)
-    np.testing.assert_allclose(uvp.scalar_array, expected.scalar_array, rtol=1e-14)
+    assert uvp == before
 
 
 def test_check_rejects_non_cosmology(vanilla_uvp: uvpspec.UVPSpec) -> None:
-    """check() raises when uvp.cosmo is not a cosmology (or its parameter dict)."""
+    """check() raises when uvp.cosmo is not an astropy cosmology."""
     uvp = copy.deepcopy(vanilla_uvp)
     uvp.cosmo = [1.0]
+    with pytest.raises(AssertionError, match="cosmo"):
+        uvp.check()
+    uvp.cosmo = conversions.params_from_cosmology(conversions.LEGACY_COSMOLOGY)
     with pytest.raises(AssertionError, match="cosmo"):
         uvp.check()
 
