@@ -3,11 +3,7 @@ Migrating to v1.0
 
 hera_pspec 1.0 uses ``astropy`` for units and cosmology. Physical inputs are
 astropy Quantities, and the v0.x ways of giving them (``little_h=``, plain
-numbers) are gone; see `Removed in v1.0`_. The few deprecated arguments that
-remain emit a ``DeprecationWarning`` that says what to use instead. Python
-hides these warnings by default; to see them, run with
-``python -W default::DeprecationWarning`` or add
-``warnings.simplefilter("default", DeprecationWarning)`` to your script.
+numbers) are gone; see `Removed in v1.0`_.
 
 Some return types changed outright, with no deprecation period. They are
 listed first.
@@ -139,12 +135,11 @@ Removed in v1.0
   written with a ``deltasq`` attribute; files that have one read as before.
   ``unit_helpers.norm_unit`` is gone (use ``parse_pspec_unit``), and
   ``unit_helpers.pspec_unit`` takes no ``deltasq`` argument.
-
-
-Deprecations (removal planned for v2.0)
----------------------------------------
-
-* ``FTBeam.from_file(spw_range=...)``: pass ``freq_array`` instead.
+* ``FTBeam.from_file(spw_range=...)`` and ``FTBeam.update_spw`` are gone:
+  channel indices mean different frequencies in different FT-beam files.
+  Pass ``freq_array`` to ``from_file``, or use ``FTBeam.select_freqs``.
+  ``uvwindow.check_spw_range``, which only checked those channel ranges,
+  is gone too.
 
 
 Units overview

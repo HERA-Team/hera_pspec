@@ -352,7 +352,7 @@ class FTBeam:
         )
 
     @classmethod
-    def from_file(cls, ftfile, spw_range=None, freq_array=None, **kwargs):
+    def from_file(cls, ftfile, freq_array=None, **kwargs):
         """
         Read Fourier transform of beam in sky plane from file.
 
@@ -367,35 +367,18 @@ class FTBeam:
             beam on the sky plane (Eq. 10 in Memo), including the polarisation
             Ex : path/to/file/ft_beam_HERA_dipole_pI.hdf5
             File must be h5 format.
-        spw_range : tuple or 2-element array of ints
-            In (start_chan, end_chan). Must be between 0 and 1024 (HERA
-            bandwidth).
-            If None, whole instrument bandwidth is considered.
-
-            .. deprecated::
-                Use `freq_array` instead: channel indices are ambiguous
-                across FT-beam files, frequencies are not.
         freq_array : astropy.units.Quantity, optional
             If given, restrict the FTBeam to these frequencies (any
             frequency unit) via :meth:`select_freqs`. Only the relevant
             channel range is read from disk, which considerably reduces the
-            memory footprint for wide-band FT-beam files. Cannot be used
-            together with spw_range.
+            memory footprint for wide-band FT-beam files. If None, the whole
+            bandwidth of the file is read.
         """
         # check file path input
         ftfile = Path(ftfile)
         if not (ftfile.exists() and ftfile.is_file() and h5py.is_hdf5(ftfile)):
             raise ValueError("Wrong ftfile input. See docstring.")
-        if spw_range is not None and freq_array is not None:
-            raise ValueError("Cannot feed both spw_range and freq_array.")
         freq_array = utils.quantity_value(freq_array, _FTBEAM_FREQ_UNIT, "freq_array")
-        if spw_range is not None:
-            warnings.warn(
-                "The spw_range parameter of FTBeam.from_file is deprecated; "
-                "use freq_array instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
         # obtain bandwidth in file to define spectral window
         with h5py.File(ftfile, "r") as f:
@@ -429,15 +412,8 @@ class FTBeam:
                 )
                 ft_beam = np.array(f["FT_beam"][i0:i1, :, :])
                 read_freqs = bandwidth[i0:i1]
-            elif spw_range is not None:
-                # check format
-                if not check_spw_range(spw_range, bandwidth):
-                    raise ValueError("Wrong spw range format, see dosctring.")
-                read_freqs = bandwidth[spw_range[0] : spw_range[-1]]
-                ft_beam = np.array(f["FT_beam"][spw_range[0] : spw_range[1], :, :])
             else:
-                # if spectral range is not specified, use whole bandwidth
-                spw_range = (0, bandwidth.size)
+                # if no frequencies are specified, use whole bandwidth
                 read_freqs = bandwidth
                 ft_beam = np.array(f["FT_beam"])
 
@@ -702,37 +678,6 @@ class FTBeam:
         if not inplace:
             return fq
 
-    def update_spw(self, spw_range):
-        """
-        Function to extract spectral window from FTBeam defined on whole bandwidth.
-
-        Extract a section of the previously computed Fourier
-        transform of the beam.
-
-        .. deprecated::
-            Use :meth:`select_freqs` instead: channel indices are ambiguous
-            across FT-beam files, frequencies are not.
-
-        Parameters
-        ----------
-        spw_range : tuple or 2-element array of ints.
-            In (start_chan, end_chan). Must be between 0 and 1024 (HERA
-            bandwidth).
-        """
-        warnings.warn(
-            "FTBeam.update_spw is deprecated; use FTBeam.select_freqs instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        # checks on inputs
-        if not check_spw_range(spw_range, self.freq_array):
-            raise ValueError("Wrong spw range format, see dosctring.")
-
-        # assign new attributes
-        self.spw_range = tuple((int(spw_range[0]), int(spw_range[1])))
-        self.freq_array = self.freq_array[self.spw_range[0] : self.spw_range[-1]]
-        self.ft_beam = self.ft_beam[self.spw_range[0] : self.spw_range[-1], :, :]
-
 
 class UVWindow:
     """Class for :class:`UVWindow` objects."""
@@ -907,7 +852,6 @@ class UVWindow:
                     ftbeam_obj_pol.append(
                         FTBeam.from_file(
                             f"{ftbeam}_{pol}.hdf5",
-                            spw_range=None,
                             verbose=verbose,
                             x_orientation=x_orientation,
                         )
@@ -1988,41 +1932,3 @@ class UVWindow:
                 f"k array units not consistent with kunits '{self.kunits}'{hint}"
             )
         return karray.to(self.kunits)
-
-
-def check_spw_range(spw_range, bandwidth=None):
-    """
-    Check if spw_range required is in correct format and if
-    it is compatible with bandwidth when given,
-
-    Parameters
-    ----------
-    spw_range : tuple or 2-element array of ints
-        In (start_chan, end_chan). Must be between 0 and 1024 (HERA
-        bandwidth).
-        If None, whole instrument bandwidth is considered.
-    bandwidth : 1D array or list of floats
-        Array or list of the frequencies over which the Fourier
-        transform of the beam has been computed (in Hz).
-        If None, does not include bandwidth-related checks.
-        Default is None.
-
-    Returns
-    ----------
-        True if compatible.
-        False if not.
-    """
-    # check format
-    if np.size(spw_range) != 2:
-        return False
-    if spw_range[1] - spw_range[0] <= 0:
-        return False
-    if min(spw_range) < 0:
-        return False
-    # bandwidth-related checks
-    if bandwidth is not None:
-        bandwidth = np.array(bandwidth)
-        if max(spw_range) > bandwidth.size:
-            return False
-
-    return True

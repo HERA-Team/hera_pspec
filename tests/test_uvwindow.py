@@ -423,21 +423,15 @@ class TestFTBeamFromFile:
         with pytest.raises(ValueError, match="Wrong ftfile input"):
             uvwindow.FTBeam.from_file(ftfile="whatever")
 
-    def test_spw_range_matches_fixture(
-        self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
-    ) -> None:
-        # deprecated channel-index selection agrees with freq_array selection
-        ft_file = DATA_PATH / ftfile
-        spw_range = (5, 25)
-        with pytest.warns(DeprecationWarning, match="spw_range"):
-            test = uvwindow.FTBeam.from_file(ftfile=ft_file, spw_range=spw_range)
-        assert np.allclose(
-            test.freq_array, make_ft_beam_obj(spw_range=spw_range).freq_array
-        )
-
-    def test_no_spw_range_uses_full_bandwidth(self, ft_bandwidth: np.ndarray) -> None:
-        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=None)
+    def test_no_freq_array_uses_full_bandwidth(self, ft_bandwidth: np.ndarray) -> None:
+        """Without freq_array, from_file reads the whole bandwidth of the file."""
+        test = uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile)
         assert np.allclose(test.freq_array, ft_bandwidth)
+
+    def test_spw_range_rejected(self) -> None:
+        """The removed spw_range argument raises instead of selecting channels."""
+        with pytest.raises(TypeError, match="spw_range"):
+            uvwindow.FTBeam.from_file(ftfile=DATA_PATH / ftfile, spw_range=(5, 25))
 
     @pytest.mark.parametrize(
         ("bad_freqs", "match"),
@@ -451,14 +445,6 @@ class TestFTBeamFromFile:
             uvwindow.FTBeam.from_file(
                 ftfile=DATA_PATH / ftfile, freq_array=bad_freqs * units.Hz
             )
-
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
-    def test_invalid_spw_range(self, bad_spw: tuple[int, ...]) -> None:
-        with (
-            pytest.warns(DeprecationWarning, match="spw_range"),
-            pytest.raises(ValueError, match="Wrong spw range format"),
-        ):
-            uvwindow.FTBeam.from_file(spw_range=bad_spw, ftfile=DATA_PATH / ftfile)
 
 
 class TestFTBeamGaussian:
@@ -511,32 +497,6 @@ class TestFTBeamGetBandwidth:
     def test_invalid_file(self) -> None:
         with pytest.raises(ValueError, match="Wrong ftfile input"):
             uvwindow.FTBeam.get_bandwidth(ftfile="whatever")
-
-
-class TestFTBeamUpdateSpw:
-    def test_happy_path(
-        self, make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam]
-    ) -> None:
-        test = make_ft_beam_obj()
-        full_freqs, full_ft_beam = test.freq_array.copy(), test.ft_beam.copy()
-        with pytest.warns(DeprecationWarning, match="select_freqs"):
-            test.update_spw((5, 25))
-        assert test.spw_range == (5, 25)
-        np.testing.assert_array_equal(test.freq_array, full_freqs[5:25])
-        np.testing.assert_array_equal(test.ft_beam, full_ft_beam[5:25])
-
-    @pytest.mark.parametrize("bad_spw", [(13,), (20, 10), (1001, 1022)])
-    def test_invalid_range(
-        self,
-        make_ft_beam_obj: Callable[[tuple[int, int] | None], uvwindow.FTBeam],
-        bad_spw: tuple[int, ...],
-    ) -> None:
-        test = make_ft_beam_obj()
-        with (
-            pytest.warns(DeprecationWarning, match="select_freqs"),
-            pytest.raises(ValueError, match="Wrong spw range format"),
-        ):
-            test.update_spw(spw_range=bad_spw)
 
 
 class TestUVWindowInit:
@@ -1750,14 +1710,6 @@ class TestFTBeamFromFileFreqArray:
         )
         assert np.allclose(test.freq_array, target)
         assert np.array_equal(test.ft_beam, full.ft_beam[5:25])
-
-    def test_both_selections_raise(self, ft_bandwidth: np.ndarray) -> None:
-        with pytest.raises(ValueError, match="both spw_range and freq_array"):
-            uvwindow.FTBeam.from_file(
-                ftfile=DATA_PATH / ftfile,
-                spw_range=(5, 25),
-                freq_array=ft_bandwidth[5:25] * units.Hz,
-            )
 
     def test_interpolation_through_partial_read(
         self,
