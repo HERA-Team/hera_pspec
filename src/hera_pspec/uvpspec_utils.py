@@ -6,6 +6,7 @@ import numpy as np
 from pyuvdata.utils import polnum2str, polstr2num
 
 from . import unit_helpers, utils
+from .bandpower_kernels import BandpowerCovariance, BandpowerWindow, window_from_dense
 
 
 def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
@@ -53,6 +54,15 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
     polpairs1 = uvp1.polpair_array.tolist()
     blps1 = sorted(set(uvp1.blpair_array))
     spws2 = [spw for spw in uvp2._spw_ranges_hz()]
+
+    # uvp1's window functions and covariances are read-only dense views of its
+    # kernels: write the new values into copies and store those at the end
+    new_windows = new_cov_real = new_cov_imag = None
+    if hasattr(uvp1, "window_function_array"):
+        new_windows = {i: np.array(a) for i, a in uvp1.window_function_array.items()}
+    if hasattr(uvp1, "cov_array_real"):
+        new_cov_real = {i: np.array(a) for i, a in uvp1.cov_array_real.items()}
+        new_cov_imag = {i: np.array(a) for i, a in uvp1.cov_array_imag.items()}
 
     # iterate over spws
     for i, spw in enumerate(spws1):
@@ -114,13 +124,13 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                         if uvp1.cov_model == uvp2.cov_model:
                             cov1r = uvp1.get_cov(key1, component="real")
                             cov2r = uvp2.get_cov(key2, component="real")
-                            uvp1.cov_array_real[i][blp1_inds, :, :, j] = np.sqrt(
+                            new_cov_real[i][blp1_inds, :, :, j] = np.sqrt(
                                 cov1r**2 + cov2r**2
                             )
 
                             cov1i = uvp1.get_cov(key1, component="imag")
                             cov2i = uvp2.get_cov(key2, component="imag")
-                            uvp1.cov_array_imag[i][blp1_inds, :, :, j] = np.sqrt(
+                            new_cov_imag[i][blp1_inds, :, :, j] = np.sqrt(
                                 cov1i**2 + cov2i**2
                             )
 
@@ -130,9 +140,13 @@ def subtract_uvp(uvp1, uvp2, run_check=True, verbose=False):
                 ):
                     window1 = uvp1.get_window_function(key1)
                     window2 = uvp2.get_window_function(key2)
-                    uvp1.window_function_array[i][blp1_inds, ..., j] = np.sqrt(
-                        window1**2 + window2**2
-                    )
+                    new_windows[i][blp1_inds, ..., j] = np.sqrt(window1**2 + window2**2)
+
+    if new_windows is not None:
+        uvp1.window_function_array = new_windows
+    if new_cov_real is not None:
+        uvp1.cov_array_real = new_cov_real
+        uvp1.cov_array_imag = new_cov_imag
 
     # run check
     if run_check:
@@ -530,6 +544,16 @@ def _get_blpairs_from_bls(uvp, bls, only_pairs_in_bls=False):
     return blp_select
 
 
+def _read_dense(dataset, blp_select, polpair_select):
+    """Read a dense ``(Nbltpairs, ..., Npols)`` array, selecting rows and polpairs.
+
+    With two index arrays, h5py needs two reads (it indexes one axis at a time).
+    """
+    if isinstance(blp_select, slice) or isinstance(polpair_select, slice):
+        return dataset[blp_select, ..., polpair_select]
+    return dataset[blp_select, ...][..., polpair_select]
+
+
 def _select(
     uvp,
     spws=None,
@@ -761,23 +785,27 @@ def _select(
         cov_real = {}
         cov_imag = {}
         stats = {}
-        window_function = {}
+        windows = {}
         window_function_kperp = {}
         window_function_kpara = {}
 
         # determine if certain arrays are stored
         if h5file is not None:
-            store_cov = "cov_real_spw0" in h5file
+            # compact files (format version 3) hold BandpowerWindow /
+            # BandpowerCovariance groups; others hold dense datasets
+            compact_cov = "cov_real_kernel_spw0" in h5file
+            compact_window = "window_function_kernel_spw0" in h5file
+            store_cov = compact_cov or "cov_real_spw0" in h5file
             if "cov_array_spw0" in h5file:
                 store_cov = False
                 warnings.warn(
                     "uvp.cov_array is no longer supported and will not be loaded. Please update this to be uvp.cov_array_real and uvp.cov_array_imag. See hera_pspec PR #181 for details."
                 )
-            store_window = "window_function_spw0" in h5file
+            store_window = compact_window or "window_function_spw0" in h5file
             exact_windows = "window_function_kperp_spw0" in h5file
         else:
-            store_cov = hasattr(uvp, "cov_array_real")
-            store_window = hasattr(uvp, "window_function_array")
+            store_cov = hasattr(uvp, "cov_real")
+            store_window = hasattr(uvp, "window_functions")
             exact_windows = hasattr(uvp, "window_function_kperp")
 
         # get stats_array keys if h5file
@@ -815,7 +843,20 @@ def _select(
                 _nsmp = h5file[f"nsample_spw{s_old}"]
                 # assign non-required arrays
                 if store_window:
-                    _window_function = h5file[f"window_function_spw{s_old}"]
+                    if compact_window:
+                        windows[s] = BandpowerWindow.read_hdf5(
+                            h5file[f"window_function_kernel_spw{s_old}"],
+                            blp_select,
+                            polpair_select,
+                        )
+                    else:
+                        windows[s] = window_from_dense(
+                            _read_dense(
+                                h5file[f"window_function_spw{s_old}"],
+                                blp_select,
+                                polpair_select,
+                            )
+                        )
                     if exact_windows:
                         _window_function_kperp = h5file[
                             f"window_function_kperp_spw{s_old}"
@@ -824,8 +865,21 @@ def _select(
                             f"window_function_kpara_spw{s_old}"
                         ]
                 if store_cov:
-                    _cov_real = h5file[f"cov_real_spw{s_old}"]
-                    _cov_imag = h5file[f"cov_imag_spw{s_old}"]
+                    for part, covs in (("real", cov_real), ("imag", cov_imag)):
+                        if compact_cov:
+                            covs[s] = BandpowerCovariance.read_hdf5(
+                                h5file[f"cov_{part}_kernel_spw{s_old}"],
+                                blp_select,
+                                polpair_select,
+                            )
+                        else:
+                            covs[s] = BandpowerCovariance.from_dense(
+                                _read_dense(
+                                    h5file[f"cov_{part}_spw{s_old}"],
+                                    blp_select,
+                                    polpair_select,
+                                )
+                            )
                 _stat = {}
                 for statname in statnames:
                     if statname not in stats:
@@ -841,19 +895,26 @@ def _select(
                 _nsmp = uvp.nsample_array[s_old]
                 # assign non-required arrays
                 if store_window:
-                    _window_function = uvp.window_function_array[s_old]
+                    windows[s] = uvp.window_functions[s_old].select(
+                        blp_select, polpair_select
+                    )
                     if exact_windows:
                         _window_function_kperp = uvp.window_function_kperp[s_old]
                         _window_function_kpara = uvp.window_function_kpara[s_old]
                 if store_cov:
-                    _cov_real = uvp.cov_array_real[s_old]
-                    _cov_imag = uvp.cov_array_imag[s_old]
+                    cov_real[s] = uvp.cov_real[s_old].select(blp_select, polpair_select)
+                    cov_imag[s] = uvp.cov_imag[s_old].select(blp_select, polpair_select)
                 # assign stats array
                 _stat = {}
                 for statname in statnames:
                     if statname not in stats:
                         stats[statname] = {}
                     _stat[statname] = uvp.stats_array[statname][s_old]
+
+            # the exact window function k grids have no blpair axis
+            if store_window and exact_windows:
+                window_function_kperp[s] = _window_function_kperp[:, polpair_select]
+                window_function_kpara[s] = _window_function_kpara[:, polpair_select]
 
             # slice data arrays and assign to dictionaries
             if sliceable:
@@ -862,20 +923,6 @@ def _select(
                 wgts[s] = _wgts[blp_select, :, :, polpair_select]
                 ints[s] = _ints[blp_select, polpair_select]
                 nsmp[s] = _nsmp[blp_select, polpair_select]
-                if store_window:
-                    window_function[s] = _window_function[
-                        blp_select, ..., polpair_select
-                    ]
-                    if exact_windows:
-                        window_function_kperp[s] = _window_function_kperp[
-                            :, polpair_select
-                        ]
-                        window_function_kpara[s] = _window_function_kpara[
-                            :, polpair_select
-                        ]
-                if store_cov:
-                    cov_real[s] = _cov_real[blp_select, :, :, polpair_select]
-                    cov_imag[s] = _cov_imag[blp_select, :, :, polpair_select]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, polpair_select]
             else:
@@ -884,28 +931,6 @@ def _select(
                 wgts[s] = _wgts[blp_select, :, :, :][:, :, :, polpair_select]
                 ints[s] = _ints[blp_select, :][:, polpair_select]
                 nsmp[s] = _nsmp[blp_select, :][:, polpair_select]
-                if store_window:
-                    if exact_windows:
-                        window_function[s] = _window_function[blp_select, :, :, :, :][
-                            :, :, :, :, polpair_select
-                        ]
-                        window_function_kperp[s] = _window_function_kperp[
-                            :, polpair_select
-                        ]
-                        window_function_kpara[s] = _window_function_kpara[
-                            :, polpair_select
-                        ]
-                    else:
-                        window_function[s] = _window_function[blp_select, :, :, :][
-                            :, :, :, polpair_select
-                        ]
-                if store_cov:
-                    cov_real[s] = _cov_real[blp_select, :, :, :][
-                        :, :, :, polpair_select
-                    ]
-                    cov_imag[s] = _cov_imag[blp_select, :, :, :][
-                        :, :, :, polpair_select
-                    ]
                 for statname in statnames:
                     stats[statname][s] = _stat[statname][blp_select, :, :][
                         :, :, polpair_select
@@ -940,15 +965,15 @@ def _select(
         uvp.nsample_array = nsmp
 
         if store_window:
-            uvp.window_function_array = window_function
+            uvp.window_functions = windows
             if exact_windows:
                 uvp.window_function_kperp = window_function_kperp
                 uvp.window_function_kpara = window_function_kpara
         if len(stats) > 0:
             uvp.stats_array = stats
         if len(cov_real) > 0:
-            uvp.cov_array_real = cov_real
-            uvp.cov_array_imag = cov_imag
+            uvp.cov_real = cov_real
+            uvp.cov_imag = cov_imag
 
         # downselect on other attrs
         if hasattr(uvp, "OmegaP"):

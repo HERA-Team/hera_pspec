@@ -1048,7 +1048,10 @@ class TestSpherical:
         """Check that inserting inf into cov and stats arrays still produces a finite
         spherical average, and that error weighting gives the inf-error spectrum zero weight."""
         uvp2 = copy.deepcopy(uvp_spherical)
-        uvp2.cov_array_real[0][0], uvp2.cov_array_imag[0][0] = np.inf, np.inf
+        for name in ("cov_array_real", "cov_array_imag"):
+            cov = np.array(getattr(uvp2, name)[0])
+            cov[0] = np.inf
+            getattr(uvp2, name)[0] = cov
         uvp2.stats_array["err"][0][0] = np.inf
         for error_weights in (None, "err"):
             sph = grouping.spherical_average(
@@ -1307,6 +1310,41 @@ class TestAverageInDelayBins:
         assert not folded_uvp.window_function_array[ispw][:, : Ndlys // 2].any(), (
             "Window functions wrongly propagated by grouping.fold_spectra"
         )
+
+    def test_fold_exact_windows_odd_ndlys(self, uvd_zen_2458116: UVData) -> None:
+        """Check that fold_spectra averages exact window functions about zero delay for odd Ndlys."""
+        ds = pspecdata.PSpecData(
+            dsets=[copy.deepcopy(uvd_zen_2458116)] * 2, wgts=[None, None]
+        )
+        bls1, bls2, _ = utils.construct_blpairs(
+            uvd_zen_2458116.get_antpairs()[1:3],
+            exclude_permutations=False,
+            exclude_auto_bls=True,
+        )
+        uvp = ds.pspec(
+            bls1,
+            bls2,
+            dsets=(0, 1),
+            pols=[("xx", "xx")],
+            spw_ranges=(175, 194),
+            taper="bh",
+            verbose=False,
+        )
+        uvp.cosmo = conversions.DEFAULT_COSMOLOGY
+        uvp.get_exact_window_functions(
+            ftbeam=DATA_PATH / "FT_beam_HERA_dipole_test", inplace=True
+        )
+        Ndlys = uvp.Ndlys
+        assert Ndlys % 2 == 1
+        window = uvp.window_function_array[0]
+        folded = copy.deepcopy(uvp)
+        grouping.fold_spectra(folded)
+        mid = Ndlys // 2
+        np.testing.assert_allclose(
+            folded.window_function_array[0][:, mid + 1 :],
+            0.5 * (window[:, :mid][:, ::-1] + window[:, mid + 1 :]),
+        )
+        assert not folded.window_function_array[0][:, :mid].any()
 
     def test_average_spectra_propagation(self, vanilla_uvp_with_beam: UVPSpec) -> None:
         """Check that average_spectra correctly propagates delay-binned window functions."""

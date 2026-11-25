@@ -3,9 +3,12 @@ import copy
 import fnmatch
 import os
 import warnings
+from collections import OrderedDict
+from collections.abc import MutableMapping
 from typing import Self
 
 import astropy.cosmology.units as cu
+import attrs
 import h5py
 import numpy as np
 from astropy import units
@@ -14,6 +17,12 @@ from pyuvdata import utils as uvutils
 
 from . import __version__, conversions, grouping, noise, pspecbeam, unit_helpers, utils
 from . import uvpspec_utils as uvputils
+from .bandpower_kernels import (
+    BandpowerCovariance,
+    BandpowerKernel,
+    BandpowerWindow,
+    window_from_dense,
+)
 from .conversions import _LITTLEH_LENGTH
 from .parameter import PSpecParam
 from .uvwindow import UVWindow
@@ -24,7 +33,13 @@ from .uvwindow import UVWindow
 # for parameters with a declared unit, and the cosmology as astropy YAML in
 # "cosmo_yaml" next to the v0.x dict string in "cosmo".
 UVPSPEC_HDF5_VERSION = "2"
-_KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION,)
+# Version 3 is version 2 with the window functions and covariances stored as
+# BandpowerWindow / BandpowerCovariance groups ("window_function_kernel_spw*",
+# "cov_real_kernel_spw*", "cov_imag_kernel_spw*") instead of dense datasets.
+# It is written only on request (write_hdf5(..., compact=True)): v0.x cannot read
+# those groups.
+UVPSPEC_HDF5_COMPACT_VERSION = "3"
+_KNOWN_UVPSPEC_HDF5_VERSIONS = (UVPSPEC_HDF5_VERSION, UVPSPEC_HDF5_COMPACT_VERSION)
 
 # Values of UVPSpec.normalization: how PSpecData.pspec normalised the spectra
 NORMALIZATIONS = ("two-step", "two-step-exact", "one-step")
@@ -71,6 +86,110 @@ def _normalize_spw_array_input(spw_array, valid_spws):
         raise ValueError("input spw is not in UVPSpec.spw_array.")
 
     return spw_values
+
+
+# Dense expansions of the most recently used kernels, for the legacy dense views
+# below: code that reads uvp.window_function_array[spw] in a loop expands the
+# kernel once, but expansions do not pile up. Kernels are immutable, so an
+# expansion stays valid; the entry holds the kernel so that its id is not reused.
+_DENSE_CACHE = OrderedDict()
+_DENSE_CACHE_SIZE = 8
+
+
+def _cached_dense(kernel):
+    """Read-only legacy dense array of ``kernel``, cached for recent kernels."""
+    key = id(kernel)
+    if key in _DENSE_CACHE:
+        _DENSE_CACHE.move_to_end(key)
+        return _DENSE_CACHE[key][1]
+    dense = kernel.to_dense()
+    dense.setflags(write=False)
+    _DENSE_CACHE[key] = (kernel, dense)
+    if len(_DENSE_CACHE) > _DENSE_CACHE_SIZE:
+        _DENSE_CACHE.popitem(last=False)
+    return dense
+
+
+def _kernel_from_dense(kernel_attr, value):
+    """Turn one legacy dense array (or a kernel) into the kernel ``kernel_attr`` holds."""
+    if isinstance(value, BandpowerKernel):
+        return value
+    if kernel_attr == "window_functions":
+        return window_from_dense(value)
+    return BandpowerCovariance.from_dense(value)
+
+
+class _DenseKernelView(MutableMapping):
+    """Legacy dense arrays for one dict of kernels on a ``UVPSpec``.
+
+    ``uvp.window_function_array``, ``uvp.cov_array_real`` and ``uvp.cov_array_imag``
+    return this. ``view[spw]`` is the dense array of ``(Nbltpairs, ..., Npols)`` that
+    those attributes used to hold. It is read-only, because changing it would not
+    change the kernel: code that modified these arrays in place fails loudly instead
+    of silently doing nothing. ``view[spw] = array`` stores ``array`` as a kernel.
+    """
+
+    def __init__(self, uvp, kernel_attr):
+        self._uvp = uvp
+        self._kernel_attr = kernel_attr
+
+    def _kernels(self):
+        return getattr(self._uvp, self._kernel_attr)
+
+    def __getitem__(self, spw):
+        return _cached_dense(self._kernels()[spw])
+
+    def __setitem__(self, spw, value):
+        self._kernels()[spw] = _kernel_from_dense(self._kernel_attr, value)
+
+    def __delitem__(self, spw):
+        del self._kernels()[spw]
+
+    def __iter__(self):
+        return iter(self._kernels())
+
+    def __len__(self):
+        return len(self._kernels())
+
+    def __repr__(self):
+        spws = [int(spw) for spw in self._kernels()]
+        return f"<dense view of {self._kernel_attr}: spws {spws}>"
+
+
+def _dense_view_property(kernel_attr, legacy_name):
+    """Property ``legacy_name`` giving the kernels in ``kernel_attr`` as dense arrays."""
+
+    def fget(self):
+        if kernel_attr not in self.__dict__:
+            raise AttributeError(
+                f"'UVPSpec' object has no attribute '{legacy_name}' "
+                f"(no {kernel_attr} stored)"
+            )
+        return _DenseKernelView(self, kernel_attr)
+
+    def fset(self, value):
+        if isinstance(value, _DenseKernelView):
+            # share the (immutable) kernels instead of expanding and re-reducing
+            setattr(self, kernel_attr, dict(value._kernels()))
+            return
+        setattr(
+            self,
+            kernel_attr,
+            {
+                spw: _kernel_from_dense(kernel_attr, array)
+                for spw, array in value.items()
+            },
+        )
+
+    def fdel(self):
+        delattr(self, kernel_attr)
+
+    doc = (
+        f"The ``{kernel_attr}`` kernels as legacy dense arrays, a mapping of spw to "
+        "read-only arrays of shape ``(Nbltpairs, ..., Npols)``. Assigning a dict "
+        f"of dense arrays (or an item of one) stores them in ``{kernel_attr}``."
+    )
+    return property(fget, fset, fdel, doc)
 
 
 class UVPSpec:
@@ -144,7 +263,7 @@ class UVPSpec:
         # Data attributes
         # Parameters that carry a physical unit declare it with ``unit=``; the
         # stored value is a plain array in that unit. data_array,
-        # cov_array_real/imag, stats_array and scalar_array leave unit=None
+        # cov_real/imag, stats_array and scalar_array leave unit=None
         # because their unit is set by vis_units and norm_units. Unitless
         # quantities (weights, nsamples, window functions, indices and counts)
         # also leave unit=None.
@@ -161,25 +280,37 @@ class UVPSpec:
             expected_type=np.complex128,
             form="(Nbltpairs, spw_Ndlys, Npols)",
         )
-        desc = "Power spectrum covariance dictionary with spw integer as keys and values as float ndarrays, stored separately for real and imaginary parts."
-        self._cov_array_real = PSpecParam(
-            "cov_array_real",
-            description=desc,
-            expected_type=np.float64,
-            form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+        desc = (
+            "Covariances of the real parts of the power spectra: a dict with spw "
+            "integer keys and BandpowerCovariance values. cov_array_real gives "
+            "them as dense arrays."
         )
-        self._cov_array_imag = PSpecParam(
-            "cov_array_imag",
+        self._cov_real = PSpecParam(
+            "cov_real",
             description=desc,
-            expected_type=np.float64,
-            form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            expected_type=BandpowerCovariance,
+            form="{spw: Nbltpairs x Npols entries of (spw_Ndlys, spw_Ndlys)}",
         )
-        desc = "Window function dictionary of bandpowers."
-        self._window_function_array = PSpecParam(
-            "window_function_array",
+        desc = (
+            "Covariances of the imaginary parts of the power spectra, as "
+            "cov_real. cov_array_imag gives them as dense arrays."
+        )
+        self._cov_imag = PSpecParam(
+            "cov_imag",
             description=desc,
-            expected_type=np.float64,
-            form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            expected_type=BandpowerCovariance,
+            form="{spw: Nbltpairs x Npols entries of (spw_Ndlys, spw_Ndlys)}",
+        )
+        desc = (
+            "Window functions of the bandpowers: a dict with spw integer keys and "
+            "BandpowerWindow values. window_function_array gives them as dense "
+            "arrays."
+        )
+        self._window_functions = PSpecParam(
+            "window_functions",
+            description=desc,
+            expected_type=BandpowerWindow,
+            form="{spw: Nbltpairs x Npols entries of (spw_Ndlys, *in_shape)}",
         )
         # The unit of the exact window function k grids depends on norm_units,
         # so it is not declared on the parameter: see window_k_unit()
@@ -192,7 +323,7 @@ class UVPSpec:
             "window_function_kperp",
             description=desc,
             expected_type=np.float64,
-            form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            form="(Nkperp, Npols)",
         )
         desc = (
             "Dictionary of bandpowers given the kparallel grid used to compute "
@@ -203,7 +334,7 @@ class UVPSpec:
             "window_function_kpara",
             description=desc,
             expected_type=np.float64,
-            form="(Nbltpairs, spw_Ndlys, spw_Ndlys, Npols)",
+            form="(Nkpara, Npols)",
         )
         desc = "Weight dictionary for original two datasets. The second axis holds [dset1_wgts, dset2_wgts] in that order."
         self._wgt_array = PSpecParam(
@@ -614,13 +745,12 @@ class UVPSpec:
             "data_array",
             "wgt_array",
             "integration_array",
-            "window_function_array",
             "window_function_kperp",
             "window_function_kpara",
             "nsample_array",
-            "cov_array_real",
-            "cov_array_imag",
         ]
+        # dicts of spw -> BandpowerKernel
+        self._kernel_dicts = ["window_functions", "cov_real", "cov_imag"]
         self._dicts_of_dicts = ["stats_array"]
 
         # define which attributes are considered meta data. Large attrs should
@@ -645,6 +775,7 @@ class UVPSpec:
         self._meta_attrs = sorted(
             set(self._all_params)
             - set(self._dicts)
+            - set(self._kernel_dicts)
             - set(self._meta_dsets)
             - set(self._dicts_of_dicts)
         )
@@ -662,6 +793,7 @@ class UVPSpec:
             len(
                 set(self._all_params)
                 - set(self._dicts)
+                - set(self._kernel_dicts)
                 - set(self._immutables)
                 - set(self._ndarrays)
                 - set(self._dicts_of_dicts)
@@ -677,6 +809,12 @@ class UVPSpec:
         # Set function docstrings
         self.get_red_bls.__func__.__doc__ = uvputils._get_red_bls.__doc__
         self.get_red_blpairs.__func__.__doc__ = uvputils._get_red_blpairs.__doc__
+
+    window_function_array = _dense_view_property(
+        "window_functions", "window_function_array"
+    )
+    cov_array_real = _dense_view_property("cov_real", "cov_array_real")
+    cov_array_imag = _dense_view_property("cov_imag", "cov_array_imag")
 
     def get_cov(self, key, component="real", omit_flags=False):
         """
@@ -707,40 +845,20 @@ class UVPSpec:
         data : complex ndarray
             Shape (Ntimes, Ndlys, Ndlys)
         """
-        spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
-
-        # Need to deal with folded data!
-        # if data has been folded, return only positive delays
-        if component == "real":
-            if hasattr(self, "cov_array_real"):
-                if self.folded:
-                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return self.cov_array_real[spw][
-                        blpairts,
-                        -(Ndlys - Ndlys // 2 - 1) :,
-                        -(Ndlys - Ndlys // 2 - 1) :,
-                        polpair,
-                    ]
-                else:
-                    return self.cov_array_real[spw][blpairts, :, :, polpair]
-            else:
-                raise AttributeError("No covariance array has been calculated.")
-        elif component == "imag":
-            if hasattr(self, "cov_array_imag"):
-                if self.folded:
-                    Ndlys = np.count_nonzero(self.spw_dly_array == spw)
-                    return self.cov_array_imag[spw][
-                        blpairts,
-                        -(Ndlys - Ndlys // 2 - 1) :,
-                        -(Ndlys - Ndlys // 2 - 1) :,
-                        polpair,
-                    ]
-                else:
-                    return self.cov_array_imag[spw][blpairts, :, :, polpair]
-            else:
-                raise AttributeError("No covariance array has been calculated.")
-        else:
+        if component not in ("real", "imag"):
             raise ValueError("No types besides real and imag.")
+        name = f"cov_{component}"
+        if not hasattr(self, name):
+            raise AttributeError("No covariance array has been calculated.")
+        spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
+        cov = getattr(self, name)[spw].get(blpairts, polpair)
+
+        # if data has been folded, return only positive delays
+        if self.folded:
+            Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            positive = slice(-(Ndlys - Ndlys // 2 - 1), None)
+            return cov[:, positive, positive]
+        return cov
 
     def get_window_function(self, key, omit_flags=False):
         """
@@ -772,24 +890,17 @@ class UVPSpec:
         """
 
         spw, blpairts, polpair = self.key_to_indices(key, omit_flags=omit_flags)
+        window = self.window_functions[spw].get(blpairts, polpair)
 
-        # Need to deal with folded data!
         # if data has been folded, return only positive delays
         if self.folded:
             Ndlys = np.count_nonzero(self.spw_dly_array == spw)
+            positive = slice(-(Ndlys - Ndlys // 2 - 1), None)
             if self.exact_windows:
                 # only the delay axis is folded; (kperp, kpara) grid is untouched
-                return self.window_function_array[spw][
-                    blpairts, -(Ndlys - Ndlys // 2 - 1) :, ..., polpair
-                ]
-            return self.window_function_array[spw][
-                blpairts,
-                -(Ndlys - Ndlys // 2 - 1) :,
-                -(Ndlys - Ndlys // 2 - 1) :,
-                polpair,
-            ]
-        else:
-            return self.window_function_array[spw][blpairts, ..., polpair]
+                return window[:, positive]
+            return window[:, positive, positive]
+        return window
 
     def get_data(self, key, omit_flags=False):
         """
@@ -2474,7 +2585,7 @@ class UVPSpec:
                 only_pairs_in_bls=only_pairs_in_bls,
             )
 
-    def write_to_group(self, group, run_check=True):
+    def write_to_group(self, group, run_check=True, compact=False):
         """
         Write UVPSpec data into an HDF5 group.
 
@@ -2488,9 +2599,23 @@ class UVPSpec:
             Whether to run a validity check on the UVPSpec object before
             writing it to the HDF5 group. Default: True.
 
+        compact : bool, optional
+            Store the window functions and covariances as their
+            :class:`BandpowerWindow` / :class:`BandpowerCovariance` blocks
+            (format version 3) instead of dense arrays. This is usually much
+            smaller, but hera_pspec v0.x cannot read the window functions or
+            covariances of such a file. Default: False.
+
         Notes
         -----
-        Writes format version 2 (group attribute ``uvpspec_version = "2"``).
+        Writes format version 2 (group attribute ``uvpspec_version = "2"``),
+        or version 3 when ``compact`` is True and there are window functions or
+        covariances to store. Version 3 differs only in those: each spw has a
+        ``window_function_kernel_spw*`` group instead of the
+        ``window_function_spw*`` dataset, and ``cov_real_kernel_spw*`` /
+        ``cov_imag_kernel_spw*`` groups (each with the ``unit`` attribute of the
+        covariance) instead of the ``cov_real_spw*`` / ``cov_imag_spw*``
+        datasets; see :meth:`BandpowerKernel.write_hdf5` for their contents.
         Metadata in ``_meta_attrs`` are group attributes and those in
         ``_meta_dsets`` are datasets; per-spectral-window arrays are datasets
         such as ``data_spw0``. Parameters with a declared unit (see
@@ -2599,13 +2724,18 @@ class UVPSpec:
             group.create_dataset(
                 f"nsample_spw{i}", data=self.nsample_array[i], dtype=float
             )
-            if hasattr(self, "window_function_array"):
-                dset = group.create_dataset(
-                    f"window_function_spw{i}",
-                    data=self.window_function_array[i],
-                    dtype=np.float64,
-                )
-                dset.attrs["unit"] = window_unit
+            if hasattr(self, "window_functions"):
+                if compact:
+                    self.window_functions[i].write_hdf5(
+                        group.create_group(f"window_function_kernel_spw{i}")
+                    )
+                else:
+                    dset = group.create_dataset(
+                        f"window_function_spw{i}",
+                        data=self.window_functions[i].to_dense(),
+                        dtype=np.float64,
+                    )
+                    dset.attrs["unit"] = window_unit
                 if self.exact_windows:
                     dset = group.create_dataset(
                         f"window_function_kperp_spw{i}",
@@ -2623,15 +2753,19 @@ class UVPSpec:
                         dtype=np.float64,
                     )
                     dset.attrs["unit"] = window_k_unit_string
-            if hasattr(self, "cov_array_real"):
-                dset = group.create_dataset(
-                    f"cov_real_spw{i}", data=self.cov_array_real[i], dtype=np.float64
-                )
-                dset.attrs["unit"] = cov_unit
-                dset = group.create_dataset(
-                    f"cov_imag_spw{i}", data=self.cov_array_imag[i], dtype=np.float64
-                )
-                dset.attrs["unit"] = cov_unit
+            if hasattr(self, "cov_real"):
+                for part in ("real", "imag"):
+                    if compact:
+                        cov_group = group.create_group(f"cov_{part}_kernel_spw{i}")
+                        getattr(self, f"cov_{part}")[i].write_hdf5(cov_group)
+                        cov_group.attrs["unit"] = cov_unit
+                    else:
+                        dset = group.create_dataset(
+                            f"cov_{part}_spw{i}",
+                            data=getattr(self, f"cov_{part}")[i].to_dense(),
+                            dtype=np.float64,
+                        )
+                        dset.attrs["unit"] = cov_unit
 
         # Store any statistics arrays
         if hasattr(self, "stats_array"):
@@ -2644,10 +2778,15 @@ class UVPSpec:
                     dset.attrs["unit"] = data_unit
 
         # denote as a uvpspec object, and record the format version
-        attrs["uvpspec_version"] = UVPSPEC_HDF5_VERSION
+        wrote_kernels = compact and (
+            hasattr(self, "window_functions") or hasattr(self, "cov_real")
+        )
+        attrs["uvpspec_version"] = (
+            UVPSPEC_HDF5_COMPACT_VERSION if wrote_kernels else UVPSPEC_HDF5_VERSION
+        )
         attrs["pspec_type"] = self.__class__.__name__
 
-    def write_hdf5(self, filepath, overwrite=False, run_check=True):
+    def write_hdf5(self, filepath, overwrite=False, run_check=True, compact=False):
         """
         Write a UVPSpec object to HDF5 file.
 
@@ -2661,6 +2800,11 @@ class UVPSpec:
 
         run_check : bool, optional
             Run UVPSpec validity check before writing to file. Default: True.
+
+        compact : bool, optional
+            Store window functions and covariances compactly (format version 3);
+            see :meth:`write_to_group`. hera_pspec v0.x cannot read the window
+            functions or covariances of such a file. Default: False.
         """
         # Check output
         if os.path.exists(filepath) and overwrite is False:
@@ -2671,7 +2815,7 @@ class UVPSpec:
 
         # Write file
         with h5py.File(filepath, "w") as f:
-            self.write_to_group(f, run_check=run_check)
+            self.write_to_group(f, run_check=run_check, compact=compact)
 
     def set_cosmology(self, new_cosmo, overwrite=False, new_beam=None, verbose=True):
         """
@@ -2840,9 +2984,12 @@ class UVPSpec:
                 ).to_value(scalar_unit)
                 ratio = scalar / self.scalar_array[spw, j]
                 self.data_array[spw][:, :, j] *= ratio
-                for name in ("cov_array_real", "cov_array_imag"):
+                for name in ("cov_real", "cov_imag"):
                     if hasattr(self, name):
-                        getattr(self, name)[spw][..., j] *= ratio**2
+                        cov = getattr(self, name)[spw]
+                        scale = cov.scale.copy()
+                        scale[:, j] *= ratio**2
+                        getattr(self, name)[spw] = attrs.evolve(cov, scale=scale)
                 if hasattr(self, "stats_array"):
                     for stat in self.stats_array.values():
                         stat[spw][:, :, j] *= ratio
@@ -3077,6 +3224,19 @@ class UVPSpec:
                             assert issubclass(
                                 getattr(self, p)[k].dtype.type, a.expected_type
                             ), err_msg
+                    elif p in self._kernel_dicts:
+                        assert isinstance(value, dict), (
+                            f"attribute {p} needs to be a dictionary"
+                        )
+                        # one entry per row of blpair_array (the per-bltpair
+                        # arrays all have that many rows) and per polpair
+                        shape = (self.blpair_array.size, self.Npols)
+                        for k, kernel in value.items():
+                            assert isinstance(kernel, a.expected_type), err_msg
+                            assert (kernel.Nbltpairs, kernel.Npols) == shape, (
+                                f"{p}[{k}] has (Nbltpairs, Npols) = "
+                                f"{(kernel.Nbltpairs, kernel.Npols)}, not {shape}"
+                            )
                     # cosmology: convert a deprecated Cosmo_Conversions (or a
                     # parameter dict) instead of the generic cast below
                     elif p == "cosmo":
@@ -3235,6 +3395,9 @@ class UVPSpec:
                         assert np.isclose(
                             getattr(self, p)[i], getattr(other, p)[i]
                         ).all()
+                elif p in self._kernel_dicts:
+                    for i in getattr(self, p):
+                        assert getattr(self, p)[i] == getattr(other, p)[i]
 
         except AssertionError:
             if verbose:
@@ -3896,6 +4059,15 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     ]
     uvp_polpairs = [_uvp.polpair_array.tolist() for _uvp in uvps]
 
+    # Dense window functions and covariances of the inputs, expanded once each:
+    # the loops below read them entry by entry
+    dense_inputs = {}
+
+    def _dense_input(name, l, m):
+        if (name, l, m) not in dense_inputs:
+            dense_inputs[name, l, m] = getattr(uvps[l], name)[m]
+        return dense_inputs[name, l, m]
+
     # Store optional attrs only if all uvps have them
     store_cov = np.all([hasattr(uvp, "cov_array_real") for uvp in uvps])
     store_window = np.all([hasattr(uvp, "window_function_array") for uvp in uvps])
@@ -3907,7 +4079,7 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.wgt_array = {}
     u.nsample_array = {}
     if store_window:
-        u.window_function_array = {}
+        window_arrays = {}
         if exact_windows:
             u.window_function_kperp = {}
             u.window_function_kpara = {}
@@ -3917,8 +4089,8 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
         if len(set([uvp.cov_model for uvp in uvps])) > 1:
             store_cov = False
         else:
-            u.cov_array_real = {}
-            u.cov_array_imag = {}
+            cov_real_arrays = {}
+            cov_imag_arrays = {}
             u.cov_model = uvps[0].cov_model
     if store_stats:
         # get shared stats keys
@@ -3951,19 +4123,19 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
             if exact_windows:
                 Nkperp = uvps[l].window_function_kperp[m][:, 0].size
                 Nkpara = uvps[l].window_function_kpara[m][:, 0].size
-                u.window_function_array[i] = np.empty(
+                window_arrays[i] = np.empty(
                     (Nbltpairs, spw[3], Nkperp, Nkpara, Npols), np.float64
                 )
             else:
-                Nkpar = uvps[l].window_function_array[m].shape[2]
-                u.window_function_array[i] = np.empty(
+                Nkpar = _dense_input("window_function_array", l, m).shape[2]
+                window_arrays[i] = np.empty(
                     (Nbltpairs, spw[3], Nkpar, Npols), np.float64
                 )
         if store_cov:
-            u.cov_array_real[i] = np.empty(
+            cov_real_arrays[i] = np.empty(
                 (Nbltpairs, spw[3], spw[3], Npols), np.float64
             )
-            u.cov_array_imag[i] = np.empty(
+            cov_imag_arrays[i] = np.empty(
                 (Nbltpairs, spw[3], spw[3], Npols), np.float64
             )
         if store_stats:
@@ -4086,16 +4258,16 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.label_1_array[i, j, k] = u_lbls[uvps[l].labels[lbl1]]
                     u.label_2_array[i, j, k] = u_lbls[uvps[l].labels[lbl2]]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
-                            n, :, :, q
-                        ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
-                            n, :, :, q
-                        ]
+                        cov_real_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_real", l, m
+                        )[n, :, :, q]
+                        cov_imag_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_imag", l, m
+                        )[n, :, :, q]
                     if store_window:
-                        u.window_function_array[i][j, ..., k] = uvps[
-                            l
-                        ].window_function_array[m][n, ..., q]
+                        window_arrays[i][j, ..., k] = _dense_input(
+                            "window_function_array", l, m
+                        )[n, ..., q]
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
@@ -4143,16 +4315,16 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     u.integration_array[i][j, k] = uvps[l].integration_array[m][n, q]
                     u.nsample_array[i][j, k] = uvps[l].nsample_array[m][n, q]
                     if store_window:
-                        u.window_function_array[i][j, ..., k] = uvps[
-                            l
-                        ].window_function_array[m][n, ..., q]
+                        window_arrays[i][j, ..., k] = _dense_input(
+                            "window_function_array", l, m
+                        )[n, ..., q]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
-                            n, :, :, q
-                        ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
-                            n, :, :, q
-                        ]
+                        cov_real_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_real", l, m
+                        )[n, :, :, q]
+                        cov_imag_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_imag", l, m
+                        )[n, :, :, q]
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
@@ -4198,16 +4370,16 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
                     n = blpts_idxs[j]
                     u.data_array[i][j, :, k] = uvps[l].data_array[m][n, :, q]
                     if store_window:
-                        u.window_function_array[i][j, ..., k] = uvps[
-                            l
-                        ].window_function_array[m][n, ..., q]
+                        window_arrays[i][j, ..., k] = _dense_input(
+                            "window_function_array", l, m
+                        )[n, ..., q]
                     if store_cov:
-                        u.cov_array_real[i][j, :, :, k] = uvps[l].cov_array_real[m][
-                            n, :, :, q
-                        ]
-                        u.cov_array_imag[i][j, :, :, k] = uvps[l].cov_array_imag[m][
-                            n, :, :, q
-                        ]
+                        cov_real_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_real", l, m
+                        )[n, :, :, q]
+                        cov_imag_arrays[i][j, :, :, k] = _dense_input(
+                            "cov_array_imag", l, m
+                        )[n, :, :, q]
                     if store_stats:
                         for stat in stored_stats:
                             u.stats_array[stat][i][j, :, k] = uvps[l].stats_array[stat][
@@ -4259,6 +4431,13 @@ def combine_uvpspec(uvps, merge_history=True, verbose=True):
     u.labels = np.array(u.labels, str)
 
     u.r_params = uvputils.compress_r_params(r_params)
+
+    # filled above as dense arrays; store them as kernels
+    if store_window:
+        u.window_function_array = window_arrays
+    if store_cov:
+        u.cov_array_real = cov_real_arrays
+        u.cov_array_imag = cov_imag_arrays
 
     for k in static_meta.keys():
         setattr(u, k, static_meta[k])

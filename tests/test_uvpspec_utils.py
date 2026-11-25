@@ -1,6 +1,7 @@
 import copy
 import json
 
+import h5py
 import numpy as np
 import pytest
 
@@ -382,3 +383,16 @@ def test_r_param_compression() -> None:
 
     assert uvputils.compress_r_params({}) == ""
     assert uvputils.decompress_r_params("") == {}
+
+
+@pytest.mark.parametrize(
+    ("rows", "pols"), [(slice(1, 3), [0, 2]), ([0, 2], slice(None)), ([0, 2], [1, 2])]
+)
+def test_read_dense(tmp_path, rows, pols) -> None:
+    """_read_dense selects rows and polpairs of an HDF5 dataset like numpy would."""
+    array = np.arange(4 * 2 * 3, dtype=float).reshape(4, 2, 3)
+    with h5py.File(tmp_path / "dense.h5", "w") as f:
+        f.create_dataset("x", data=array)
+    with h5py.File(tmp_path / "dense.h5", "r") as f:
+        got = uvputils._read_dense(f["x"], rows, pols)
+    np.testing.assert_array_equal(got, array[rows][..., pols])
