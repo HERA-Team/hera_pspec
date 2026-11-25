@@ -735,3 +735,19 @@ class TestScalarLengthUnit:
             beam_nf_dipole.compute_pspec_scalar(
                 LOWER_FREQ, UPPER_FREQ, NUM_FREQS, length_unit=length_unit
             )
+
+
+def test_interpolate_omega_ratio_quadratic() -> None:
+    """Check that a beam ratio quadratic in frequency is interpolated and extrapolated exactly."""
+    beam_freqs = np.linspace(100e6, 200e6, 11)
+
+    def ratio(freqs: np.ndarray) -> np.ndarray:
+        mhz = freqs / 1e6
+        return 2e-3 * mhz**2 - 0.1 * mhz + 30.0
+
+    freqs = np.array([90e6, 123.4e6, 150e6, 210e6])
+    np.testing.assert_allclose(
+        pspecbeam.interpolate_omega_ratio(beam_freqs, ratio(beam_freqs), freqs),
+        ratio(freqs),
+        rtol=1e-10,
+    )

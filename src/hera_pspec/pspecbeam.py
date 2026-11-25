@@ -6,6 +6,7 @@ import numpy as np
 import scipy.integrate as integrate
 import uvtools.dspec as dspec
 from astropy import constants
+from numpy.typing import ArrayLike
 from pyuvdata import UVBeam
 from pyuvdata import utils as uvutils
 from pyuvdata.analytic_beam import AnalyticBeam, GaussianBeam
@@ -13,6 +14,40 @@ from scipy.interpolate import interp1d
 
 from . import conversions, utils
 from . import uvpspec_utils as uvputils
+
+
+def interpolate_omega_ratio(
+    beam_freqs: ArrayLike, omega_ratio: ArrayLike, freqs: ArrayLike
+) -> np.ndarray:
+    r"""
+    Interpolate the beam ratio ``Omega_pp(nu) / Omega_p(nu)^2`` [1/sr].
+
+    The interpolation is quadratic in MHz (more stable than in Hz) and
+    extrapolates outside ``beam_freqs``. The power spectrum scalar
+    (:meth:`PSpecBeamBase.compute_pspec_scalar`) and the separable beam term
+    of :class:`hera_pspec.DelayResponse` both use it, so they agree.
+
+    Parameters
+    ----------
+    beam_freqs : array_like
+        Frequencies of the beam integrals, in Hz.
+    omega_ratio : array_like
+        ``Omega_pp / Omega_p^2`` at ``beam_freqs``, in 1/sr.
+    freqs : array_like
+        Frequencies to interpolate to, in Hz.
+
+    Returns
+    -------
+    ndarray
+        ``Omega_pp / Omega_p^2`` at ``freqs``, in 1/sr.
+    """
+    fit = interp1d(
+        np.asarray(beam_freqs) / 1e6,
+        omega_ratio,
+        kind="quadratic",
+        fill_value="extrapolate",
+    )
+    return fit(np.asarray(freqs, dtype=float) / 1e6)
 
 
 def _compute_pspec_scalar(
@@ -90,9 +125,6 @@ def _compute_pspec_scalar(
         dtype=float,
     )
 
-    # The interpolations are generally more stable in MHz
-    integration_freqs_MHz = integration_freqs / 1e6
-
     # Get redshifts and cosmological functions
     redshifts = conversions.f2z(integration_freqs).flatten()
     X2Y = conversions.X2Y(redshifts, cosmo, length_unit).to_value(
@@ -105,14 +137,9 @@ def _compute_pspec_scalar(
         )
         return scalar
 
-    # Use linear interpolation to interpolate the frequency-dependent
-    # quantities derived from the beam model to the same frequency grid as the
-    # power spectrum estimation
-    beam_model_freqs_MHz = beam_freqs / 1e6
-    dOpp_over_Op2_fit = interp1d(
-        beam_model_freqs_MHz, omega_ratio, kind="quadratic", fill_value="extrapolate"
-    )
-    dOpp_over_Op2 = dOpp_over_Op2_fit(integration_freqs_MHz)
+    # Interpolate the frequency-dependent quantities derived from the beam
+    # model to the same frequency grid as the power spectrum estimation
+    dOpp_over_Op2 = interpolate_omega_ratio(beam_freqs, omega_ratio, integration_freqs)
 
     # Get B_pp = \int dnu taper^2 and Bp = \int dnu
     if taper == "none":

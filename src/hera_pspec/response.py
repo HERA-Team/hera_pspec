@@ -38,9 +38,9 @@ from dataclasses import dataclass
 import astropy.cosmology.units as cu
 import numpy as np
 from astropy import units
-from scipy.interpolate import interp1d
+from numpy.typing import ArrayLike
 
-from . import conversions
+from . import conversions, pspecbeam
 
 __all__ = [
     "DelayResponse",
@@ -59,7 +59,9 @@ _BIN_WIDTH_OPTIONS = ("ndlys", "nfreqs")
 _CONVENTION_OPTIONS = ("cosmological", "legacy", "legacy-exact")
 
 
-def healpix_integral_beam(beam, pol, freqs_hz):
+def healpix_integral_beam(
+    beam: pspecbeam.PSpecBeamUV, pol: str | int, freqs_hz: ArrayLike
+) -> np.ndarray:
     r"""
     HEALPix beam integral ``B_ij`` [1/sr] at the frequencies ``freqs_hz``.
 
@@ -90,18 +92,17 @@ def healpix_integral_beam(beam, pol, freqs_hz):
     return np.pi / (3.0 * nside * nside) * np.dot(beam_prod, beam_prod.T)
 
 
-def omega_ratio(beam, pol, freqs_hz):
+def omega_ratio(
+    beam: pspecbeam.PSpecBeamBase, pol: str | int, freqs_hz: ArrayLike
+) -> np.ndarray:
     r"""
     ``Omega_pp(nu) / Omega_p(nu)^2`` [1/sr] at the frequencies ``freqs_hz``.
 
-    Interpolated exactly as the power spectrum scalar does
-    (``pspecbeam._compute_pspec_scalar``: quadratic in MHz, extrapolated).
+    Interpolated with :func:`hera_pspec.pspecbeam.interpolate_omega_ratio`,
+    as the power spectrum scalar is.
     """
     ratio = beam.power_beam_sq_int(pol) / beam.power_beam_int(pol) ** 2
-    fit = interp1d(
-        beam.beam_freqs / 1e6, ratio, kind="quadratic", fill_value="extrapolate"
-    )
-    return fit(np.asarray(freqs_hz, dtype=float) / 1e6)
+    return pspecbeam.interpolate_omega_ratio(beam.beam_freqs, ratio, freqs_hz)
 
 
 def estimator_phases(n_dlys, n_freqs):
