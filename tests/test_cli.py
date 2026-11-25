@@ -296,7 +296,7 @@ def test_run_end_to_end(tmp_path):
 
 
 def test_run_symmetric_taper_flag_passes_bool(monkeypatch, tmp_path):
-    """Regression: --no-symmetric-taper must forward Python False (not a truthy str)."""
+    """Check that --no-symmetric-taper reaches pspec_run as the bool False."""
     captured = _capture_pspec_run(monkeypatch)
     result = invoke(
         ["run", "a.uvh5", "--output", str(tmp_path / "o.h5"), "--no-symmetric-taper"]
@@ -580,6 +580,7 @@ def test_run_rejects_unknown_normalization(monkeypatch, tmp_path):
 
 
 def test_run_help_lists_cosmology_and_unit_options(monkeypatch):
+    """Check that `run --help` lists and explains the cosmology and unit options."""
     # wide terminal so rich does not wrap the parameter order across lines
     monkeypatch.setenv("COLUMNS", "300")
     result = invoke(["run", "--help"])
@@ -639,7 +640,7 @@ def bootstrap_run_args(monkeypatch) -> dict:
 
 
 def test_bootstrap_bool_flags_round_trip(bootstrap_run_args: dict):
-    """Regression: time_avg/normal_std/robust_std are real bool flags, not type=bool."""
+    """Check that the bootstrap bool flags and --nsamples reach bootstrap_run as given."""
     result = invoke(
         ["bootstrap", "x.h5", "--time-avg", "--no-normal-std", "--nsamples", "5"]
     )
@@ -702,6 +703,7 @@ def auto_noise_calls(monkeypatch) -> dict:
 
 
 def test_auto_noise_default_spectra(auto_noise_calls: dict):
+    """Check that by default auto-noise adds P_N errors to the stored spectrum and saves."""
     result = invoke(["auto-noise", "cont.h5", "autos.uvh5", "beam.fits"])
     assert result.exit_code == 0, result.output
     assert auto_noise_calls["read"] == "autos.uvh5"
@@ -711,7 +713,7 @@ def test_auto_noise_default_spectra(auto_noise_calls: dict):
 
 
 def test_auto_noise_explicit_spectra_does_not_raise(auto_noise_calls: dict):
-    """Regression: passing --spectra used to leave `spectra` unbound -> NameError."""
+    """Check that --spectra given twice runs and sets noise errors on both spectra."""
     result = invoke(
         [
             "auto-noise",
