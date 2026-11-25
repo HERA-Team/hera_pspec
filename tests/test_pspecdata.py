@@ -213,32 +213,36 @@ def test_init_raises_on_unequal_dsets_and_wgts_lengths() -> None:
         )
 
 
-# A dict of arrays, i.e. visibilities that are not wrapped in a UVData object
-_ARRAY_DICT = {"(0,1)": np.arange(5), "(0,2)": np.arange(5)}
+def test_init_rejects_ndarray() -> None:
+    """Check that a bare array is rejected as datasets and weights."""
+    with pytest.raises(
+        TypeError, match="dsets, dsets_std, wgts and cals must be UVData"
+    ):
+        pspecdata.PSpecData(np.ones((6, 8)), np.ones((6, 8)))
+
+
+def test_init_rejects_float() -> None:
+    """Check that a single float is rejected as datasets and weights."""
+    with pytest.raises(TypeError, match="object of type 'float' has no len\\(\\)"):
+        pspecdata.PSpecData(12.0, 12.0)
 
 
 @pytest.mark.parametrize(
-    "bad_input, match",
+    "bad_input",
     [
-        (np.ones((6, 8)), "dsets, dsets_std, wgts and cals must be UVData"),
-        ([[0, 1, 2] for i in range(5)], "Only UVData objects can be used as datasets"),
-        (12.0, "object of type 'float' has no len\\(\\)"),
-        ([12.0], "Only UVData objects can be used as datasets"),
-        (_ARRAY_DICT, "Only UVData objects can be used as datasets."),
-        ([_ARRAY_DICT], "Only UVData objects can be used as datasets"),
+        [[0, 1, 2] for i in range(5)],
+        [12.0],
+        # visibilities as a dict of arrays, not wrapped in a UVData object
+        {"(0,1)": np.arange(5), "(0,2)": np.arange(5)},
+        [{"(0,1)": np.arange(5), "(0,2)": np.arange(5)}],
     ],
-    ids=[
-        "ndarray",
-        "list_of_lists",
-        "float",
-        "list_of_floats",
-        "dict_of_arrays",
-        "list_of_dicts",
-    ],
+    ids=["list_of_lists", "list_of_floats", "dict_of_arrays", "list_of_dicts"],
 )
-def test_init_rejects_non_uvdata(bad_input, match: str) -> None:
-    """Check that datasets and weights that are not UVData objects are rejected."""
-    with pytest.raises(TypeError, match=match):
+def test_init_rejects_non_uvdata(bad_input: list | dict) -> None:
+    """Check that datasets and weights holding something other than UVData are rejected."""
+    with pytest.raises(
+        TypeError, match="Only UVData objects can be used as datasets\\."
+    ):
         pspecdata.PSpecData(bad_input, bad_input)
 
 
