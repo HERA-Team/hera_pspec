@@ -233,6 +233,7 @@ class Sensitivity:
         freqs: npt.NDArray[np.floating[Any]],
         pol: str,
         num_steps: int = 5000,
+        *,
         length_unit: u.UnitBase | str | None = None,
     ) -> None:
         """

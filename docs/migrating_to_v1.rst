@@ -98,8 +98,9 @@ Removed in v1.0
   and ``utils.uvp_noise_error`` work in the object's own length unit,
   ``uvp.length_unit`` (see `little_h is now length_unit`_). For
   ``spherical_average`` and ``spherical_wf_from_uvp``, give the k bins as
-  Quantities. The arguments that followed ``little_h`` moved up one
-  position, so pass them by name. ``UVWindow(little_h=...)`` is unchanged:
+  Quantities. The arguments that followed ``little_h`` are now
+  keyword-only, so a v0.x call that passed them by position raises
+  ``TypeError`` instead of filling the wrong argument. ``UVWindow(little_h=...)`` is unchanged:
   it keeps its v0.x name, position and meaning.
   ``conversions.length_unit_from_little_h`` is gone too.
 * Plain numbers for physical inputs raise ``astropy.units.UnitTypeError``,

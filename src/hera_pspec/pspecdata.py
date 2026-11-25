@@ -3250,7 +3250,7 @@ class PSpecData:
                             bl_inds[flag_ints], self.spw_range[0] : self.spw_range[1], i
                         ] = True
 
-    def units(self, length_unit=None):
+    def units(self, *, length_unit=None):
         r"""
         Return the units of the power spectrum. These are inferred from the
         units reported by the input visibilities (UVData objects).
@@ -3337,6 +3337,7 @@ class PSpecData:
     def scalar(
         self,
         polpair,
+        *,
         num_steps=2000,
         beam=None,
         taper_override="no_override",
@@ -3620,6 +3621,7 @@ class PSpecData:
         norm="I",
         taper="none",
         sampling=False,
+        *,
         spw_ranges=None,
         symmetric_taper=True,
         baseline_tol=1.0,

@@ -1096,7 +1096,7 @@ class UVPSpec:
 
         return k_perp << k_unit
 
-    def get_kparas(self, spw, dlys=None):
+    def get_kparas(self, spw, *, dlys=None):
         """
         Get radial (parallel) cosmological wavevectors for
         power spectra given an adopted cosmology and a spw selection.
@@ -3313,6 +3313,7 @@ class UVPSpec:
         polpair,
         Tsys,
         blpairs=None,
+        *,
         form="Pk",
         num_steps=2000,
         component="real",
@@ -3663,7 +3664,7 @@ class UVPSpec:
             self, bl_len_tol=bl_len_tol, bl_ang_tol=bl_ang_tol
         )
 
-    def compute_scalar(self, spw, polpair, num_steps=1000, noise_scalar=False):
+    def compute_scalar(self, spw, polpair, num_steps=1000, *, noise_scalar=False):
         """
         Compute power spectrum normalization scalar given an adopted cosmology
         and a beam model. See pspecbeam.PSpecBeamBase.compute_pspec_scalar for

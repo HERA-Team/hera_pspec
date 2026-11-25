@@ -911,6 +911,7 @@ def spherical_average(
     error_weights=None,
     time_tol: float = 1e-6,
     add_to_history="",
+    *,
     A={},
     run_check=True,
 ):
@@ -1395,6 +1396,7 @@ def spherical_wf_from_uvp(
     error_weights=None,
     time_avg=False,
     spw_array=None,
+    *,
     verbose=False,
     time_tol: float = 1e-6,
 ):
