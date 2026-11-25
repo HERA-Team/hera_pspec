@@ -3319,11 +3319,10 @@ class UVPSpec:
             polpair int. Strings are expanded into polarization pairs, e.g.
             'XX' becomes ('XX,'XX').
 
-        Tsys : dictionary, astropy.units.Quantity, float or array
+        Tsys : astropy.units.Quantity or dictionary of Quantities
             System temperature for each blpair, a Quantity in any temperature
             unit (e.g. ``300 * u.K``). Key is blpair-integer, value is a scalar
-            or an array of shape (Ntpairs,). Plain numbers are read as K
-            (deprecated).
+            or an array of shape (Ntpairs,).
 
         blpairs : list
             List of unique blair tuples or i12 integers to calculate noise
@@ -3401,21 +3400,12 @@ class UVPSpec:
 
         # handle Tsys: Quantities are converted to plain values in K
         if isinstance(Tsys, dict):
-            Tsys_in_K = {}
-            plain_Tsys = False
-            for key, value in Tsys.items():
-                if utils._contains_quantity(value):
-                    Tsys_in_K[key] = utils.to_value_in(value, units.K, "Tsys")
-                else:
-                    plain_Tsys = True
-                    Tsys_in_K[key] = value
-            Tsys = Tsys_in_K
+            Tsys = {
+                key: utils.quantity_value(value, units.K, "Tsys", example="300 * u.K")
+                for key, value in Tsys.items()
+            }
         else:
-            plain_Tsys = not utils._contains_quantity(Tsys)
-            if not plain_Tsys:
-                Tsys = utils.to_value_in(Tsys, units.K, "Tsys")
-        if plain_Tsys:
-            utils.warn_plain_number("Tsys", units.K, example="300 * u.K", stacklevel=3)
+            Tsys = utils.quantity_value(Tsys, units.K, "Tsys", example="300 * u.K")
         if not isinstance(Tsys, dict):
             if not isinstance(Tsys, np.ndarray):
                 Tsys = np.ones(self.Ntpairs) * Tsys

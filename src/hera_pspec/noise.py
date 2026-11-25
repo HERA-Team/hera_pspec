@@ -48,12 +48,12 @@ def calc_P_N(
         X2Y(z) * Omega_P^2 / Omega_PP, in L^3 / (Hz sr) for a cosmological length
         unit L. A Quantity (as returned by UVPSpec.compute_scalar or
         PSpecData.scalar) sets L; a plain float is taken to be in L^3 / (Hz sr)
-        for the L the caller has in mind (not deprecated: it is a computed
-        conversion factor, not a physical input).
+        for the L the caller has in mind (it is a computed conversion
+        factor, not a physical input).
     Tsys : astropy.units.Quantity, System temperature in any temperature unit
-        (e.g. ``300 * u.K``). A plain number is read as K (deprecated).
+        (e.g. ``300 * u.K``).
     t_int : astropy.units.Quantity, integration time of power spectra in any time
-        unit. A plain number is read as seconds (deprecated).
+        unit.
     Ncoherent : int, number of coherent averages of visibility data with integration time t_int
         Total integration time is t_int * Ncoherent
     Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
@@ -85,10 +85,10 @@ def calc_P_N(
                 "k is a Quantity but scalar is a plain float, so the length unit "
                 "of k is unknown; pass scalar as a Quantity in L^3 / (Hz sr)."
             )
-    Tsys = utils.to_value_in(Tsys, u.K, "Tsys", example="300 * u.K")
-    t_int = utils.to_value_in(t_int, u.s, "t_int", example="10.7 * u.s")
+    Tsys = utils.quantity_value(Tsys, u.K, "Tsys", example="300 * u.K")
+    t_int = utils.quantity_value(t_int, u.s, "t_int", example="10.7 * u.s")
     if isinstance(k, u.Quantity):
-        k = utils.to_value_in(k, 1 / length_unit, "k")
+        k = utils.quantity_value(k, 1 / length_unit, "k")
     P_N = _calc_P_N(
         scalar,
         Tsys,
@@ -244,7 +244,7 @@ class Sensitivity:
         Parameters
         ----------
         freqs : astropy.units.Quantity, frequency bins of the spectral window in any
-            frequency unit. A plain array is read as Hz (deprecated).
+            frequency unit.
 
         pol : str, specification of polarization to calculate scalar for
             See pyuvdata.utils.polstr2num for options.
@@ -268,7 +268,7 @@ class Sensitivity:
         self.pol : str, polarization used to calculate self.scalar
         """
         length_unit = conversions.resolve_length_unit(length_unit)
-        freqs = np.atleast_1d(utils.to_value_in(freqs, u.Hz, "freqs"))
+        freqs = np.atleast_1d(utils.quantity_value(freqs, u.Hz, "freqs"))
         # compute scalar
         self.scalar = self.beam.compute_pspec_scalar(
             freqs.min() * u.Hz,
@@ -310,9 +310,8 @@ class Sensitivity:
         Parameters
         ----------
         Tsys : astropy.units.Quantity, System temperature in any temperature unit.
-            A plain number is read as K (deprecated).
         t_int : astropy.units.Quantity, integration time of power spectra in any time
-            unit. A plain number is read as seconds (deprecated).
+            unit.
         Ncoherent : int, number of coherent averages of visibility data with integration time t_int
             Total integration time is t_int * Ncoherent
         Nincoherent : int, number of incoherent averages of pspectra (i.e. after squaring).
@@ -339,11 +338,11 @@ class Sensitivity:
             "form must be either 'Pk' or 'DelSq' for P(k) or Delta^2(k) respectively"
         )
 
-        Tsys = utils.to_value_in(Tsys, u.K, "Tsys", example="300 * u.K")
-        t_int = utils.to_value_in(t_int, u.s, "t_int", example="10.7 * u.s")
+        Tsys = utils.quantity_value(Tsys, u.K, "Tsys", example="300 * u.K")
+        t_int = utils.quantity_value(t_int, u.s, "t_int", example="10.7 * u.s")
         if isinstance(k, u.Quantity):
             length_unit = getattr(self, "length_unit", conversions._LITTLEH_LENGTH)
-            k = utils.to_value_in(k, 1 / length_unit, "k")
+            k = utils.quantity_value(k, 1 / length_unit, "k")
 
         # calculate P_N
         P_N = _calc_P_N(

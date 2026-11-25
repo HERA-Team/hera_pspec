@@ -115,7 +115,7 @@ class TestPSpecBeamUV:
         assert abs(scalar / 1989353792.1765163 - 1.0) <= 1e-8
 
     def test_jy_to_mk(self, beam_nf_pstokes: pspecbeam.PSpecBeamUV) -> None:
-        """Check Jy_to_mK output, extrapolation warnings and that non-float-array inputs raise a TypeError."""
+        """Check Jy_to_mK output, extrapolation warnings and that inputs without a unit raise a UnitTypeError."""
         M = beam_nf_pstokes.Jy_to_mK(np.linspace(100e6, 200e6, 11) * u.Hz)
         assert len(M) == 11
         # k_B from astropy.constants (CODATA 2018); CODATA 2014 gave 40.643366654821904
@@ -132,10 +132,10 @@ class TestPSpecBeamUV:
             M = beam_nf_pstokes.Jy_to_mK(np.linspace(90e6, 210e6, 13) * u.Hz)
         assert np.all(np.isfinite(M))
 
-        with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
+        with pytest.raises(u.UnitTypeError, match="freqs must be an astropy Quantity"):
             beam_nf_pstokes.Jy_to_mK([1])
-        with pytest.raises(TypeError, match="freqs must be fed as a float ndarray"):
-            beam_nf_pstokes.Jy_to_mK(np.array([1]))
+        with pytest.raises(u.UnitTypeError, match="freqs must be an astropy Quantity"):
+            beam_nf_pstokes.Jy_to_mK(np.array([1.0]))
 
     def test_noise_scalar(self, beam_nf_pstokes_legacy: pspecbeam.PSpecBeamUV) -> None:
         """Check compute_pspec_scalar with noise_scalar=True against a precomputed reference value."""
@@ -534,7 +534,7 @@ class TestPSpecBeamFromArray:
                     OmegaP={"pI": Om_P}, OmegaPP={"pI": "string"}, beam_freqs=freqs
                 ),
                 TypeError,
-                "must both be array_like",
+                "OmegaPP must be an astropy Quantity",
             ),
             (
                 lambda Om_P, Om_PP, freqs: dict(

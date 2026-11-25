@@ -1,10 +1,12 @@
 Migrating to v1.0
 =================
 
-hera_pspec 1.0 uses ``astropy`` for units and cosmology. Most v0.x code still
-runs. Plain numbers for physical inputs keep working but emit a
-``DeprecationWarning`` that says what to use instead. Python hides these warnings by default; to see them, run
-with ``python -W default::DeprecationWarning`` or add
+hera_pspec 1.0 uses ``astropy`` for units and cosmology. Physical inputs are
+astropy Quantities, and the v0.x ways of giving them (``little_h=``, plain
+numbers) are gone; see `Removed in v1.0`_. The few deprecated arguments that
+remain emit a ``DeprecationWarning`` that says what to use instead. Python
+hides these warnings by default; to see them, run with
+``python -W default::DeprecationWarning`` or add
 ``warnings.simplefilter("default", DeprecationWarning)`` to your script.
 
 Some return types changed outright, with no deprecation period. They are
@@ -102,15 +104,21 @@ Removed in v1.0
   position, so pass them by name. ``UVWindow(little_h=...)`` is unchanged:
   it keeps its v0.x name, position and meaning.
   ``conversions.length_unit_from_little_h`` is gone too.
+* Plain numbers for physical inputs raise ``astropy.units.UnitTypeError``,
+  whose message names the argument and its unit; pass Quantities (see
+  `Quantity inputs`_). This covers the k bins of ``spherical_average``
+  (``kbins``, ``kbins_theory``) and ``spherical_wf_from_uvp``
+  (``kbin_edges``, ``kbin_edges_theory``). ``utils.to_value_in`` and
+  ``utils.warn_plain_number`` are gone; ``utils.quantity_value`` converts a
+  Quantity to plain numbers in a given unit.
+* ``UVWindow`` no longer reads k bins in hour/Mpc (``astropy.units.h /
+  astropy.units.Mpc``) as littleh/Mpc: they raise ``ValueError``. Use
+  ``astropy.cosmology.units.littleh / astropy.units.Mpc``.
 
 
 Deprecations (removal planned for v2.0)
 ---------------------------------------
 
-* Plain-number k bins in ``spherical_average`` (``kbins``, ``kbins_theory``)
-  and ``spherical_wf_from_uvp`` (``kbin_edges``, ``kbin_edges_theory``).
-  ``UVWindow`` k bins in hour/Mpc are read as littleh/Mpc, with a warning.
-* Plain numbers for physical inputs (see `Quantity inputs`_).
 * ``FTBeam.from_file(spw_range=...)``: pass ``freq_array`` instead.
 
 
@@ -223,8 +231,9 @@ k bins and window functions
 
 ``grouping.spherical_average`` and ``grouping.spherical_wf_from_uvp`` take k
 bins as Quantities, in littleh/Mpc or 1/Mpc. They are converted to the
-object's k unit with its own cosmology. Plain numbers still work, read as
-littleh/Mpc, but are deprecated.
+object's k unit with its own cosmology. Plain numbers raise
+``astropy.units.UnitTypeError``. Plain bin widths are taken in the unit of
+``kbins``.
 
 .. code-block:: python
 
@@ -242,8 +251,8 @@ littleh/Mpc, but are deprecated.
 ``UVWindow`` keeps its ``little_h`` flag: ``True`` (the default) gives k in
 ``cu.littleh / u.Mpc``, ``False`` in ``1 / u.Mpc``, and ``uvw.kunits`` holds the
 unit. In v0.x the tutorials built k bins with ``units.h / units.Mpc``. ``units.h`` is astropy's
-hour, so those bins were in hour/Mpc. They still work, read as littleh/Mpc,
-with a ``DeprecationWarning``. Use ``cu.littleh`` instead.
+hour, so those bins were in hour/Mpc, which now raise ``ValueError``. Use
+``cu.littleh`` instead.
 
 .. code-block:: python
 
@@ -379,16 +388,18 @@ Quantity inputs
 ---------------
 
 Public functions that take a physical number accept a Quantity in any
-equivalent unit. A plain number still works and is read in the unit below,
-with a ``DeprecationWarning``. A Quantity in the wrong kind of unit raises
-``UnitConversionError``.
+equivalent unit. A plain number raises ``astropy.units.UnitTypeError``, and a
+Quantity in the wrong kind of unit raises ``UnitConversionError``. The table
+lists the unit v0.x read plain numbers in. Lists of Quantities, such as
+``[(160 * u.MHz, 165 * u.MHz)]``, work too. The ``k`` of the noise functions
+may still be plain numbers, read in 1 / length unit.
 
 .. list-table::
   :header-rows: 1
 
   * - Function
     - Argument
-    - Plain numbers read as
+    - v0.x unit
   * - ``PSpecBeamGauss``
     - ``fwhm``, ``beam_freqs``
     - rad, Hz

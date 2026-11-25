@@ -1,12 +1,11 @@
 """Quantity inputs at the public API boundaries.
 
-Each boundary accepts an astropy Quantity in any equivalent unit and gives
-the same numbers as the old plain-number call, which still works but emits a
-DeprecationWarning that points at the caller's line.
+Each boundary accepts an astropy Quantity in any equivalent unit, and a plain
+number raises an astropy UnitTypeError that names the argument and its unit.
 """
 
-import contextlib
 import copy
+import re
 
 import astropy.cosmology.units as cu
 import h5py
@@ -17,64 +16,63 @@ from astropy import units as u
 from hera_pspec import noise, pspecbeam, utils, uvwindow
 from tests.regression_cases import FT_BEAM_FILE
 
-
-@contextlib.contextmanager
-def plain_number_warning(*names):
-    """Expect one plain-number DeprecationWarning per name, at this file's lines."""
-    with pytest.warns(DeprecationWarning, match="as a plain number") as record:
-        yield
-    messages = [str(rec.message) for rec in record]
-    for name in names:
-        assert any(f"Passing {name} as a plain number" in m for m in messages), name
-    for rec in record:
-        assert rec.filename == __file__
-
-
 # frequencies chosen so that MHz -> Hz conversion is exact
 FREQS_MHZ = np.arange(140.0, 160.0, 0.5)
 FREQS_HZ = FREQS_MHZ * 1e6
 
 
-class TestToValueIn:
+class TestQuantityValue:
     def test_quantity_is_converted(self):
-        assert utils.to_value_in(150 * u.MHz, u.Hz, "freq") == 150e6
+        """Check that a Quantity is returned as plain numbers in the requested unit."""
+        assert utils.quantity_value(150 * u.MHz, u.Hz, "freq") == 150e6
         np.testing.assert_array_equal(
-            utils.to_value_in(FREQS_MHZ * u.MHz, u.Hz, "freqs"), FREQS_HZ
+            utils.quantity_value(FREQS_MHZ * u.MHz, u.Hz, "freqs"), FREQS_HZ
         )
 
     def test_list_of_quantities_is_stacked(self):
-        out = utils.to_value_in([1 * u.MHz, 2000 * u.kHz], u.Hz, "freqs")
+        """Check that lists of Quantities and of (low, high) Quantity pairs are stacked."""
+        out = utils.quantity_value([1 * u.MHz, 2000 * u.kHz], u.Hz, "freqs")
         np.testing.assert_array_equal(out, [1e6, 2e6])
-        out = utils.to_value_in([(1 * u.MHz, 2 * u.MHz)], u.Hz, "freqs")
-        assert out.shape == (1, 2)
+        out = utils.quantity_value([(1 * u.MHz, 2 * u.MHz)], u.Hz, "freqs")
+        np.testing.assert_array_equal(out, [[1e6, 2e6]])
 
     def test_none_passes_through(self):
-        assert utils.to_value_in(None, u.Hz, "freqs") is None
+        """Check that None is returned unchanged."""
+        assert utils.quantity_value(None, u.Hz, "freqs") is None
 
-    def test_plain_number_warns_at_caller(self):
-        with plain_number_warning("freqs"):
-            out = utils.to_value_in(FREQS_HZ, u.Hz, "freqs", stacklevel=2)
-        np.testing.assert_array_equal(out, FREQS_HZ)
-        assert out.dtype == float
+    @pytest.mark.parametrize(
+        "value,type_name",
+        [(3, "int"), (150e6, "float"), (FREQS_HZ, "ndarray"), ([1e6, 2e6], "list")],
+        ids=["int", "float", "array", "list"],
+    )
+    def test_plain_number_raises(self, value, type_name):
+        """Check that a plain number raises UnitTypeError naming the argument, unit and type."""
+        with pytest.raises(
+            u.UnitTypeError,
+            match=re.escape(
+                "freqs must be an astropy Quantity in units of Hz (e.g. 1 * u.Hz), "
+                f"got {type_name}."
+            ),
+        ):
+            utils.quantity_value(value, u.Hz, "freqs")
 
-    def test_plain_scalar_returns_float(self):
-        with plain_number_warning("freq"):
-            out = utils.to_value_in(3, u.Hz, "freq", stacklevel=2)
-        assert isinstance(out, float)
-        assert out == 3.0
-
-    def test_no_deprecation(self):
-        out = utils.to_value_in([1, 2], u.Hz, "freqs", deprecate_plain=False)
-        np.testing.assert_array_equal(out, [1.0, 2.0])
+    def test_plain_number_message_example(self):
+        """Check that the error message shows the example Quantity it is given."""
+        with pytest.raises(u.UnitTypeError, match=re.escape("(e.g. 100 * u.MHz)")):
+            utils.quantity_value(1e8, u.Hz, "freq_range", example="100 * u.MHz")
 
     def test_wrong_unit_raises(self):
+        """Check that a Quantity in the wrong unit, or a mixed list, raises UnitConversionError."""
         with pytest.raises(u.UnitConversionError, match="freqs must be in a unit"):
-            utils.to_value_in(3 * u.s, u.Hz, "freqs")
+            utils.quantity_value(3 * u.s, u.Hz, "freqs")
         with pytest.raises(u.UnitConversionError, match="mixed units"):
-            utils.to_value_in([1 * u.MHz, 2 * u.s], u.Hz, "freqs")
+            utils.quantity_value([1 * u.MHz, 2 * u.s], u.Hz, "freqs")
+        with pytest.raises(u.UnitConversionError, match="mixed units"):
+            utils.quantity_value([1 * u.MHz, 2e6], u.Hz, "freqs")
 
     def test_equivalencies(self):
-        out = utils.to_value_in(2 * u.m, u.Hz, "freq", equivalencies=u.spectral())
+        """Check that equivalencies are used in the conversion."""
+        out = utils.quantity_value(2 * u.m, u.Hz, "freq", equivalencies=u.spectral())
         np.testing.assert_allclose(out, 299792458.0 / 2, rtol=1e-15)
 
 
@@ -96,11 +94,10 @@ class TestPSpecBeamGauss:
             beam.power_beam_int(), gauss_beam_hz.power_beam_int(), rtol=1e-14
         )
 
-    def test_plain_numbers_warn_and_match(self, gauss_beam_hz):
-        with plain_number_warning("fwhm", "beam_freqs"):
-            beam = pspecbeam.PSpecBeamGauss(0.25, np.linspace(100e6, 200e6, 51))
-        assert beam.fwhm == gauss_beam_hz.fwhm
-        np.testing.assert_array_equal(beam.beam_freqs, gauss_beam_hz.beam_freqs)
+    def test_plain_fwhm_raises(self):
+        """Check that a plain-number fwhm raises UnitTypeError."""
+        with pytest.raises(u.UnitTypeError, match="fwhm must be an astropy Quantity"):
+            pspecbeam.PSpecBeamGauss(0.25, FREQS_MHZ * u.MHz)
 
     def test_wrong_units_raise(self):
         with pytest.raises(u.UnitConversionError, match="fwhm"):
@@ -114,9 +111,8 @@ class TestPSpecBeamGauss:
         np.testing.assert_array_equal(
             gauss_beam_hz.Jy_to_mK(FREQS_MHZ * u.MHz), expected
         )
-        with plain_number_warning("freqs"):
-            plain = gauss_beam_hz.Jy_to_mK(FREQS_HZ)
-        np.testing.assert_array_equal(plain, expected)
+        with pytest.raises(u.UnitTypeError, match="freqs must be an astropy Quantity"):
+            gauss_beam_hz.Jy_to_mK(FREQS_HZ)
         scalar = gauss_beam_hz.Jy_to_mK(150 * u.MHz)
         assert isinstance(scalar, np.ndarray) and scalar.shape == (1,)
         with pytest.raises(u.UnitConversionError, match="freqs"):
@@ -148,15 +144,12 @@ class TestComputePspecScalar:
         scalar = beam_nf_pstokes.compute_pspec_scalar(lower, upper, 20, num_steps=500)
         np.testing.assert_allclose(scalar, expected, rtol=1e-14)
 
-    def test_plain_numbers_warn_and_match(self, beam_nf_pstokes):
-        expected = beam_nf_pstokes.compute_pspec_scalar(
-            120e6 * u.Hz, 128e6 * u.Hz, 20, num_steps=500
-        )
-        with plain_number_warning("lower_freq", "upper_freq"):
-            scalar = beam_nf_pstokes.compute_pspec_scalar(
-                120e6, 128e6, 20, num_steps=500
-            )
-        assert scalar == expected
+    def test_plain_numbers_raise(self, beam_nf_pstokes):
+        """Check that plain-number band edges raise UnitTypeError."""
+        with pytest.raises(
+            u.UnitTypeError, match="lower_freq must be an astropy Quantity"
+        ):
+            beam_nf_pstokes.compute_pspec_scalar(120e6, 128e6, 20)
 
     def test_wrong_unit_raises(self, beam_nf_pstokes):
         with pytest.raises(u.UnitConversionError, match="lower_freq"):
@@ -189,18 +182,18 @@ class TestPSpecBeamFromArray:
         )
         np.testing.assert_allclose(beam.beam_freqs, ref.beam_freqs, rtol=1e-15)
 
-    def test_plain_numbers_warn_and_match(self, gauss_beam_hz):
+    def test_plain_numbers_raise(self, gauss_beam_hz):
+        """Check that plain-number solid angles raise UnitTypeError, also in add_pol."""
         omega_p, omega_pp, freqs = self._arrays(gauss_beam_hz)
-        ref = pspecbeam.PSpecBeamFromArray(
+        with pytest.raises(u.UnitTypeError, match="OmegaP must be an astropy Quantity"):
+            pspecbeam.PSpecBeamFromArray(omega_p, omega_pp * u.sr, freqs * u.Hz)
+        beam = pspecbeam.PSpecBeamFromArray(
             omega_p * u.sr, omega_pp * u.sr, freqs * u.Hz
         )
-        with plain_number_warning("OmegaP", "OmegaPP", "beam_freqs"):
-            beam = pspecbeam.PSpecBeamFromArray(omega_p, omega_pp, freqs)
-        np.testing.assert_array_equal(beam.power_beam_int(), ref.power_beam_int())
-        np.testing.assert_array_equal(beam.beam_freqs, ref.beam_freqs)
-        with plain_number_warning("OmegaP", "OmegaPP"):
-            beam.add_pol("pQ", omega_p, omega_pp)
-        np.testing.assert_array_equal(beam.power_beam_int("pQ"), omega_p)
+        with pytest.raises(
+            u.UnitTypeError, match="OmegaPP must be an astropy Quantity"
+        ):
+            beam.add_pol("pQ", omega_p * u.sr, omega_pp)
 
     def test_add_pol_quantity(self, gauss_beam_hz):
         omega_p, omega_pp, freqs = self._arrays(gauss_beam_hz)
@@ -227,9 +220,6 @@ class TestBeamNormalizedResponse:
         )
         np.testing.assert_array_equal(res_mhz, res_hz)
         np.testing.assert_array_equal(omega_mhz, omega_hz)
-        with plain_number_warning("freq"):
-            res, omega, _ = beam_nf_dipole.beam_normalized_response("xx", freqs * 1e6)
-        np.testing.assert_array_equal(res, res_hz)
 
 
 class TestCalcPN:
@@ -243,11 +233,15 @@ class TestCalcPN:
         out = noise.calc_P_N(self.SCALAR, 300000 * u.mK, 10700 * u.ms, Nincoherent=4)
         np.testing.assert_allclose(out, expected, rtol=1e-14)
 
-    def test_plain_numbers_warn_and_match(self):
-        expected = noise.calc_P_N(self.SCALAR, 300 * u.K, 10.7 * u.s)
-        with plain_number_warning("Tsys", "t_int"):
-            out = noise.calc_P_N(self.SCALAR, 300.0, 10.7)
-        assert out == expected
+    def test_plain_tsys_raises(self):
+        """Check that a plain-number Tsys raises UnitTypeError with a K example."""
+        with pytest.raises(
+            u.UnitTypeError,
+            match=re.escape(
+                "Tsys must be an astropy Quantity in units of K (e.g. 300 * u.K)"
+            ),
+        ):
+            noise.calc_P_N(self.SCALAR, 300.0, 10.7 * u.s)
 
     def test_quantity_scalar_returns_quantity(self):
         scalar_unit = u.Mpc**3 / cu.littleh**3 / (u.Hz * u.sr)
@@ -315,9 +309,6 @@ class TestSensitivity:
         np.testing.assert_array_equal(sense.subband, FREQS_HZ)
         sense.calc_scalar(FREQS_HZ * u.Hz, "pI", num_steps=500)
         assert sense.scalar == scalar
-        with plain_number_warning("freqs"):
-            sense.calc_scalar(FREQS_HZ, "pI", num_steps=500)
-        assert sense.scalar == scalar
         with pytest.raises(u.UnitConversionError, match="freqs"):
             sense.calc_scalar(FREQS_HZ * u.m, "pI")
 
@@ -327,8 +318,8 @@ class TestSensitivity:
         np.testing.assert_allclose(
             sense.calc_P_N(0.3 * u.kK, 10700 * u.ms), expected, rtol=1e-14
         )
-        with plain_number_warning("Tsys", "t_int"):
-            assert sense.calc_P_N(300.0, 10.7) == expected
+        with pytest.raises(u.UnitTypeError, match="t_int must be an astropy Quantity"):
+            sense.calc_P_N(300 * u.K, 10.7)
         k = np.linspace(0.1, 1.0, 5)
         dsq = sense.calc_P_N(300 * u.K, 10.7 * u.s, form="DelSq", k=k)
         np.testing.assert_array_equal(
@@ -358,10 +349,9 @@ class TestGenerateNoiseSpectra:
             uvp.generate_noise_spectra(0, self.POLPAIR, tsys, blpairs=[blp])[blp_int],
             expected,
         )
-        with plain_number_warning("Tsys"):
-            plain = uvp.generate_noise_spectra(0, self.POLPAIR, 500)[blp_int]
-        np.testing.assert_array_equal(plain, expected)
-        with plain_number_warning("Tsys"):
+        with pytest.raises(u.UnitTypeError, match="Tsys must be an astropy Quantity"):
+            uvp.generate_noise_spectra(0, self.POLPAIR, 500)
+        with pytest.raises(u.UnitTypeError, match="Tsys must be an astropy Quantity"):
             uvp.generate_noise_spectra(
                 0, self.POLPAIR, {blp_int: 500.0 * np.ones(uvp.Ntpairs)}, blpairs=[blp]
             )
@@ -383,10 +373,17 @@ class TestSpwRangeFromFreqs:
         assert utils.spw_range_from_freqs(
             vanilla_uvp, [(100.1e6 * u.Hz, 100.74e6 * u.Hz)] * 2
         ) == [expected, expected]
-        with plain_number_warning("freq_range"):
-            assert utils.spw_range_from_freqs(vanilla_uvp, (100.1e6, 100.74e6)) == (
-                expected
-            )
+
+    def test_plain_numbers_raise(self, vanilla_uvp):
+        """Check that a plain-number frequency range raises UnitTypeError."""
+        with pytest.raises(
+            u.UnitTypeError,
+            match=re.escape(
+                "freq_range must be an astropy Quantity in units of Hz "
+                "(e.g. (100 * u.MHz, 120 * u.MHz)), got tuple."
+            ),
+        ):
+            utils.spw_range_from_freqs(vanilla_uvp, (100.1e6, 100.74e6))
 
     def test_errors(self, vanilla_uvp):
         with pytest.raises(u.UnitConversionError, match="freq_range"):
@@ -413,9 +410,10 @@ class TestFTBeam:
         )
         np.testing.assert_allclose(beam.freq_array, ref.freq_array, rtol=1e-15)
         np.testing.assert_allclose(beam.mapsize, ref.mapsize, rtol=1e-15)
-        with plain_number_warning("freq_array", "mapsize"):
-            plain = uvwindow.FTBeam(data, "xx", ft_freqs, 1.0)
-        assert plain == ref
+        with pytest.raises(
+            u.UnitTypeError, match="freq_array must be an astropy Quantity"
+        ):
+            uvwindow.FTBeam(data, "xx", ft_freqs, 1.0 * u.rad)
         with pytest.raises(u.UnitConversionError, match="mapsize"):
             uvwindow.FTBeam(data, "xx", ft_freqs * u.Hz, 1.0 * u.m)
 
@@ -426,9 +424,6 @@ class TestFTBeam:
         )
         np.testing.assert_allclose(beam.freq_array, ref.freq_array, rtol=1e-15)
         np.testing.assert_array_equal(beam.ft_beam, ref.ft_beam)
-        with plain_number_warning("freq_array"):
-            plain = uvwindow.FTBeam.from_file(FT_BEAM_FILE, freq_array=ft_freqs)
-        assert plain == ref
         with pytest.raises(u.UnitConversionError, match="freq_array"):
             uvwindow.FTBeam.from_file(FT_BEAM_FILE, freq_array=ft_freqs * u.s)
 
@@ -437,9 +432,8 @@ class TestFTBeam:
         ref = full.select_freqs(ft_freqs[2:8] * u.Hz, inplace=False)
         beam = full.select_freqs(ft_freqs[2:8] * u.Hz, atol=1 * u.kHz, inplace=False)
         assert beam == ref
-        with plain_number_warning("freq_array", "atol"):
-            plain = full.select_freqs(ft_freqs[2:8], atol=1e3, inplace=False)
-        assert plain == ref
+        with pytest.raises(u.UnitTypeError, match="atol must be an astropy Quantity"):
+            full.select_freqs(ft_freqs[2:8] * u.Hz, atol=1e3, inplace=False)
 
     def test_gaussian_units(self, ft_freqs):
         ref = uvwindow.FTBeam.gaussian(
@@ -449,9 +443,8 @@ class TestFTBeam:
             (ft_freqs * u.Hz).to(u.MHz), 300 * u.arcmin, "xx", npix=31
         )
         np.testing.assert_allclose(beam.ft_beam, ref.ft_beam, rtol=1e-12)
-        with plain_number_warning("freq_array", "widths", "mapsize"):
-            plain = uvwindow.FTBeam.gaussian(ft_freqs, 5.0, "xx", mapsize=1.0, npix=31)
-        assert plain == ref
+        with pytest.raises(u.UnitTypeError, match="widths must be an astropy Quantity"):
+            uvwindow.FTBeam.gaussian(ft_freqs * u.Hz, 5.0, "xx", npix=31)
         with pytest.raises(u.UnitConversionError, match="widths"):
             uvwindow.FTBeam.gaussian(ft_freqs * u.Hz, 5 * u.m, "xx")
 
@@ -469,11 +462,10 @@ class TestUVWindowLengths:
         np.testing.assert_allclose(
             uvw.get_kperp_bins((bl_lens * u.m).to(u.cm)).value, ref.value, rtol=1e-14
         )
-        with plain_number_warning("bl_lens"):
-            np.testing.assert_array_equal(uvw.get_kperp_bins(bl_lens), ref)
-        kpara = uvw.get_kpara_bins(uvw.freq_array * u.Hz)
-        with plain_number_warning("freq_array"):
-            np.testing.assert_array_equal(uvw.get_kpara_bins(uvw.freq_array), kpara)
+        with pytest.raises(
+            u.UnitTypeError, match="bl_lens must be an astropy Quantity"
+        ):
+            uvw.get_kperp_bins(bl_lens)
         with pytest.raises(u.UnitConversionError, match="bl_lens"):
             uvw.get_kperp_bins(bl_lens * u.Hz)
 
@@ -482,8 +474,8 @@ class TestUVWindowLengths:
         np.testing.assert_allclose(
             uvw.get_cylindrical_wf(1460 * u.cm), cyl, rtol=1e-12, atol=1e-15
         )
-        with plain_number_warning("bl_len"):
-            np.testing.assert_array_equal(uvw.get_cylindrical_wf(14.6), cyl)
+        with pytest.raises(u.UnitTypeError, match="bl_len must be an astropy Quantity"):
+            uvw.get_cylindrical_wf(14.6)
         with pytest.raises(u.UnitConversionError, match="bl_len"):
             uvw.get_cylindrical_wf(14.6 * u.s)
 
@@ -497,23 +489,14 @@ class TestUVWindowLengths:
         np.testing.assert_array_equal(
             uvw.get_spherical_wf(kbins, (bl_lens * u.m).to(u.km), **kwargs), ref
         )
-        with plain_number_warning("bl_lens"):
-            np.testing.assert_array_equal(
-                uvw.get_spherical_wf(kbins, bl_lens, **kwargs), ref
-            )
         cyl_wf = np.stack(
             [uvw.get_cylindrical_wf(bl * u.m, kperp_bins, kpara_bins) for bl in bl_lens]
         )
         sph, _ = uvw.cylindrical_to_spherical(cyl_wf, kbins, ktot, bl_lens * u.m)
         np.testing.assert_array_equal(sph, ref)
-        with plain_number_warning("bl_lens"):
-            sph_plain, _ = uvw.cylindrical_to_spherical(cyl_wf, kbins, ktot, bl_lens)
-        np.testing.assert_array_equal(sph_plain, ref)
 
     def test_run_and_write(self, uvw, tmp_path):
-        uvw.run_and_write(tmp_path / "q.h5", bl_lens=[14.6] * u.m)
-        with plain_number_warning("bl_lens"):
-            uvw.run_and_write(tmp_path / "plain.h5", bl_lens=[14.6])
-        with h5py.File(tmp_path / "q.h5") as fq, h5py.File(tmp_path / "plain.h5") as fp:
-            np.testing.assert_array_equal(fq["cyl_wf"][()], fp["cyl_wf"][()])
-            np.testing.assert_array_equal(fq["bl_lens"][()], [14.6])
+        """Check that run_and_write stores the baseline lengths in m."""
+        uvw.run_and_write(tmp_path / "q.h5", bl_lens=[1460] * u.cm)
+        with h5py.File(tmp_path / "q.h5") as fq:
+            np.testing.assert_allclose(fq["bl_lens"][()], [14.6], rtol=1e-15)

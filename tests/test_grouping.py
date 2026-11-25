@@ -156,14 +156,14 @@ def test_grouping_input_validation(vanilla_uvp: UVPSpec) -> None:
     with pytest.raises(ValueError, match="bin_widths must be one-dimensional"):
         grouping.spherical_average(vanilla_uvp, kbins, np.array([[0.05, 0.05]]))
 
-    with pytest.raises(TypeError, match="kbins must be numeric and array-like"):
+    with pytest.raises(u.UnitTypeError, match="kbins must be an astropy Quantity"):
         grouping.spherical_average(vanilla_uvp, "bad", 0.1)
 
     with pytest.raises(TypeError, match="uvp_in must be a UVPSpec object"):
         grouping.spherical_wf_from_uvp(wrong_uvp, kbins)
 
     with pytest.raises(
-        TypeError, match="kbin_edges_theory must be numeric and array-like"
+        u.UnitTypeError, match="kbin_edges_theory must be an astropy Quantity"
     ):
         grouping.spherical_wf_from_uvp(vanilla_uvp, kbins, kbin_edges_theory="bad")
 
@@ -896,21 +896,32 @@ class TestSpherical:
         )
         self._assert_same_average(sph4, sph5)
 
-    def test_average_plain_kbins_deprecated(self, uvp_spherical: UVPSpec) -> None:
-        """Check that plain-number k bins warn and match the Quantity result."""
-        sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
-        with pytest.warns(DeprecationWarning, match="kbins as plain numbers"):
-            sph_plain = grouping.spherical_average(
+    def test_average_plain_kbins_raise(self, uvp_spherical: UVPSpec) -> None:
+        """Check that plain-number kbins or kbins_theory raise UnitTypeError."""
+        with pytest.raises(
+            u.UnitTypeError,
+            match="kbins must be an astropy Quantity in units of littleh / Mpc or 1 / Mpc",
+        ):
+            grouping.spherical_average(
                 uvp_spherical, self.KBINS.value, self.BIN_WIDTHS.value
             )
-        self._assert_same_average(sph, sph_plain, rtol=0)
-        with pytest.warns(DeprecationWarning, match="kbins_theory as plain numbers"):
+        with pytest.raises(
+            u.UnitTypeError, match="kbins_theory must be an astropy Quantity"
+        ):
             grouping.spherical_average(
                 uvp_spherical,
                 self.KBINS,
                 self.BIN_WIDTHS,
                 kbins_theory=self.KBINS[:4].value,
             )
+
+    def test_average_plain_bin_widths(self, uvp_spherical: UVPSpec) -> None:
+        """Check that plain-number bin widths are taken in the unit of kbins."""
+        sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
+        sph_plain = grouping.spherical_average(
+            uvp_spherical, self.KBINS, self.BIN_WIDTHS.to_value(self.KBINS.unit)
+        )
+        self._assert_same_average(sph, sph_plain, rtol=0)
 
     def test_average_bad_k_units(self, uvp_spherical: UVPSpec) -> None:
         """Check that k bins or bin widths in a unit that is not a wavenumber raise."""
@@ -1178,7 +1189,7 @@ class TestSpherical:
             grouping.spherical_wf_from_uvp(uvp, kbin_edges)
 
     def test_wf_kbin_units(self, uvp_exact_wfs: UVPSpec) -> None:
-        """Check that spherical_wf_from_uvp gives the same windows for edges in either k unit."""
+        """Check that spherical_wf_from_uvp gives the same windows for edges in either k unit, and rejects edges without a wavenumber unit."""
         h = uvp_exact_wfs.cosmo.h
         edges = np.arange(0.075, 2.9, 0.25)
         edges_theory = np.arange(0.075, 2.9, 0.125)
@@ -1195,16 +1206,14 @@ class TestSpherical:
         for spw in wf_h:
             np.testing.assert_allclose(wf_h[spw], wf_mpc[spw], rtol=1e-12)
 
-        # deprecated: plain numbers
-        with pytest.warns(DeprecationWarning, match="kbin_edges as plain numbers"):
-            wf_plain = grouping.spherical_wf_from_uvp(
+        with pytest.raises(
+            u.UnitTypeError, match="kbin_edges must be an astropy Quantity"
+        ):
+            grouping.spherical_wf_from_uvp(
                 uvp_exact_wfs,
                 kbin_edges=edges,
                 kbin_edges_theory=edges_theory * cu.littleh / u.Mpc,
             )
-        for spw in wf_h:
-            np.testing.assert_array_equal(wf_h[spw], wf_plain[spw])
-
         with pytest.raises(
             u.UnitConversionError, match="kbin_edges must be a wavenumber"
         ):
