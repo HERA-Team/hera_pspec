@@ -363,7 +363,7 @@ def test_run_cosmo_builds_astropy_cosmology(monkeypatch, tmp_path):
 
 
 def test_run_cosmo_missing_values_take_defaults(monkeypatch, tmp_path):
-    """Omitted trailing --cosmo values give the v0.x default cosmology's parameters."""
+    """Check that omitted trailing --cosmo values take LEGACY_COSMOLOGY's parameters."""
     captured = _capture_pspec_run(monkeypatch)
     with pytest.warns(FutureWarning, match="--cosmo is deprecated"):
         result = invoke(
