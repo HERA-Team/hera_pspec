@@ -143,7 +143,7 @@ def convert_from_stored_unit(value, stored_unit, declared_unit, name):
 
 # Legacy (v0.x) norm_units strings. The values are (unit, unit of k) where the
 # unit of k is what UVPSpec.convert_to_deltasq uses for the k^3 factor: it
-# computes k with little_h only when "h^-3" is in norm_units.
+# computes k in littleh / Mpc only when "h^-3" is in norm_units.
 _LEGACY_NORM_UNITS = {
     "h^-3 Mpc^3": (u.Mpc**3 / cu.littleh**3, cu.littleh / u.Mpc),
     "Mpc^3": (u.Mpc**3, u.Mpc**-1),
@@ -176,7 +176,7 @@ def norm_units_from_legacy_string(norm_units):
     Each form may end in ``" k^3 / (2pi^2)"``, which
     ``UVPSpec.convert_to_deltasq`` appends. The unit is then multiplied by
     the unit of k^3: ``(littleh / Mpc)**3`` for the ``h^-3`` form, else
-    ``(1 / Mpc)**3`` (``convert_to_deltasq`` only uses little_h k when
+    ``(1 / Mpc)**3`` (``convert_to_deltasq`` only uses littleh / Mpc k when
     ``"h^-3"`` is in ``norm_units``). So ``"h^-3 Mpc^3 k^3 / (2pi^2)"`` and
     ``"Mpc^3 k^3 / (2pi^2)"`` map to dimensionless units, and the
     ``Hz str`` forms to ``Hz sr / Mpc**3``.

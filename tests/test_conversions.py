@@ -52,7 +52,6 @@ def test_legacy_cosmology_reference_values() -> None:
     )
 
 
-
 # --- astropy cosmology backend ---------------------------------------------
 #
 # The reference values below come from the formulas hera_pspec v0.x used
@@ -77,7 +76,11 @@ def _old_E(Om_L, Om_M, Om_k, z):
 
 
 def _old_DH(H0, little_h):
-    return constants.c.to_value(u.km / u.s) / 100.0 if little_h else constants.c.to_value(u.km / u.s) / H0
+    return (
+        constants.c.to_value(u.km / u.s) / 100.0
+        if little_h
+        else constants.c.to_value(u.km / u.s) / H0
+    )
 
 
 def _old_DC(Om_L, Om_M, Om_k, H0, z, little_h):
@@ -200,7 +203,9 @@ class TestAstropyBackend:
             z, conversions.F21.to_value(u.Hz) / freqs.to_value(u.Hz) - 1, rtol=1e-15
         )
         np.testing.assert_allclose(
-            conversions.f2z(150e6), conversions.F21.to_value(u.Hz) / 150e6 - 1, rtol=1e-15
+            conversions.f2z(150e6),
+            conversions.F21.to_value(u.Hz) / 150e6 - 1,
+            rtol=1e-15,
         )
 
     def test_z2f_returns_hz(self) -> None:
@@ -299,11 +304,6 @@ class TestAstropyCosmologyObjects:
         with pytest.raises(TypeError, match="astropy.cosmology.FLRW"):
             conversions.as_astropy_cosmology(value)
 
-    def test_length_unit_from_little_h(self) -> None:
-        """little_h maps to Mpc / littleh, otherwise Mpc."""
-        assert conversions.length_unit_from_little_h(True) == u.Mpc / cu.littleh
-        assert conversions.length_unit_from_little_h(False) == u.Mpc
-
 
 class TestResolveLengthUnit:
     def test_default(self) -> None:
@@ -315,22 +315,13 @@ class TestResolveLengthUnit:
     def test_length_units_pass(self, unit) -> None:
         assert conversions.resolve_length_unit(unit) == u.Unit(unit)
 
-    def test_littleh_string(self) -> None:
-        unit = conversions.resolve_length_unit("Mpc / littleh")
+    @pytest.mark.parametrize(
+        "unit_string", ["Mpc / littleh", b"Mpc / littleh"], ids=["str", "bytes"]
+    )
+    def test_littleh_string(self, unit_string) -> None:
+        """A littleh unit string, as str or bytes, parses to Mpc / littleh."""
+        unit = conversions.resolve_length_unit(unit_string)
         assert unit == u.Mpc / cu.littleh
-
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_little_h_deprecated(self, little_h) -> None:
-        with pytest.warns(DeprecationWarning, match="little_h argument"):
-            unit = conversions.resolve_length_unit(little_h=little_h)
-        assert unit == conversions.length_unit_from_little_h(little_h)
-
-    def test_disagreement_raises(self) -> None:
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            conversions.resolve_length_unit(u.Mpc, little_h=True)
 
     @pytest.mark.parametrize("unit", [u.s, u.Mpc**2, cu.littleh])
     def test_bad_unit_raises(self, unit) -> None:

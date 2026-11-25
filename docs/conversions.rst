@@ -75,6 +75,4 @@ The ``conversions`` module
 
 .. autofunction:: hera_pspec.conversions.resolve_length_unit
 
-.. autofunction:: hera_pspec.conversions.length_unit_from_little_h
-
 .. autofunction:: hera_pspec.unit_helpers.parse_pspec_unit

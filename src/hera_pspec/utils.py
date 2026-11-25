@@ -1655,7 +1655,6 @@ def uvp_noise_error(
     precomp_P_N=None,
     P_SN_correction=True,
     num_steps_scalar=2000,
-    little_h=None,
     length_unit=None,
 ):
     """
@@ -1697,10 +1696,6 @@ def uvp_noise_error(
         Number of frequency steps to explicitly compute (and interpolate over) for integrand in scalar.
         Default is 2000
 
-    little_h : bool, optional
-        Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
-        Raises ValueError if it disagrees with ``length_unit``.
-
     length_unit : astropy.units.Unit or str, optional
         Cosmological length unit L of the noise spectra. P_N and P_SN are
         stored in ``uvp.stats_array`` as plain arrays in mK^2 * L^3.
@@ -1721,8 +1716,7 @@ def uvp_noise_error(
         lsts = auto_Tsys.lst_array[sorted(lst_indices)]
         freqs = np.squeeze(auto_Tsys.freq_array)
     # calculate scalars for spws and polpairs (floats in scalar_unit).
-    # stacklevel 4 in the helper: the deprecation warning points at our caller
-    length_unit = uvp._resolve_length_unit(length_unit, little_h)
+    length_unit = uvp._resolve_length_unit(length_unit)
     scalar_unit = length_unit**3 / (u.Hz * u.sr)
     P_N_unit = u.mK**2 * length_unit**3
     scalar = {}

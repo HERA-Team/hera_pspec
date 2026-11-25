@@ -233,7 +233,6 @@ class Sensitivity:
         freqs: npt.NDArray[np.floating[Any]],
         pol: str,
         num_steps: int = 5000,
-        little_h: bool | None = None,
         length_unit: u.UnitBase | str | None = None,
     ) -> None:
         """
@@ -252,10 +251,6 @@ class Sensitivity:
 
         num_steps : number of frequency bins to use in numerical integration of scalar
 
-        little_h : boolean, optional
-            Deprecated, use ``length_unit``. True for h^-1 Mpc, False for Mpc.
-            Raises ValueError if it disagrees with ``length_unit``.
-
         length_unit : astropy.units.Unit or str, optional
             Cosmological length unit L of the scalar, e.g. ``u.Mpc / cu.littleh``
             (h^-1 Mpc) or ``u.Mpc``. Default: ``u.Mpc / cu.littleh``.
@@ -272,10 +267,7 @@ class Sensitivity:
 
         self.pol : str, polarization used to calculate self.scalar
         """
-        # stacklevel 3: the deprecation warning points at the caller of calc_scalar
-        length_unit = conversions.resolve_length_unit(
-            length_unit, little_h, stacklevel=3
-        )
+        length_unit = conversions.resolve_length_unit(length_unit)
         freqs = np.atleast_1d(utils.to_value_in(freqs, u.Hz, "freqs"))
         # compute scalar
         self.scalar = self.beam.compute_pspec_scalar(

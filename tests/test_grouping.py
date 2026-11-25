@@ -896,30 +896,14 @@ class TestSpherical:
         )
         self._assert_same_average(sph4, sph5)
 
-    def test_average_plain_kbins_deprecated(
-        self, uvp_spherical: UVPSpec, cosmo: FLRW
-    ) -> None:
-        """Check that plain-number k bins and little_h warn and match the Quantity result."""
+    def test_average_plain_kbins_deprecated(self, uvp_spherical: UVPSpec) -> None:
+        """Check that plain-number k bins warn and match the Quantity result."""
         sph = grouping.spherical_average(uvp_spherical, self.KBINS, self.BIN_WIDTHS)
         with pytest.warns(DeprecationWarning, match="kbins as plain numbers"):
             sph_plain = grouping.spherical_average(
                 uvp_spherical, self.KBINS.value, self.BIN_WIDTHS.value
             )
         self._assert_same_average(sph, sph_plain, rtol=0)
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            sph_noh = grouping.spherical_average(
-                uvp_spherical,
-                self.KBINS.value * cosmo.h,
-                self.BIN_WIDTHS.value * cosmo.h,
-                little_h=False,
-            )
-        self._assert_same_average(sph, sph_noh)
-        # little_h consistent with a Quantity: deprecated but accepted
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            sph_h = grouping.spherical_average(
-                uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=True
-            )
-        self._assert_same_average(sph, sph_h, rtol=0)
         with pytest.warns(DeprecationWarning, match="kbins_theory as plain numbers"):
             grouping.spherical_average(
                 uvp_spherical,
@@ -929,15 +913,7 @@ class TestSpherical:
             )
 
     def test_average_bad_k_units(self, uvp_spherical: UVPSpec) -> None:
-        """Check that little_h disagreeing with the bins, or a non-k unit, raises."""
-        with pytest.raises(ValueError, match="little_h=False disagrees"):
-            grouping.spherical_average(
-                uvp_spherical, self.KBINS, self.BIN_WIDTHS, little_h=False
-            )
-        with pytest.raises(ValueError, match="little_h=True disagrees"):
-            grouping.spherical_average(
-                uvp_spherical, self.KBINS.value / u.Mpc, 0.25, little_h=True
-            )
+        """Check that k bins or bin widths in a unit that is not a wavenumber raise."""
         with pytest.raises(u.UnitConversionError, match="kbins must be a wavenumber"):
             grouping.spherical_average(uvp_spherical, self.KBINS.value * u.Mpc, 0.25)
         with pytest.raises(
@@ -1219,28 +1195,16 @@ class TestSpherical:
         for spw in wf_h:
             np.testing.assert_allclose(wf_h[spw], wf_mpc[spw], rtol=1e-12)
 
-        # deprecated: plain numbers, little_h
+        # deprecated: plain numbers
         with pytest.warns(DeprecationWarning, match="kbin_edges as plain numbers"):
             wf_plain = grouping.spherical_wf_from_uvp(
                 uvp_exact_wfs,
                 kbin_edges=edges,
                 kbin_edges_theory=edges_theory * cu.littleh / u.Mpc,
             )
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            wf_noh = grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs,
-                kbin_edges=edges * h,
-                kbin_edges_theory=edges_theory * h,
-                little_h=False,
-            )
         for spw in wf_h:
             np.testing.assert_array_equal(wf_h[spw], wf_plain[spw])
-            np.testing.assert_allclose(wf_h[spw], wf_noh[spw], rtol=1e-12)
 
-        with pytest.raises(ValueError, match="little_h=False disagrees"):
-            grouping.spherical_wf_from_uvp(
-                uvp_exact_wfs, kbin_edges=edges * cu.littleh / u.Mpc, little_h=False
-            )
         with pytest.raises(
             u.UnitConversionError, match="kbin_edges must be a wavenumber"
         ):

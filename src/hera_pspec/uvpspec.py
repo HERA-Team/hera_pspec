@@ -1044,7 +1044,7 @@ class UVPSpec:
 
         return np.array(blp_blvecs)
 
-    def get_kperps(self, spw, little_h=None, length_unit=None):
+    def get_kperps(self, spw, length_unit=None):
         """
         Get transverse (perpendicular) cosmological wavevector for each
         baseline-pair given an adopted cosmology and a spw selection.
@@ -1052,10 +1052,6 @@ class UVPSpec:
         Parameters
         ----------
         spw : int, choice of spectral window
-
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         length_unit : astropy.units.Unit or str, optional
             Cosmological length unit; k is returned in ``1 / length_unit``.
@@ -1076,7 +1072,7 @@ class UVPSpec:
         before, whatever the object's normalisation; for an object normalised
         in ``Mpc3`` the default is now 1 / Mpc.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self._resolve_length_unit(length_unit)
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
@@ -1096,7 +1092,7 @@ class UVPSpec:
 
         return k_perp << k_unit
 
-    def get_kparas(self, spw, little_h=None, dlys=None, length_unit=None):
+    def get_kparas(self, spw, dlys=None, length_unit=None):
         """
         Get radial (parallel) cosmological wavevectors for
         power spectra given an adopted cosmology and a spw selection.
@@ -1105,10 +1101,6 @@ class UVPSpec:
         ----------
         spw : int
             Choice of spectral window
-
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         dlys : array_like or astropy.units.Quantity, optional
             Delays to compute k_parallel for (the spw still sets the
@@ -1133,7 +1125,7 @@ class UVPSpec:
         before, whatever the object's normalisation; for an object normalised
         in ``Mpc3`` the default is now 1 / Mpc.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self._resolve_length_unit(length_unit)
         # assert cosmo
         assert hasattr(self, "cosmo"), (
             "self.cosmo must exist to form cosmological "
@@ -1244,20 +1236,16 @@ class UVPSpec:
             units.Quantity(self.window_function_kpara[spw], k_unit),
         )
 
-    def _resolve_length_unit(self, length_unit, little_h):
+    def _resolve_length_unit(self, length_unit):
         """
-        Resolve the ``length_unit`` / deprecated ``little_h`` arguments.
+        Resolve a ``length_unit`` argument.
 
-        None for both gives :meth:`_default_length_unit`. Strings are parsed
-        with :func:`unit_helpers.parse_unit_string`; the rest is
-        :func:`conversions.resolve_length_unit`, whose deprecation warning
-        points at the caller of the public method that called this one.
+        None gives :meth:`_default_length_unit`; anything else is checked by
+        :func:`conversions.resolve_length_unit`.
         """
-        if length_unit is None and little_h is None:
+        if length_unit is None:
             return self._default_length_unit()
-        if isinstance(length_unit, (str, bytes)):
-            length_unit = unit_helpers.parse_unit_string(length_unit)
-        return conversions.resolve_length_unit(length_unit, little_h, stacklevel=4)
+        return conversions.resolve_length_unit(length_unit)
 
     def get_blpairs(self):
         """
@@ -3310,7 +3298,6 @@ class UVPSpec:
         polpair,
         Tsys,
         blpairs=None,
-        little_h=None,
         form="Pk",
         num_steps=2000,
         component="real",
@@ -3367,10 +3354,6 @@ class UVPSpec:
             List of unique blair tuples or i12 integers to calculate noise
             spectrum for default is to calculate for baseline pairs.
 
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
-
         form : str, optional
             Form of power spectra, whetehr P(k) or Delta^2(k). Valid options
             are 'Pk' or 'DelSq'. Default: 'Pk'.
@@ -3407,7 +3390,7 @@ class UVPSpec:
         -----
         Changed in v1.0: the values were float ndarrays before.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self._resolve_length_unit(length_unit)
         scalar_unit = length_unit**3 / (units.Hz * units.sr)
         # Check for str polpair and convert to integer
         if isinstance(polpair, str):
@@ -3690,13 +3673,7 @@ class UVPSpec:
         )
 
     def compute_scalar(
-        self,
-        spw,
-        polpair,
-        num_steps=1000,
-        little_h=None,
-        noise_scalar=False,
-        length_unit=None,
+        self, spw, polpair, num_steps=1000, noise_scalar=False, length_unit=None
     ):
         """
         Compute power spectrum normalization scalar given an adopted cosmology
@@ -3714,10 +3691,6 @@ class UVPSpec:
         num_steps : int, optional
             Number of integration bins along frequency in computing scalar.
             Default: 1000.
-
-        little_h : bool, optional
-            Deprecated, use ``length_unit``. True means
-            ``length_unit=u.Mpc / cu.littleh``, False ``length_unit=u.Mpc``.
 
         noise_scalar : bool, optional
             If True calculate noise pspec scalar, else calculate normal pspec
@@ -3739,7 +3712,7 @@ class UVPSpec:
         Changed in v1.0: this returned a float in h^-3 Mpc^3 / (Hz sr) by
         default before, whatever the object's normalisation.
         """
-        length_unit = self._resolve_length_unit(length_unit, little_h)
+        length_unit = self._resolve_length_unit(length_unit)
         # make assertions
         assert hasattr(self, "cosmo"), (
             "self.cosmo object must exist to compute scalar. See self.set_cosmology()"

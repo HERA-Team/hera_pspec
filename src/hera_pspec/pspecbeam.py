@@ -22,7 +22,6 @@ def _compute_pspec_scalar(
     pspec_freqs,
     num_steps=5000,
     taper="none",
-    little_h=None,
     noise_scalar=False,
     exact_norm=False,
     length_unit=None,
@@ -60,10 +59,6 @@ def _compute_pspec_scalar(
         Whether a tapering function (e.g. Blackman-Harris) is being used in the
         power spectrum estimation. Default: 'none'.
 
-    little_h : boolean, optional
-        Deprecated, use ``length_unit``. Whether to have cosmological length
-        units be h^-1 Mpc (True) or Mpc (False).
-
     noise_scalar : boolean, optional
         Whether to calculate power spectrum scalar, or noise power scalar. The
         noise power scalar only differs in that the Bpp_over_BpSq term turns
@@ -83,7 +78,7 @@ def _compute_pspec_scalar(
         [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
         in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
     """
-    length_unit = conversions.resolve_length_unit(length_unit, little_h)
+    length_unit = conversions.resolve_length_unit(length_unit)
 
     # Get integration freqs
     df = np.median(np.diff(pspec_freqs))
@@ -200,7 +195,6 @@ class PSpecBeamBase:
         num_steps=5000,
         pol="pI",
         taper="none",
-        little_h=None,
         noise_scalar=False,
         exact_norm=False,
         length_unit=None,
@@ -243,10 +237,6 @@ class PSpecBeamBase:
             Whether a tapering function (e.g. Blackman-Harris) is being used in
             the power spectrum estimation. Default: none.
 
-        little_h : boolean, optional
-            Deprecated, use ``length_unit``. Whether to have cosmological
-            length units be h^-1 Mpc (True) or Mpc (False).
-
         noise_scalar : boolean, optional
             Whether to calculate power spectrum scalar, or noise power scalar.
             The noise power scalar only differs in that the Bpp_over_BpSq term
@@ -258,8 +248,7 @@ class PSpecBeamBase:
 
         length_unit : astropy.units.Unit, optional
             Cosmological length unit. Default: ``u.Mpc / cu.littleh``
-            (h^-1 Mpc, with h from ``self.cosmo``); use ``u.Mpc`` for Mpc
-            (the old ``little_h=False``).
+            (h^-1 Mpc, with h from ``self.cosmo``); use ``u.Mpc`` for Mpc.
 
         Returns
         -------
@@ -267,7 +256,7 @@ class PSpecBeamBase:
             [\int dnu (\Omega_PP / \Omega_P^2) ( B_PP / B_P^2 ) / (X^2 Y)]^-1
             in ``length_unit**3`` (h^-3 Mpc^3 or Mpc^3).
         """
-        length_unit = conversions.resolve_length_unit(length_unit, little_h)
+        length_unit = conversions.resolve_length_unit(length_unit)
         lower_freq = utils.to_value_in(
             lower_freq, u.Hz, "lower_freq", example="100 * u.MHz"
         )

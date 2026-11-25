@@ -31,7 +31,10 @@ MPC3_H3 = units.Mpc**3 / cu.littleh**3
 
 
 def _pspec(
-    uvd: UVData, beam=None, vis_units: str | None = None, little_h: bool = True
+    uvd: UVData,
+    beam=None,
+    vis_units: str | None = None,
+    length_unit: units.UnitBase = units.Mpc / cu.littleh,
 ) -> UVPSpec:
     uvd = copy.deepcopy(uvd)
     if vis_units is not None:
@@ -43,7 +46,7 @@ def _pspec(
         dsets=(0, 1),
         pols=[("xx", "xx")],
         spw_ranges=[(20, 30)],
-        length_unit=units.Mpc / cu.littleh if little_h else units.Mpc,
+        length_unit=length_unit,
         store_cov=True,
         verbose=False,
     )
@@ -166,22 +169,27 @@ class TestPspecUnits:
             ("K str", units.K * units.sr),
         ],
     )
-    @pytest.mark.parametrize("little_h", [True, False])
+    @pytest.mark.parametrize(
+        "length_unit,norm_units",
+        [(units.Mpc / cu.littleh, "Mpc3 / littleh3"), (units.Mpc, "Mpc3")],
+        ids=["littleh", "Mpc"],
+    )
     def test_with_beam(
         self,
         uvd_zen_even_xx: UVData,
         beam_nf_dipole: PSpecBeamUV,
         vis_units,
         vis_unit,
-        little_h: bool,
+        length_unit: units.UnitBase,
+        norm_units: str,
     ) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, vis_units, little_h=little_h)
-        norm_unit = MPC3_H3 if little_h else units.Mpc**3
+        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, vis_units, length_unit)
+        norm_unit = length_unit**3
         assert uvp.vis_unit == vis_unit
         assert uvp.norm_unit == norm_unit
         assert uvp.units == vis_unit**2 * norm_unit
         assert uvp.vis_units == unit_helpers.unit_to_string(vis_unit)
-        assert uvp.norm_units == ("Mpc3 / littleh3" if little_h else "Mpc3")
+        assert uvp.norm_units == norm_units
         assert uvp.deltasq is False
 
     def test_without_beam(self, uvd_zen_even_xx: UVData) -> None:
@@ -208,11 +216,16 @@ class TestPspecUnits:
 
 
 class TestDeltasq:
-    @pytest.mark.parametrize("little_h", [True, False])
+    @pytest.mark.parametrize(
+        "length_unit", [units.Mpc / cu.littleh, units.Mpc], ids=["littleh", "Mpc"]
+    )
     def test_cosmological(
-        self, uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, little_h: bool
+        self,
+        uvd_zen_even_xx: UVData,
+        beam_nf_dipole: PSpecBeamUV,
+        length_unit: units.UnitBase,
     ) -> None:
-        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK", little_h=little_h)
+        uvp = _pspec(uvd_zen_even_xx, beam_nf_dipole, "mK", length_unit)
         dsq = uvp.convert_to_deltasq(inplace=False)
         assert dsq.deltasq is True
         assert uvp.deltasq is False
@@ -221,7 +234,6 @@ class TestDeltasq:
         assert dsq.norm_unit == units.dimensionless_unscaled
         assert dsq.units == units.mK**2
         # k was taken in littleh / Mpc only for the littleh normalisation
-        length_unit = conversions.length_unit_from_little_h(little_h)
         k_para = uvp.get_kparas(0, length_unit=length_unit).to_value(1 / length_unit)
         k_perp = uvp.get_kperps(0, length_unit=length_unit).to_value(1 / length_unit)
         coeff = (k_perp[:, None] ** 2 + k_para[None, :] ** 2) ** 1.5 / (2 * np.pi**2)

@@ -1524,21 +1524,6 @@ class TestScalar:
         assert scalar.unit == unit**3 / (u.Hz * u.sr)
         assert scalar.value == expected
 
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_scalar_little_h_deprecated(self, d, beam_nf_dipole, little_h) -> None:
-        ds = pspecdata.PSpecData(dsets=d, wgts=[None, None], beam=beam_nf_dipole)
-        length_unit = u.Mpc / cu.littleh if little_h else u.Mpc
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            old = ds.scalar("xx", little_h=little_h)
-        new = ds.scalar("xx", length_unit=length_unit)
-        assert old.unit == new.unit == length_unit**3 / (u.Hz * u.sr)
-        assert old.value == new.value
-        with (
-            pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
-            pytest.raises(ValueError, match="disagrees with length_unit"),
-        ):
-            ds.scalar("xx", little_h=not little_h, length_unit=length_unit)
-
 
 @pytest.fixture
 def phased_uvd_pair(d: list[UVData]) -> tuple[UVData, UVData]:
@@ -1777,29 +1762,12 @@ def test_units(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     assert ds_b.units(length_unit="Mpc")[1] == "Mpc3"
 
 
-@pytest.mark.parametrize(
-    "little_h,expected", [(True, "Mpc3 / littleh3"), (False, "Mpc3")]
-)
-def test_units_little_h_deprecated(
-    beam_nf_dipole: PSpecBeamUV, uvd: UVData, little_h: bool, expected: str
-) -> None:
-    ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
-    with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-        _, norm_u = ds.units(little_h=little_h)
-    assert norm_u == expected
-
-
 def test_units_bad_length_unit(beam_nf_dipole: PSpecBeamUV, uvd: UVData) -> None:
     ds = pspecdata.PSpecData(dsets=[uvd, uvd], wgts=[None, None], beam=beam_nf_dipole)
     with pytest.raises(ValueError, match="length_unit must be a length"):
         ds.units(length_unit=u.s)
     with pytest.raises(ValueError):
         ds.units(length_unit="not a unit")
-    with (
-        pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
-        pytest.raises(ValueError, match="disagrees with length_unit"),
-    ):
-        ds.units(little_h=True, length_unit=u.Mpc)
 
 
 def test_delays(uvd: UVData) -> None:
@@ -2321,7 +2289,7 @@ class TestPspec:
         pspec_ds.pspec(pspec_bls, pspec_bls, (0, 1), ("xx", "xx"), n_dlys=1)
 
     def test_pspec_length_unit(self, pspec_ds) -> None:
-        """length_unit replaces little_h; outputs match the deprecated flag exactly."""
+        """Check that length_unit as a unit or a string gives the same spectra, and Mpc^3 spectra are h^-3 times the littleh ones."""
         kwargs = dict(
             input_data_weight="identity",
             norm="I",
@@ -2336,17 +2304,12 @@ class TestPspec:
         uvp_h_str = pspec_ds.pspec(*args, length_unit="Mpc / littleh", **kwargs)
         uvp_mpc = pspec_ds.pspec(*args, length_unit=u.Mpc, **kwargs)
         uvp_mpc_str = pspec_ds.pspec(*args, length_unit="Mpc", **kwargs)
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            uvp_old_h = pspec_ds.pspec(*args, little_h=True, **kwargs)
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            uvp_old_mpc = pspec_ds.pspec(*args, little_h=False, **kwargs)
 
         assert uvp_default.norm_units == "Mpc3 / littleh3"
         assert uvp_mpc.norm_units == "Mpc3"
-        for uvp in (uvp_h, uvp_h_str, uvp_old_h):
+        for uvp in (uvp_h, uvp_h_str):
             _assert_same_pspec(uvp, uvp_default)
-        for uvp in (uvp_mpc_str, uvp_old_mpc):
-            _assert_same_pspec(uvp, uvp_mpc)
+        _assert_same_pspec(uvp_mpc_str, uvp_mpc)
 
         # P in Mpc^3 is P in (Mpc / h)^3 divided by h^3
         h3 = pspec_ds.primary_beam.cosmo.h**3
@@ -2359,11 +2322,6 @@ class TestPspec:
 
     def test_pspec_length_unit_errors(self, pspec_ds) -> None:
         args = (pspec_bls, pspec_bls, (0, 1), ("xx", "xx"))
-        with (
-            pytest.warns(DeprecationWarning, match="little_h argument is deprecated"),
-            pytest.raises(ValueError, match="disagrees with length_unit"),
-        ):
-            pspec_ds.pspec(*args, little_h=True, length_unit=u.Mpc, verbose=False)
         with pytest.raises(ValueError, match="length_unit must be a length"):
             pspec_ds.pspec(*args, length_unit=u.Hz, verbose=False)
 

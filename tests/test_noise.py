@@ -117,38 +117,9 @@ class TestSensitivity:
         sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=u.Mpc)
         assert sense.calc_P_N(300.0 * u.K, 10.7 * u.s) == Pk_mpc
 
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_scalar_little_h_deprecated(
-        self, sense: noise.Sensitivity, little_h: bool
-    ) -> None:
-        """Check that little_h warns at the caller's line, keeps its positional slot and matches length_unit."""
-        freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        length_unit = conversions.length_unit_from_little_h(little_h)
-        sense.calc_scalar(freqs * u.Hz, "pI", num_steps=2000, length_unit=length_unit)
-        expected = sense.scalar
-        with pytest.warns(
-            DeprecationWarning, match="little_h argument is deprecated"
-        ) as record:
-            sense.calc_scalar(freqs * u.Hz, "pI", 2000, little_h)
-        assert len(record) == 1
-        assert record[0].filename == __file__
-        assert sense.scalar == expected
-        assert sense.length_unit == length_unit
-        # agreeing pair is accepted
-        with pytest.warns(DeprecationWarning, match="little_h argument is deprecated"):
-            sense.calc_scalar(
-                freqs * u.Hz, "pI", 2000, little_h=little_h, length_unit=length_unit
-            )
-        assert sense.scalar == expected
-
     def test_scalar_length_unit_errors(self, sense: noise.Sensitivity) -> None:
-        """Check that a disagreeing little_h or a non-length unit raises."""
+        """Check that a length_unit that is not a length raises."""
         freqs = np.linspace(150e6, 160e6, 100, endpoint=False)
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            sense.calc_scalar(freqs * u.Hz, "pI", little_h=True, length_unit=u.Mpc)
         with pytest.raises(ValueError, match="length_unit must be a length"):
             sense.calc_scalar(freqs * u.Hz, "pI", length_unit=u.s)
 
@@ -458,42 +429,6 @@ class TestNoiseErrorUnits:
             littleh.stats_array["P_N"][0] * factor,
             rtol=1e-12,
         )
-
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_little_h_deprecated(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData], little_h: bool
-    ) -> None:
-        """little_h warns at the caller's line and gives the same result as length_unit."""
-        uvp_h, uvp_mpc, auto_Tsys = noise_error_uvps
-        uvp = uvp_h if little_h else uvp_mpc
-        expected = self._noise_error(uvp, auto_Tsys)
-        uvp_dep = copy.deepcopy(uvp)
-        with pytest.warns(
-            DeprecationWarning, match="little_h argument is deprecated"
-        ) as record:
-            utils.uvp_noise_error(
-                uvp_dep, copy.deepcopy(auto_Tsys), "P_N", little_h=little_h
-            )
-        assert len(record) == 1
-        assert record[0].filename == __file__
-        np.testing.assert_array_equal(
-            uvp_dep.stats_array["P_N"][0], expected.stats_array["P_N"][0]
-        )
-
-    def test_little_h_disagreement_raises(
-        self, noise_error_uvps: tuple[UVPSpec, UVPSpec, UVData]
-    ) -> None:
-        uvp_h, _, auto_Tsys = noise_error_uvps
-        with (
-            pytest.warns(DeprecationWarning),
-            pytest.raises(ValueError, match="disagrees"),
-        ):
-            utils.uvp_noise_error(
-                copy.deepcopy(uvp_h),
-                copy.deepcopy(auto_Tsys),
-                little_h=True,
-                length_unit=u.Mpc,
-            )
 
 
 def check_corr_matrix(m: np.ndarray) -> None:

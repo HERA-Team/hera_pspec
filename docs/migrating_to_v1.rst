@@ -2,9 +2,8 @@ Migrating to v1.0
 =================
 
 hera_pspec 1.0 uses ``astropy`` for units and cosmology. Most v0.x code still
-runs. Old arguments (``little_h=``, plain numbers for physical inputs) keep
-working but emit a ``DeprecationWarning`` that says
-what to use instead. Python hides these warnings by default; to see them, run
+runs. Plain numbers for physical inputs keep working but emit a
+``DeprecationWarning`` that says what to use instead. Python hides these warnings by default; to see them, run
 with ``python -W default::DeprecationWarning`` or add
 ``warnings.simplefilter("default", DeprecationWarning)`` to your script.
 
@@ -88,19 +87,24 @@ Removed in v1.0
 * ``pspec run --cosmo`` is gone, and the option is now rejected as unknown.
   Use ``--cosmology NAME`` (``hera_pspec_default`` is the v0.x cosmology) or
   ``--h0`` and ``--om0``, with ``--ode0``, ``--ob0`` and ``--tcmb0`` if needed.
+* The ``little_h=`` argument is gone from ``PSpecData.pspec``,
+  ``PSpecData.scalar``, ``PSpecData.units``, ``UVPSpec.get_kperps``,
+  ``UVPSpec.get_kparas``, ``UVPSpec.compute_scalar``,
+  ``UVPSpec.generate_noise_spectra``, ``PSpecBeamBase.compute_pspec_scalar``,
+  ``noise.Sensitivity.calc_scalar``, ``utils.uvp_noise_error``,
+  ``grouping.spherical_average`` and ``grouping.spherical_wf_from_uvp``.
+  Passing it by name raises ``TypeError``. Use ``length_unit=`` instead (see
+  `little_h is now length_unit`_); for ``spherical_average`` and
+  ``spherical_wf_from_uvp``, give the k bins as Quantities. The arguments
+  that followed ``little_h`` moved up one position, so pass them by name.
+  ``UVWindow(little_h=...)`` is unchanged: it keeps its v0.x name, position
+  and meaning.
+  ``conversions.length_unit_from_little_h`` is gone too.
 
 
 Deprecations (removal planned for v2.0)
 ---------------------------------------
 
-* ``little_h=`` everywhere. Use ``length_unit=`` (see `little_h is now
-  length_unit`_). Affected: ``PSpecData.pspec``, ``PSpecData.scalar``,
-  ``PSpecData.units``, ``UVPSpec.get_kperps``, ``UVPSpec.get_kparas``,
-  ``UVPSpec.compute_scalar``, ``UVPSpec.generate_noise_spectra``,
-  ``PSpecBeamBase.compute_pspec_scalar``, ``noise.Sensitivity.calc_scalar``,
-  ``utils.uvp_noise_error``, ``grouping.spherical_average``,
-  and ``grouping.spherical_wf_from_uvp``. ``UVWindow(little_h=...)`` is not
-  deprecated: it keeps its v0.x name, position and meaning.
 * Plain-number k bins in ``spherical_average`` (``kbins``, ``kbins_theory``)
   and ``spherical_wf_from_uvp`` (``kbin_edges``, ``kbin_edges_theory``).
   ``UVWindow`` k bins in hour/Mpc are read as littleh/Mpc, with a warning.
@@ -173,7 +177,7 @@ The ``little_h`` flag is replaced by a ``length_unit`` argument:
 
 .. code-block:: python
 
-  # v0.x (still works, with a DeprecationWarning)
+  # v0.x (raises TypeError in v1.0)
   k_para = uvp.get_kparas(0, little_h=True)
   uvp_mpc = ds.pspec(bls, bls, (0, 1), [("xx", "xx")], spw_ranges=[(50, 90)],
                      little_h=False, verbose=False)

@@ -619,31 +619,8 @@ class TestUnitGetters:
             rtol=1e-14,
         )
 
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_k_little_h_deprecated(self, vanilla_uvp: UVPSpec, little_h: bool) -> None:
-        length_unit = conversions.length_unit_from_little_h(little_h)
-        for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
-            expected = getter(0, length_unit=length_unit)
-            with pytest.warns(DeprecationWarning, match="little_h") as record:
-                old = getter(0, little_h=little_h)
-            # the warning points at the caller
-            assert record[0].filename == __file__
-            assert old.unit == expected.unit
-            np.testing.assert_array_equal(old.value, expected.value)
-            # agreeing values are accepted
-            with pytest.warns(DeprecationWarning, match="little_h"):
-                both = getter(0, length_unit=length_unit, little_h=little_h)
-            np.testing.assert_array_equal(both.value, expected.value)
-            # a flag passed positionally in its old slot still works
-            with pytest.warns(DeprecationWarning, match="little_h"):
-                positional = getter(0, little_h)
-            np.testing.assert_array_equal(positional.value, expected.value)
-
     def test_k_bad_length_unit(self, vanilla_uvp: UVPSpec) -> None:
         for getter in (vanilla_uvp.get_kperps, vanilla_uvp.get_kparas):
-            with pytest.warns(DeprecationWarning, match="little_h"):
-                with pytest.raises(ValueError, match="disagrees"):
-                    getter(0, length_unit=units.Mpc, little_h=True)
             with pytest.raises(ValueError, match="length_unit must be a length"):
                 getter(0, length_unit=units.Hz)
 
@@ -1709,26 +1686,6 @@ class TestScalarAndNoiseUnits:
         mpc_uvp = _with_norm_units(uvp, "Mpc3")
         assert mpc_uvp.compute_scalar(0, self.POLPAIR) == mpc
 
-    @pytest.mark.parametrize("little_h", [True, False])
-    def test_compute_scalar_little_h_deprecated(
-        self, vanilla_uvp_with_beam: UVPSpec, little_h: bool
-    ) -> None:
-        uvp = vanilla_uvp_with_beam
-        length_unit = conversions.length_unit_from_little_h(little_h)
-        expected = uvp.compute_scalar(0, self.POLPAIR, length_unit=length_unit)
-        with pytest.warns(DeprecationWarning, match="little_h") as record:
-            old = uvp.compute_scalar(0, self.POLPAIR, little_h=little_h)
-        assert record[0].filename == __file__
-        assert old == expected
-        with pytest.warns(DeprecationWarning, match="little_h"):
-            with pytest.raises(ValueError, match="disagrees"):
-                uvp.compute_scalar(
-                    0,
-                    self.POLPAIR,
-                    little_h=little_h,
-                    length_unit=conversions.length_unit_from_little_h(not little_h),
-                )
-
     def test_noise_spectra_units(self, vanilla_uvp_with_beam: UVPSpec) -> None:
         uvp = vanilla_uvp_with_beam
         h = uvp.cosmo.h
@@ -1777,23 +1734,6 @@ class TestScalarAndNoiseUnits:
             uvp.generate_noise_spectra(
                 0, self.POLPAIR, 500 * units.K, scalar=scalar * units.s
             )
-
-    def test_noise_spectra_little_h_deprecated(
-        self, vanilla_uvp_with_beam: UVPSpec
-    ) -> None:
-        uvp = vanilla_uvp_with_beam
-        expected = uvp.generate_noise_spectra(
-            0, self.POLPAIR, 500 * units.K, length_unit=units.Mpc
-        )
-        with pytest.warns(DeprecationWarning, match="little_h") as record:
-            old = uvp.generate_noise_spectra(
-                0, self.POLPAIR, 500 * units.K, little_h=False
-            )
-        # one warning, pointing at the caller
-        assert len(record) == 1
-        assert record[0].filename == __file__
-        assert old[self.BLP].unit == expected[self.BLP].unit
-        np.testing.assert_array_equal(old[self.BLP].value, expected[self.BLP].value)
 
 
 def test_compute_scalar(

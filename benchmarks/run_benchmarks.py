@@ -217,7 +217,7 @@ PSPEC_FULL = Workflow(
     description=(
         "PSpecData + Jy_to_mK + pspec over every redundant blpair of the LST "
         "cutout (even x even), 2 spws, blackman-harris taper, PSpecBeamUV, "
-        "store_cov (autos), little_h default"
+        "store_cov (autos), default length unit"
     ),
     setup=pspec_inputs,
     prepare=lambda inputs: inputs.fresh(),
