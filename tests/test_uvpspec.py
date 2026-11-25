@@ -91,7 +91,12 @@ def uvp_with_covariance(
 
 
 def _add_optionals(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
-    """Add dummy optional cov_array and stats_array to uvp."""
+    """Add dummy optional cov_array and stats_array to uvp.
+
+    The covariances are identity matrices and the stats are all one (the
+    values must be set: uninitialised memory can hold NaNs that make later
+    arithmetic on these arrays warn).
+    """
     uvp.cov_array_real = {}
     uvp.cov_array_imag = {}
     uvp.cov_model = "empirical"
@@ -99,13 +104,12 @@ def _add_optionals(uvp: uvpspec.UVPSpec) -> uvpspec.UVPSpec:
     uvp.stats_array = {stat: {}}
     for spw in uvp.spw_array:
         ndlys = uvp.get_spw_ranges(spw)[0][-1]
-        uvp.cov_array_real[spw] = np.empty(
-            (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64
+        cov = np.broadcast_to(
+            np.eye(ndlys)[None, :, :, None], (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols)
         )
-        uvp.cov_array_imag[spw] = np.empty(
-            (uvp.Nbltpairs, ndlys, ndlys, uvp.Npols), np.float64
-        )
-        uvp.stats_array[stat][spw] = np.empty(
+        uvp.cov_array_real[spw] = cov.copy()
+        uvp.cov_array_imag[spw] = cov.copy()
+        uvp.stats_array[stat][spw] = np.ones(
             (uvp.Nbltpairs, ndlys, uvp.Npols), np.complex128
         )
     return uvp
@@ -1918,6 +1922,28 @@ def test_set_cosmology_same_cosmology(
                 spw, uvp.polpair_array[0], length_unit=length_unit
             ).to_value(length_unit**3 / (units.Hz * units.sr)),
         )
+
+
+@pytest.mark.parametrize("norm", ["I", "H^-1", "V^-1/2"])
+def test_set_cosmology_with_taper(
+    uvd_zen_even_xx: UVData, beam_nf_dipole: PSpecBeamUV, norm: str
+) -> None:
+    """set_cosmology recomputes the scalar that pspec applied: the tapered one
+    for norm I, the untapered one for norms H^-1 and V^-1/2 (whose
+    normalisation already accounts for the taper)."""
+    uvp = testing.uvpspec_from_data(
+        uvd_zen_even_xx,
+        [(37, 38), (38, 39)],
+        spw_ranges=[(20, 50)],
+        beam=beam_nf_dipole,
+        taper="blackman-harris",
+        norm=norm,
+    )
+    old = copy.deepcopy(uvp)
+    uvp.set_cosmology(conversions.DEFAULT_COSMOLOGY, overwrite=True, verbose=False)
+    # only the scalar's integration grid differs from pspec's (num_steps)
+    np.testing.assert_allclose(uvp.scalar_array, old.scalar_array, rtol=5e-3)
+    np.testing.assert_allclose(uvp.data_array[0], old.data_array[0], rtol=5e-3)
 
 
 def test_set_cosmology_new_cosmology(

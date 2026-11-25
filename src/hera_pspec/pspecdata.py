@@ -1137,9 +1137,10 @@ class PSpecData:
             if self.taper == "none":
                 sqrtT = np.ones(self.spw_Nfreqs).reshape(1, -1)
             else:
-                sqrtT = np.sqrt(dspec.gen_window(self.taper, self.spw_Nfreqs)).reshape(
-                    1, -1
-                )
+                # some tapers (e.g. blackman) evaluate to tiny negative values
+                # at their ends; clip them to zero before taking the sqrt
+                window = dspec.gen_window(self.taper, self.spw_Nfreqs)
+                sqrtT = np.sqrt(np.clip(window, 0, None)).reshape(1, -1)
 
             # get flag weight vector: straight multiplication of vectors
             # mimics matrix multiplication
@@ -3459,7 +3460,7 @@ class PSpecData:
                 end * units.Hz,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3470,7 +3471,7 @@ class PSpecData:
                 end * units.Hz,
                 len(freqs),
                 pol=pol,
-                taper=self.taper,
+                taper=taper,
                 length_unit=length_unit,
                 num_steps=num_steps,
                 exact_norm=exact_norm,
@@ -3904,9 +3905,9 @@ class PSpecData:
             For ``norm="I"``, ``Ndlys = Nfreqs`` and identity weighting
             without flags, one-step equals two-step times ``s_disc / s``, the
             scalar's integral evaluated as a sum over channels divided by the
-            integral (typically a few 0.01% above 1). With a taper and
-            ``norm="H^-1"`` / ``"V^-1/2"``, or with ``Ndlys < Nfreqs``, the
-            two-step normalisation is biased and the one-step one is not.
+            integral (typically a few 0.01% above 1). With
+            ``Ndlys < Nfreqs`` the two-step normalisation is biased and the
+            one-step one is not.
 
         response : DelayResponse or object, optional
             Response ``dC/dp`` for ``normalization="one-step"``; see
@@ -4254,17 +4255,17 @@ class PSpecData:
                     if one_step:
                         # reference scalar, kept so set_cosmology can rescale
                         # one-step spectra between cosmologies: computed
-                        # as the two-step path does (scalar() ignores the
-                        # H^-1 taper override), stored in scalar_array but
-                        # never multiplied into p or cov
+                        # with the data taper whatever the norm (as
+                        # UVPSpec.compute_scalar recomputes it), stored in
+                        # scalar_array but never multiplied into p or cov
                         scalar = self.scalar(
                             p,
                             num_steps=uvpspec.ONE_STEP_SCALAR_NUM_STEPS,
                             length_unit=length_unit,
                         ).to_value(scalar_unit)
-                    elif norm == "H^-1":
-                        # If using decorrelation, the H^-1 normalization
-                        # already deals with the taper, so we need to override
+                    elif norm in ("H^-1", "V^-1/2"):
+                        # The H^-1 and V^-1/2 normalizations already deal with
+                        # the taper (H contains it), so we need to override
                         # the taper when computing the scalar
                         scalar = self.scalar(
                             p,
