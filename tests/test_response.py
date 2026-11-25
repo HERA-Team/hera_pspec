@@ -390,20 +390,30 @@ class TestQMatrices:
 
 
 class TestDelayResponseKernel:
-    @pytest.mark.parametrize(
-        "kwargs",
-        [
-            {"sampling": "yes"},
-            {"beam": "gauss"},
-            {"x2y": "mean"},
-            {"bin_width": 3},
-            {"convention": "exact"},
-        ],
-        ids=["sampling", "beam", "x2y", "bin_width", "convention"],
-    )
-    def test_invalid_options(self, kwargs) -> None:
-        with pytest.raises(ValueError, match="DelayResponse"):
-            DelayResponse(**kwargs)
+    def test_invalid_sampling(self) -> None:
+        """Check that a sampling flag that is not a bool raises."""
+        with pytest.raises(ValueError, match="DelayResponse sampling must be"):
+            DelayResponse(sampling="yes")
+
+    def test_invalid_beam(self) -> None:
+        """Check that an unknown beam option raises."""
+        with pytest.raises(ValueError, match="DelayResponse beam must be"):
+            DelayResponse(beam="gauss")
+
+    def test_invalid_x2y(self) -> None:
+        """Check that an unknown x2y option raises."""
+        with pytest.raises(ValueError, match="DelayResponse x2y must be"):
+            DelayResponse(x2y="mean")
+
+    def test_invalid_bin_width(self) -> None:
+        """Check that a bin_width that is not one of the option strings raises."""
+        with pytest.raises(ValueError, match="DelayResponse bin_width must be"):
+            DelayResponse(bin_width=3)
+
+    def test_invalid_convention(self) -> None:
+        """Check that an unknown convention raises."""
+        with pytest.raises(ValueError, match="DelayResponse convention must be"):
+            DelayResponse(convention="exact")
 
     def test_hashable_and_comparable(self) -> None:
         assert DelayResponse() == DelayResponse()
