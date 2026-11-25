@@ -85,6 +85,9 @@ Removed in v1.0
   ``cosmo`` of a beam or ``UVWindow``): it raises a ``TypeError``. Build the
   astropy cosmology first with ``conversions.cosmology_from_params``. Reading
   v0.x files, which store their cosmology as such a dictionary, is unchanged.
+* ``pspec run --cosmo`` is gone, and the option is now rejected as unknown.
+  Use ``--cosmology NAME`` (``hera_pspec_default`` is the v0.x cosmology) or
+  ``--h0`` and ``--om0``, with ``--ode0``, ``--ob0`` and ``--tcmb0`` if needed.
 
 
 Deprecations (removal planned for v2.0)
@@ -103,7 +106,6 @@ Deprecations (removal planned for v2.0)
   ``UVWindow`` k bins in hour/Mpc are read as littleh/Mpc, with a warning.
 * Plain numbers for physical inputs (see `Quantity inputs`_).
 * ``FTBeam.from_file(spw_range=...)``: pass ``freq_array`` instead.
-* ``pspec run --cosmo`` (a ``FutureWarning``, so the CLI shows it).
 
 
 Units overview
@@ -551,5 +553,5 @@ normalization:
     --length-unit Mpc --normalization one-step
 
 The cosmology options only take effect together with ``--beam``.
-``--cosmo`` still works but prints a deprecation warning; use ``--cosmology``
-or ``--h0``/``--om0`` instead.
+The removed ``--cosmo`` option is replaced by ``--cosmology`` and
+``--h0``/``--om0``.
